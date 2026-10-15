@@ -290,13 +290,27 @@ export function mapUpdateLeaf(state: ExhaustionState, updates: readonly MapUpdat
 /** A period's leaves in order, from `map` at the period's start (advanced here to its end) over `blocks`: transaction
  * and tree-and-header leaves interleaved by progress, a map-update leaf whenever a leaf's worth of entries waits and at
  * the end. The leaves join end to start; the last state is the period's end. */
-export function periodLeaves(map: SubjectMap, blocks: readonly ExhaustionBlock[], sizes: LeafSizes, nodeKeyHash = 0n):
-    { readonly leaves: readonly ExhaustionLeaf[]; readonly start: ExhaustionState; readonly end: ExhaustionState } {
-  const begin = map.end;
-  const start = startState(begin.id, begin.height, map.root);
-  const { t: tSlots, m: mOps } = periodStreams(blocks);
+export function periodLeaves(map: SubjectMap, blocks: readonly ExhaustionBlock[], sizes: LeafSizes, nodeKeyHash = 0n): PeriodLeaves {
+  const begin = { ...map.end, root: map.root };
   const updates: MapUpdate[] = [];
   for (const block of blocks) updates.push(...map.appendBlock(blake2b(block.header, { dkLen: 32 }), block.transactions.map(x => x.unsigned)));
+  return leavesOf({ begin, blocks, updates }, sizes, nodeKeyHash);
+}
+
+/** A period's leaves with the states at either end. */
+export interface PeriodLeaves { readonly leaves: readonly ExhaustionLeaf[]; readonly start: ExhaustionState; readonly end: ExhaustionState }
+/** A period as a map-keeper hands it to a prover: the header and map root it starts at, its blocks, and the map's
+ * updates over them (`SubjectMap.appendBlock`'s, in order). */
+export interface ExhaustionPeriod {
+  readonly begin: { readonly id: Uint8Array; readonly height: bigint; readonly root: bigint };
+  readonly blocks: readonly ExhaustionBlock[];
+  readonly updates: readonly MapUpdate[];
+}
+
+/** `periodLeaves` over a period whose map updates its keeper already applied. */
+export function leavesOf({ begin, blocks, updates }: ExhaustionPeriod, sizes: LeafSizes, nodeKeyHash = 0n): PeriodLeaves {
+  const start = startState(begin.id, begin.height, begin.root);
+  const { t: tSlots, m: mOps } = periodStreams(blocks);
   const leaves: ExhaustionLeaf[] = [];
   let state = start, ti = 0, mi = 0, emitted = 0, applied = 0;
   while (ti < tSlots.length || mi < mOps.length || applied < emitted) {
