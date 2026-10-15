@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { blake2b } from "@noble/hashes/blake2b.js";
 import { describe, expect, it } from "vitest";
+import { parseErgoHeader } from "../src/ergo-headers.js";
 import { sectionMatchesRoot } from "../src/ergo-profile.js";
 import {
   copyTransaction, ergoNodeSupplier, nodeText, parseNodeJson, supplyBlock, supplyHeader, supplyTransaction, type NodeJson,
@@ -135,6 +136,20 @@ describe("the node supplier's copy of a header", () => {
   it("reads an empty unparsedBytes as the node's zero length", () => {
     expect(editedHeader(header => header.set("unparsedBytes", ""))).toBeDefined();
   });
+  it("copies a version byte of 128–255, which the node states as a negative signed byte, and refuses it stated unsigned", () => {
+    // The node accepts any version byte inside a voting epoch (venue-ergo §3); its JSON states the byte as Scala's
+    // signed Byte. The serialization under such a byte has no new-fields length.
+    const v4Bytes = supplyHeader(v4)!.bytes, withoutPow = parseErgoHeader(v4Bytes)!.withoutPow.length;
+    for (const version of [128, 255]) {
+      const bytes = Uint8Array.from([version, ...v4Bytes.slice(1, withoutPow - 1), ...v4Bytes.slice(withoutPow)]);
+      const id = hex(blake2b(bytes, { dkLen: 32 }));
+      const supplied = editedHeader(header => { header.set("version", BigInt(version - 256)); header.set("id", id); });
+      expect(supplied && hex(supplied.bytes)).toBe(hex(bytes));
+      expect(parseErgoHeader(supplied!.bytes)?.version).toBe(version);
+      expect(editedHeader(header => { header.set("version", BigInt(version)); header.set("id", id); })).toBeUndefined();
+    }
+    expect(editedHeader(header => header.set("version", -129n))).toBeUndefined();
+  });
   it.each([
     ["wrongId", (h: Json) => h.set("id", "00".repeat(32))],
     ["unparsedBytes", (h: Json) => h.set("unparsedBytes", "00")],
@@ -188,6 +203,12 @@ describe("the node supplier over HTTP", () => {
     const got = await supplier.headers(height, height + 3n);
     expect(got.map(hex)).toEqual([hex(supplyHeader(header)!.bytes)]);
     expect(seen).toEqual(["/info", `/blocks/chainSlice?fromHeight=${height - 1n}&toHeight=${height + 1n}`]);
+  });
+
+  it("takes a header batch only as wide as the node's chainSlice answers", () => {
+    expect(() => ergoNodeSupplier("http://node", { batch: 16_385n })).toThrow(/1 to 16,384/);
+    expect(() => ergoNodeSupplier("http://node", { batch: 0n })).toThrow(/1 to 16,384/);
+    expect(ergoNodeSupplier("http://node", { batch: 16_384n }).name).toBe("http://node");
   });
 
   it("refuses a response over its byte budget and an error status", async () => {

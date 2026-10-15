@@ -36,6 +36,7 @@ as current instructions.
 
 ## Index
 
+- `2026-10-15` [Copy a header's signed version byte from the node's JSON, judge section widths on owned copies, and hold the node's misstated transaction JSON as a venue blocker (audit 12)](decisions/2026-10.md#2026-10-15--copy-a-headers-signed-version-byte-from-the-nodes-json-judge-section-widths-on-owned-copies-and-hold-the-nodes-misstated-transaction-json-as-a-venue-blocker-audit-12)
 - `2026-10-15` [Prove a replica's exhaustion periods in a resumable prover pool from pinned 2^22 points, and fold real Ergo mainnet blocks (slice 43, Next 12)](decisions/2026-10.md#2026-10-15--prove-a-replicas-exhaustion-periods-in-a-resumable-prover-pool-from-pinned-222-points-and-fold-real-ergo-mainnet-blocks-slice-43-next-12)
 - `2026-10-15` [Read the venue succinctly in a succinct directory's view: its backings' subjects below a replica's fold, and sections natively above it (slice 43, Next 12)](decisions/2026-10.md#2026-10-15--read-the-venue-succinctly-in-a-succinct-directorys-view-its-backings-subjects-below-a-replicas-fold-and-sections-natively-above-it-slice-43-next-12)
 - `2026-10-15` [Prove the exhaustion's six circuits in production form end to end, and keep up with a heavy Ergo day one and a half times on one prover (slice 43, Next 12)](decisions/2026-10.md#2026-10-15--prove-the-exhaustions-six-circuits-in-production-form-end-to-end-and-keep-up-with-a-heavy-ergo-day-one-and-a-half-times-on-one-prover-slice-43-next-12)

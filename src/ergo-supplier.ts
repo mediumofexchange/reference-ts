@@ -151,8 +151,8 @@ const hash = (input: Uint8Array): Uint8Array => blake2b(input, { dkLen: 32 });
  * `/blocks/chainSlice` lists them), or undefined where the statement is not
  * of the node's shape or the copy does not hash to the id it states. The
  * bytes are the node's serialization: fixed-width roots, VLQ timestamp and
- * height, big-endian nBits; for versions 2–127 (the node reads the version as
- * a signed byte) a new-fields length, zero through version 4 and followed by
+ * height, big-endian nBits; for versions 2–127 (the node reads and states the
+ * version as a signed byte) a new-fields length, zero through version 4 and followed by
  * `unparsedBytes` above it; then the Autolykos solution, for version 1 the
  * key, `w`, the nonce and `d` (a length byte and its minimal unsigned bytes),
  * otherwise the key and the nonce. Nodes before 6.0 omit `unparsedBytes`,
@@ -161,8 +161,10 @@ export function supplyHeader(statement: NodeJson): { readonly id: Uint8Array; re
   try {
     if (!(statement instanceof Map)) refuse();
     const header = statement as Map<string, NodeJson>;
-    const version = integer(field(header, "version"), 255n), solution = field(header, "powSolutions");
-    const signed = version < 128n ? version : version - 256n;
+    // The node states the version as it reads it, a signed byte (−128 to 127): versions 128–255 are written negative.
+    const stated = field(header, "version"), solution = field(header, "powSolutions");
+    const signed = typeof stated === "bigint" && stated >= -128n && stated <= 127n ? stated : refuse();
+    const version = signed < 0n ? signed + 256n : signed;
     const fields = header.has("unparsedBytes") ? bytes(header.get("unparsedBytes")!) : new Uint8Array(0);
     if (fields.length > 255 || (fields.length !== 0 && signed <= 4n)) refuse();
     const nBits = new Uint8Array(4);
@@ -344,7 +346,7 @@ export interface ErgoNodeSupplierOptions {
 }
 /** Consensus caps a block near 8 MB; its JSON is at most a few times that. */
 const DEFAULT_MAX_RESPONSE_BYTES = 64 * 1024 * 1024;
-const DEFAULT_BATCH = 500n;
+const DEFAULT_BATCH = 500n, MAX_CHAIN_SLICE = 16_384n;
 
 /** A supplier over one node's REST API (`/info`, `/blocks/chainSlice`,
  * `/blocks/{id}/transactions`), GET only. The node is untrusted: what it
@@ -355,7 +357,8 @@ export function ergoNodeSupplier(baseUrl: string, options: ErgoNodeSupplierOptio
   const fetcher = options.fetch ?? ((url: string, init: { signal: AbortSignal }) => fetch(url, init));
   const timeoutMs = options.timeoutMs ?? 30_000, maxBytes = options.maxResponseBytes ?? DEFAULT_MAX_RESPONSE_BYTES;
   const batch = options.batch ?? DEFAULT_BATCH;
-  if (batch < 1n) throw new RangeError("a header batch is positive");
+  // The node answers no chainSlice wider than 16,384 heights (BlocksApiRoute's MaxHeaders).
+  if (batch < 1n || batch > MAX_CHAIN_SLICE) throw new RangeError("a header batch is 1 to 16,384 heights");
   /** The body as text, or undefined where the node answers 404. */
   const get = (path: string): Promise<string | undefined> =>
     nodeText(fetcher, `${base}${path}`, path, { signal: AbortSignal.timeout(timeoutMs) }, maxBytes);

@@ -95,7 +95,8 @@ read above 4, and an Autolykos v1 solution for version 1), and
 root rule (ids alone, or ids then witness ids) from the section's own
 serialization, not the header, so `sectionMatchesRoot` accepts either. No
 version byte or root rule a miner chooses can strand the reader or deny a
-range. A node the reader runs is a
+range; the node's JSON states the version as a signed byte (128–255 as −128
+to −1), which the supplier copies back to the byte. A node the reader runs is a
 supplier like any other ([own node](POOL_DEPLOYMENT_PROBES.md#own-node-as-the-header-source)).
 The node's upstream v6.0.6 sources are the reference for the difficulty and
 work arithmetic, checked on real mainnet headers from three nodes and every
