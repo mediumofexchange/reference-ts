@@ -277,29 +277,29 @@ Folds add one 1.5 M-gate proof a period. The two windows overlap by 126 blocks.
 
 Measured 2026-10-15 ([decision](../decisions/2026-10.md#2026-10-15--prove-the-exhaustions-six-circuits-in-production-form-end-to-end-and-keep-up-with-a-heavy-ergo-day-one-and-a-half-times-on-one-prover-slice-43-next-12); [proving report](ergo-exhaustion-prove-verification.json), [execution report](ergo-exhaustion-check-verification.json)). The six circuits of [succinct reading](https://github.com/mediumofexchange/money-from-first-principles/blob/282c925/succinct-read.md) §4.3 over pool-v2 §1's sponge and §2's tags (sources `scripts/venue/exhaustion-sources.mjs`, `exhaustion-circuits/`), proved on bb.js's bundled native `bb` on one 4-vCPU Xeon at 2.10 GHz (15 GB), against [slice 32's probe](#the-complete-exhaustion-leaf-slice-32) on the same CPU model.
 
-| Circuit | Slots | Gates (2^22 rows for leaves) | Proof, two runs | Witness (noir_js) |
+| Circuit | Slots | Gates (2^22 rows for leaves) | Proofs in the report's run | Witness (noir_js) |
 |---|---|---|---|---|
-| Transaction leaf | 167 (24,597 a slot, 30,209 fixed; probe 23,799 and 172) | 4,179,945 | 60.9–64.3 s | 23–29 s |
-| Tree-and-header leaf | 380 (10,880 a slot; probe 11,044 and 378) | 4,143,333 | 57.8–58.9 s | 16 s |
-| Map-update leaf | 746 (5,552 a slot; probe 5,253 and 790) | 4,150,381 | 56.1–58.5 s | 6 s |
-| Node | | 1,469,901 (2^21) | 18.3–21.3 s | |
-| First and next fold | | 708,272 and 1,474,513 | 9.2 s and 24.0 s | |
+| Transaction leaf | 167 (24,597 a slot, 30,209 fixed; probe 23,799 and 172) | 4,179,945 | 58.5–62.2 s | 22–29 s |
+| Tree-and-header leaf | 380 (10,880 a slot; probe 11,044 and 378) | 4,143,333 | 57.3–58.4 s | 16 s |
+| Map-update leaf | 746 (5,552 a slot; probe 5,253 and 790) | 4,150,381 | 57.6–58.7 s | 6 s |
+| Node | | 1,469,901 (2^21) | 18.1–18.4 s | |
+| First and next fold | | 708,272 and 1,474,513 | 9.2–9.4 s and 18.1–18.8 s | |
 
 Slot costs are fits over 2 and 6 slots; the full-size leaves land 0.0–1.0% above them. Every proof is 14,656 bytes.
 
 **Slice 43's day keeps one prover busy about 16 hours.** That day (720 blocks to height 1,894,624: 107,371 transaction
-compressions, 25,069 tree or header ones, no entry) takes 643 transaction leaves and 66 tree-and-header leaves, 12.3
-prover hours, and about 708 nodes, 3.8 hours: 16.0 hours, so one 4-vCPU machine keeps up 1.50 times (the probe's slot
-costs gave 1.29). Witnesses computed by noir_js on one core add 4.6 hours where they share the machine (1.17 times).
+compressions, 25,069 tree or header ones, no entry) takes 643 transaction leaves and 66 tree-and-header leaves, 11.9
+prover hours at the means, and about 708 nodes, 3.6 hours: 15.4 hours, so one 4-vCPU machine keeps up 1.55 times (the
+probe's slot costs gave 1.29). Witnesses computed by noir_js on one core add 4.6 hours where they share the machine (1.20 times).
 Native witness generation is the lever: `nargo execute` gave a full mainnet transaction leaf's witness in 15.7 s
-against noir_js' 28.9 s, byte for byte the same, which makes the day 18.8 hours (1.28 times). Two machines keep up
+against noir_js' 28.9 s, byte for byte the same, which makes the day 18.2 hours (1.32 times). Two machines keep up
 about two and a half times.
 
 **The departures from the probe.** `H` over seven inputs puts three permutations on each chain an entry joins (the
 stream in two leaves, its key's chain): a map update costs 5.7% more and a transaction slot 3.4% more (its list's
 chain and the id chain's two permutations); the state hash over 71 inputs, the scan's register resets and the exact
-shape test are inside those figures. The fold's limbs cost one byte decomposition of the end id. Proofs ran 10–26% faster than the probe's on
-the same CPU model (one run each; the probe's 71–75 s), likely from the host, not the circuits.
+shape test are inside those figures. The fold's limbs cost one byte decomposition of the end id. Proofs ran 13–24% faster than the probe's on
+the same CPU model (the probe's 71–75 s; an earlier run of the same circuits but for their checks' names took 56–64 s), likely from the host, not the circuits.
 
 **Agreement and hostile witnesses.** `exhaustion-check.mjs` compiles the same sources at 6, 12 and 6 slots (noir_wasm,
 equal byte for byte to native nargo, which compiles the full size) and executes every leaf of a synthetic chain of 9
