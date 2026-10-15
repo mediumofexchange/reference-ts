@@ -368,6 +368,7 @@ describe("Ergo venue-profile candidate", () => {
     const lying = new Lying(32); lying.set(second);
     expect(profile.attributeSection(base, [{ unsigned: pair[0]!.unsigned, witnessId: lying }], idsRoot)).toBeUndefined();
     expect(profile.sectionMatchesRoot([{ id: committed(pair[0]!).id, witnessId: second }], idsRoot)).toBe(false);
+    expect(profile.sectionMatchesRoot([{ id: committed(pair[0]!).id, witnessId: lying }], idsRoot)).toBe(false);
     expect(() => profile.transactionsRoot(2n, [{ id: committed(pair[0]!).id, witnessId: second }])).toThrow(/witness id 31/);
   });
 

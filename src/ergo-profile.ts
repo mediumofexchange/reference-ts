@@ -126,17 +126,26 @@ export function merkleRoot(leaves: readonly Uint8Array[]): Uint8Array {
   } while (level.length > 1);
   return level[0]!;
 }
-/** Whether every id is 32 bytes and every witness id 31: the widths by which the two root rules cannot collide. */
-const committedWidths = (transactions: readonly { readonly id: Uint8Array; readonly witnessId: Uint8Array }[]): boolean =>
-  transactions.every(transaction => transaction.id.length === 32 && transaction.witnessId.length === 31);
+/** A section's leaves, owned: ids of 32 bytes and witness ids of 31, the widths by which the two root rules cannot
+ * collide, judged on the copies; undefined for anything else. */
+function committedLeaves(transactions: readonly { readonly id: Uint8Array; readonly witnessId: Uint8Array }[]):
+  { readonly ids: Uint8Array[]; readonly witnessIds: Uint8Array[] } | undefined {
+  try {
+    const ids = transactions.map(transaction => copyBytes(transaction.id)), witnessIds = transactions.map(transaction => copyBytes(transaction.witnessId));
+    return ids.every(id => id.length === 32) && witnessIds.every(witnessId => witnessId.length === 31) ? { ids, witnessIds } : undefined;
+  } catch (error) {
+    if (error instanceof EncodingError) return undefined;
+    throw error;
+  }
+}
 /** The root under a section's own version, the marker in the section's
  * serialization (1 = ids only), never the header's: version 1 over the
  * transaction ids alone, every other version over all ids followed by all
  * witness ids. A reader matches a header with `sectionMatchesRoot`. */
 export function transactionsRoot(version: bigint, transactions: readonly { readonly id: Uint8Array; readonly witnessId: Uint8Array }[]): Uint8Array {
-  if (!committedWidths(transactions)) throw new EncodingError("a transaction id is 32 bytes and a witness id 31");
-  const ids = transactions.map(transaction => transaction.id);
-  return merkleRoot(version === 1n ? ids : [...ids, ...transactions.map(transaction => transaction.witnessId)]);
+  const leaves = committedLeaves(transactions);
+  if (leaves === undefined) throw new EncodingError("a transaction id is 32 bytes and a witness id 31");
+  return merkleRoot(version === 1n ? leaves.ids : [...leaves.ids, ...leaves.witnessIds]);
 }
 /** Whether a section reproduces a header's transactions root under either
  * rule. The node takes the rule from the section's own serialization (its
@@ -147,8 +156,9 @@ export function transactionsRoot(version: bigint, transactions: readonly { reado
  * ids-only rule the witness ids are unbound, which nothing here reads. Any
  * other width matches no root. */
 export function sectionMatchesRoot(transactions: readonly { readonly id: Uint8Array; readonly witnessId: Uint8Array }[], root: Uint8Array): boolean {
-  if (!committedWidths(transactions)) return false;
-  return compareBytes(transactionsRoot(1n, transactions), root) === 0 || compareBytes(transactionsRoot(2n, transactions), root) === 0;
+  const leaves = committedLeaves(transactions);
+  if (leaves === undefined) return false;
+  return compareBytes(merkleRoot(leaves.ids), root) === 0 || compareBytes(merkleRoot([...leaves.ids, ...leaves.witnessIds]), root) === 0;
 }
 
 /** A `Coll[Byte]` constant as a box carries it: type code 0x0e, a minimal
