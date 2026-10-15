@@ -1,0 +1,215 @@
+{
+  "specification": "succinct-read 282c925",
+  "sources": {
+    "scripts/venue/exhaustion-build.mjs": "cb140570bd825ccd590f3c343188fbc7602e92f21bef0f8608c389a2483d7ac5",
+    "scripts/venue/exhaustion-sources.mjs": "562ca05db61a34e25f83305a3d3eb351bef338422de77845132dda3785c14f16",
+    "scripts/venue/exhaustion-periods.mjs": "77e23dc8f66da9e13731e1b9a5b7696d9b2f7bfc630d8c97f30fa9bdfd436b40",
+    "scripts/venue/exhaustion-check.mjs": "4f066c9ae299c09545d4617ca7430307f032d21a04d17e362fbc36582fdc1569",
+    "scripts/venue/exhaustion-prove.mjs": "a74af5cf1590cd2736b77fb03645de2cbe965b8ccc670b1488886e8ab7920d69",
+    "scripts/venue/exhaustion-circuits/exhaustion.nr": "cd70b6137b622e386d8b347edb28f493307609ea71ac3660767555cd535deaaa",
+    "scripts/venue/exhaustion-circuits/blake2b.nr": "f749f41c6cf59ce3ece60811c32e31a663a00861ad47b674ceedb3d924f1b36d",
+    "src/pool/circuits/vendor/poseidon2.nr": "44f3a3d1abe7d5fa2da5c0339e52018195d55f295c320e530d355f9cc62159d8",
+    "src/ergo-exhaustion-prover.ts": "56484bb28bb4e472fe30ad27bcaf4bff06167d773a0876b0ce3a7a83fc91d3c0",
+    "src/ergo-exhaustion.ts": "3c015f24e43f3a6edc2db643bd325de8fafbed1a925871ee51d2eaf24ad86981",
+    "src/ergo-scan.ts": "73352b1f5412cc13ac8bede4387007196f6beace1462a7db0d016969673417e7",
+    "src/ergo-synthetic.ts": "659d27646efef374f7224c536206cbe6ad0783a7fb8aa4015440033444d314e8",
+    "src/ergo-profile.ts": "679161a58f56f7c1b16619e1a43c53c353929df130996218e92d4565a95e5c06",
+    "src/pool/poseidon2.ts": "c33b48e98263bdf99efc9650b81f57d90136017be2c843963ef38043bb09f308",
+    "src/pool/proof-verifier.ts": "9b6feafb80bf932a084e392bfb724bb7735684720411f31194cdd0041b1248cc"
+  },
+  "sizes": {
+    "t": 167,
+    "m": 380,
+    "u": 746
+  },
+  "cpu": "Intel(R) Xeon(R) Processor @ 2.10GHz",
+  "cores": 4,
+  "memoryGiB": 15.7,
+  "circuits": {
+    "leaf-t": {
+      "gates": 4179945,
+      "bytecodeSha256": "9d21ce5e75171d871f8c7f6a60401b736639db4a1af1f90dd2ed390a1ca1945d",
+      "vkSha256": "978e1deaefcc76d17a5d447b894a5935b10949a738c9e2b755194d7f5f114049",
+      "keyHash": "0x171df7bf3b3badcfe1ed77ab0ec435b7acd372a4f7d4b5e28febdc2b5df5d013",
+      "compileSeconds": 241.855
+    },
+    "leaf-m": {
+      "gates": 4143333,
+      "bytecodeSha256": "5030f6a32ecee1d8d9a14a2022d69a97d5e17e73647efb19800bc5753387b6e6",
+      "vkSha256": "8ccc7ff201b41531ae8e2f752d8af6cf056d4fbdb89995e27804976e74bb4468",
+      "keyHash": "0x08103c1cbb738a837b4e785ea379b9eaccb8f03dbf318ebe171694022af69ddc",
+      "compileSeconds": 179.566
+    },
+    "leaf-u": {
+      "gates": 4150381,
+      "bytecodeSha256": "079be332974345e946f3809f64c954bd1297ca308c45f649da1eba6804e5b8d0",
+      "vkSha256": "219a3639bf3f8ff8ee49183496e56204a13ddc0e2bcdb6831a2c639fc14a2391",
+      "keyHash": "0x0881a4e495405f03c9252c4ed9a06f273f41cac96fb95bb6697446ecc1adb703",
+      "compileSeconds": 39.207
+    },
+    "node": {
+      "gates": 1469901,
+      "bytecodeSha256": "307bf3fddd86a193a1b7d4996c7ab26ae5785e8fdc04737d81f98308e997a73e",
+      "vkSha256": "cfc1b100d8d3591c24136dcf5ae656df27a5749d0774286f2d99692256986fbe",
+      "keyHash": "0x22fa907e57cbbe4bd4f7dbe72f5739d4cf7cffe79f95823259adf19a0527a185",
+      "compileSeconds": 0.319
+    },
+    "fold-first": {
+      "gates": 708272,
+      "bytecodeSha256": "ff116d979482872d37ee55df5fc97323cb84df0ad5e6021d58983ac007bdd386",
+      "vkSha256": "11958dacb5059b41700bcaf362f6740af5a925e231edc6444e51fabaae3da9b7",
+      "keyHash": "0x03215f9de71c12b184df42fea172cbb8ff083abb55f14747d8449d7d29d2b0b8",
+      "compileSeconds": 0.357
+    },
+    "fold-next": {
+      "gates": 1474513,
+      "bytecodeSha256": "0a90d89a44eace8de9fe07a90b09095bf11740c68f39aaf3cbe61bd98c4547f6",
+      "vkSha256": "63aa0f8d7dce39bc487e9a71b49c806c5437d8761e20f4549a9667c447dec9e3",
+      "keyHash": "0x2921d350c37e9f3bd2cf62774e8e53c0d3e3e011125dbf4cc1274fde312df5ea",
+      "compileSeconds": 0.357
+    }
+  },
+  "proofs": [
+    {
+      "circuit": "leaf-t",
+      "label": "leaf-t",
+      "executeSeconds": 25.299,
+      "proveSeconds": 64.279,
+      "proofBytes": 14656
+    },
+    {
+      "circuit": "leaf-u",
+      "label": "leaf-u",
+      "executeSeconds": 6.357,
+      "proveSeconds": 58.479,
+      "proofBytes": 14656
+    },
+    {
+      "circuit": "leaf-m",
+      "label": "leaf-m",
+      "executeSeconds": 16.245,
+      "proveSeconds": 58.925,
+      "proofBytes": 14656
+    },
+    {
+      "circuit": "node",
+      "label": "node",
+      "executeSeconds": 0.014,
+      "proveSeconds": 18.633,
+      "proofBytes": 14656
+    },
+    {
+      "circuit": "node",
+      "label": "node",
+      "executeSeconds": 0.014,
+      "proveSeconds": 18.311,
+      "proofBytes": 14656
+    },
+    {
+      "circuit": "fold-first",
+      "label": "fold-first",
+      "executeSeconds": 0.016,
+      "proveSeconds": 9.177,
+      "proofBytes": 14656
+    },
+    {
+      "circuit": "leaf-t",
+      "label": "leaf-t",
+      "executeSeconds": 22.87,
+      "proveSeconds": 60.908,
+      "proofBytes": 14656
+    },
+    {
+      "circuit": "leaf-u",
+      "label": "leaf-u",
+      "executeSeconds": 6.276,
+      "proveSeconds": 56.075,
+      "proofBytes": 14656
+    },
+    {
+      "circuit": "leaf-m",
+      "label": "leaf-m",
+      "executeSeconds": 16.396,
+      "proveSeconds": 57.801,
+      "proofBytes": 14656
+    },
+    {
+      "circuit": "node",
+      "label": "node",
+      "executeSeconds": 0.014,
+      "proveSeconds": 18.487,
+      "proofBytes": 14656
+    },
+    {
+      "circuit": "node",
+      "label": "node",
+      "executeSeconds": 0.072,
+      "proveSeconds": 21.282,
+      "proofBytes": 14656
+    },
+    {
+      "circuit": "fold-next",
+      "label": "fold-next",
+      "executeSeconds": 0.023,
+      "proveSeconds": 23.966,
+      "proofBytes": 14656
+    }
+  ],
+  "checks": [
+    {
+      "name": "period 0: the fold verifies natively",
+      "ok": true
+    },
+    {
+      "name": "period 0: the fold's public inputs are §4.3's, ending at the period's last header with the map's root",
+      "ok": true
+    },
+    {
+      "name": "period 0: it starts where the previous ended",
+      "ok": true
+    },
+    {
+      "name": "period 1: the fold verifies natively",
+      "ok": true
+    },
+    {
+      "name": "period 1: the fold's public inputs are §4.3's, ending at the period's last header with the map's root",
+      "ok": true
+    },
+    {
+      "name": "period 1: it starts where the previous ended",
+      "ok": true
+    },
+    {
+      "name": "the reader takes the last fold (checkFold)",
+      "ok": true
+    },
+    {
+      "name": "the reader refuses a fold with another map root",
+      "ok": true,
+      "detail": "fold-proof"
+    },
+    {
+      "name": "the reader refuses the next fold's proof under the first fold's key",
+      "ok": true,
+      "detail": "fold-proof"
+    },
+    {
+      "name": "the reader refuses a fold ending at another header",
+      "ok": true,
+      "detail": "fold-end"
+    },
+    {
+      "name": "the reader refuses a fold above the depth",
+      "ok": true,
+      "detail": "fold-depth"
+    },
+    {
+      "name": "the reader refuses a fold from another start",
+      "ok": true,
+      "detail": "fold-start"
+    }
+  ],
+  "result": "pass",
+  "minutes": 19.4
+}

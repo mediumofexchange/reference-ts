@@ -273,6 +273,49 @@ Folds add one 1.5 M-gate proof a period. The two windows overlap by 126 blocks.
 - *Tests:* agreement with the reference's framer, not with the node; mutations are random. The scan's hints are those slice 22's review read, less its error checks, and no hostile hint is injected.
 - *Review:* one pinned circuit set becomes every phone's verifier, so the relation needs the external review a parser and circuit get.
 
+### The exhaustion circuits in production form (slice 43)
+
+Measured 2026-10-15 ([decision](../decisions/2026-10.md#2026-10-15--prove-the-exhaustions-six-circuits-in-production-form-end-to-end-and-keep-up-with-a-heavy-ergo-day-one-and-a-half-times-on-one-prover-slice-43-next-12); [proving report](ergo-exhaustion-prove-verification.json), [execution report](ergo-exhaustion-check-verification.json)). The six circuits of [succinct reading](https://github.com/mediumofexchange/money-from-first-principles/blob/282c925/succinct-read.md) §4.3 over pool-v2 §1's sponge and §2's tags (sources `scripts/venue/exhaustion-sources.mjs`, `exhaustion-circuits/`), proved on bb.js's bundled native `bb` on one 4-vCPU Xeon at 2.10 GHz (15 GB), against [slice 32's probe](#the-complete-exhaustion-leaf-slice-32) on the same CPU model.
+
+| Circuit | Slots | Gates (2^22 rows for leaves) | Proof, two runs | Witness (noir_js) |
+|---|---|---|---|---|
+| Transaction leaf | 167 (24,597 a slot, 30,209 fixed; probe 23,799 and 172) | 4,179,945 | 60.9–64.3 s | 23–29 s |
+| Tree-and-header leaf | 380 (10,880 a slot; probe 11,044 and 378) | 4,143,333 | 57.8–58.9 s | 16 s |
+| Map-update leaf | 746 (5,552 a slot; probe 5,253 and 790) | 4,150,381 | 56.1–58.5 s | 6 s |
+| Node | | 1,469,901 (2^21) | 18.3–21.3 s | |
+| First and next fold | | 708,272 and 1,474,513 | 9.2 s and 24.0 s | |
+
+Slot costs are fits over 2 and 6 slots; the full-size leaves land 0.0–1.0% above them. Every proof is 14,656 bytes.
+
+**Slice 43's day keeps one prover busy about 16 hours.** That day (720 blocks to height 1,894,624: 107,371 transaction
+compressions, 25,069 tree or header ones, no entry) takes 643 transaction leaves and 66 tree-and-header leaves, 12.3
+prover hours, and about 708 nodes, 3.8 hours: 16.0 hours, so one 4-vCPU machine keeps up 1.50 times (the probe's slot
+costs gave 1.29). Witnesses computed by noir_js on one core add 4.6 hours where they share the machine (1.17 times).
+Native witness generation is the lever: `nargo execute` gave a full mainnet transaction leaf's witness in 15.7 s
+against noir_js' 28.9 s, byte for byte the same, which makes the day 18.8 hours (1.28 times). Two machines keep up
+about two and a half times.
+
+**The departures from the probe.** `H` over seven inputs puts three permutations on each chain an entry joins (the
+stream in two leaves, its key's chain): a map update costs 5.7% more and a transaction slot 3.4% more (its list's
+chain and the id chain's two permutations); the state hash over 71 inputs, the scan's register resets and the exact
+shape test are inside those figures. The fold's limbs cost one byte decomposition of the end id. Proofs ran 10–26% faster than the probe's on
+the same CPU model (one run each; the probe's 71–75 s), likely from the host, not the circuits.
+
+**Agreement and hostile witnesses.** `exhaustion-check.mjs` compiles the same sources at 6, 12 and 6 slots (noir_wasm,
+equal byte for byte to native nargo, which compiles the full size) and executes every leaf of a synthetic chain of 9
+blocks (both root rules, 21 entries for keys shared and not, kind-4 runs, an ungrammatical transaction holding a shaped
+output, transactions over several slots), as one period and as two, and of 8 consecutive mainnet blocks to height
+1,894,700 (64 transactions, 334 leaves); each period ends where a fold requires with `SubjectMap`'s root. It refuses 23
+hostile leaves and 18 hostile streams and folds, each witness otherwise consistent with the state hashes, by the
+check each targets (by name). `exhaustion-prove.mjs` proves two periods of three synthetic blocks end to end (leaves,
+nodes, first and next fold; 19 minutes) and the reader's `checkFold` takes the last fold under the derived fold keys on
+the pinned WebAssembly verifier and refuses five hostile ones.
+
+**Limits.** A test set: keys derived here, no adoption (§6). One run on one host. The mainnet blocks carry no shaped
+output, so the map leaves run on synthetic entries. Proving reads 2^22 G1 points whose leading 2^21 match the check
+set's pinned hash; the rest are the CDN's, unpinned until an adoption names them. Full-size compilation exceeds
+noir_wasm's memory and uses nargo 1.0.0-beta.26, shown equal at small sizes only.
+
 ### The venue recheck (slice 29)
 
 Measured 2026-10-13, read-only ([tooling and result](https://github.com/mediumofexchange/reference-ts/tree/bcd39d2/scripts/venue/recheck-probe); [decision](../decisions/2026-10.md#2026-10-13--keep-ergo-for-the-release-a-phone-reaches-bitcoin-only-through-about-ten-provers-dogecoin-is-the-next-venue-probe-and-a-venue-move-is-a-planned-move-for-pool-v4-slice-29-next-12)). Three questions, scoped 2026-10-12: does a chain not yet weighed beat Ergo for the release, or Bitcoin as the second venue, by §2 and by what a phone pays ([slice 20](#absence-for-one-subject-slice-20)); what does a phone pay to reach Bitcoin through [slice 21](#the-succinct-proof-of-exhaustions-prover-cost-slice-21)'s succinct route; and can Ergo alone carry the release, with which hedges?

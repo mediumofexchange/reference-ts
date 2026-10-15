@@ -20,6 +20,14 @@ const sponge = path.join(root, "src/pool/circuits/vendor/poseidon2.nr");
 export const BB = path.join(root, `node_modules/@aztec/bb.js/build/${process.arch === "arm64" ? "arm64" : "amd64"}-${process.platform === "darwin" ? "macos" : "linux"}/bb`);
 export const CRS = process.env.CRS_PATH ?? path.join(root, "scratch/exhaustion-crs");
 const sha = bytes => createHash("sha256").update(bytes).digest("hex");
+// Noir resolves sources by POSIX paths; on Windows every path and directory entry it sees uses forward slashes (as
+// check-set.mjs).
+if (process.platform === "win32") {
+  for (const name of ["join", "resolve", "normalize", "dirname"]) {
+    const native = path[name];
+    path[name] = (...args) => native(...args).replaceAll("\\", "/");
+  }
+}
 
 /** Compile `main` with the shared modules into `directory/name`; returns the program (warnings refused). The pinned
  * compiler is noir_wasm; at the leaves' full size it exceeds WebAssembly's memory, so NARGO may name the native nargo
@@ -41,7 +49,10 @@ export async function compile(directory, name, main) {
     if (/warning/i.test(out)) throw new Error(`${name}: compiler warnings require review: ${out.slice(0, 2000)}`);
     program = JSON.parse(readFileSync(path.join(project, "target", `moe_succinct_exhaustion_${name.replaceAll("-", "_")}.json`), "utf8"));
   } else {
-    const compiled = await compile_program(createFileManager(project), undefined, () => {}, () => {});
+    const manager = createFileManager(project);
+    const readDirectory = manager.readdir.bind(manager);
+    manager.readdir = async (...args) => (await readDirectory(...args)).map(entry => entry.replaceAll("\\", "/"));
+    const compiled = await compile_program(manager, undefined, () => {}, () => {});
     if (compiled.warnings.length) throw new Error(`${name}: compiler warnings require review: ${JSON.stringify(compiled.warnings).slice(0, 2000)}`);
     program = compiled.program;
   }
