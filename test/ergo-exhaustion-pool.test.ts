@@ -145,7 +145,7 @@ describe("the exhaustion prover pool (succinct-read §4.3)", () => {
     // A damaged kept proof does not verify, so it is proved again; the rest stay kept.
     const [label, damaged] = [...store.kept].find(([, p]) => p.circuit === "leaf-t")!;
     const flipped = new Uint8Array(damaged.proof);
-    flipped[100] ^= 1;
+    flipped[100]! ^= 1;
     store.kept.set(label, { ...damaged, proof: flipped });
     const c = modelBackend(), repaired = new ExhaustionPool({ circuits, backend: c.backend, proofs: store }), third = served(repaired, start);
     await third.extend(blocks.slice(0, 2));
