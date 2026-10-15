@@ -107,10 +107,11 @@ export class Chain {
     return { anchorId: hash(bytes), context: [...this.context.slice(0, -1), bytes] };
   }
 
-  /** A block on `parent` with these transactions (a plain one where none are given). */
-  mine(parent: Block, transactions: readonly ErgoTransactionView[] = [], salt = 0): Block {
+  /** A block on `parent` with these transactions (a plain one where none are given), its root under venue-ergo §4's
+   * witness rule, or its ids rule where `rule` is 1. */
+  mine(parent: Block, transactions: readonly ErgoTransactionView[] = [], salt = 0, rule: 1n | 2n = 2n): Block {
     const section = transactions.length > 0 ? transactions : [transaction([plainOutput])];
-    const root = transactionsRoot(2n, section.map(t => ({ id: hash(t.unsigned), witnessId: t.witnessId })));
+    const root = transactionsRoot(rule, section.map(t => ({ id: hash(t.unsigned), witnessId: t.witnessId })));
     const height = parent.height + 1n;
     const bytes = header(parent.id, height, T0 + (height - SYNTHETIC_ANCHOR_HEIGHT + BigInt(ANCHOR_CONTEXT)) * SPACING, root, salt);
     return Object.freeze({ id: hash(bytes), height, bytes, parent, section: Object.freeze([...section]) });
