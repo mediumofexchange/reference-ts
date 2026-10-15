@@ -82,9 +82,9 @@ function modelBackend(options: { failProve?: (n: number, circuit: ExhaustionCirc
   };
   return { backend, calls };
 }
-const memoryStore = (): ProofStore & { size: number } => {
+const memoryStore = (): ProofStore & { size: number; kept: Map<string, ExhaustionProof> } => {
   const kept = new Map<string, ExhaustionProof>();
-  return { get: label => kept.get(label), put: (label, proof) => { kept.set(label, proof); }, get size() { return kept.size; } };
+  return { kept, get: label => kept.get(label), put: (label, proof) => { kept.set(label, proof); }, get size() { return kept.size; } };
 };
 
 const s = sha256(Uint8Array.of(1)), u = sha256(Uint8Array.of(2));
@@ -142,6 +142,16 @@ describe("the exhaustion prover pool (succinct-read §4.3)", () => {
     expect(pool.last!.kept).toBeGreaterThan(0);
     expect(store.size).toBe(proved);
     expect(refolded).toEqual(folded);
+    // A damaged kept proof does not verify, so it is proved again; the rest stay kept.
+    const [label, damaged] = [...store.kept].find(([, p]) => p.circuit === "leaf-t")!;
+    const flipped = new Uint8Array(damaged.proof);
+    flipped[100] ^= 1;
+    store.kept.set(label, { ...damaged, proof: flipped });
+    const c = modelBackend(), repaired = new ExhaustionPool({ circuits, backend: c.backend, proofs: store }), third = served(repaired, start);
+    await third.extend(blocks.slice(0, 2));
+    const fixed = await third.extend(blocks.slice(2));
+    expect(c.calls.prove).toBe(1);
+    expect(fixed).toEqual(folded);
   });
 
   it("keeps a period whose proof failed pending, answers no key past the fold, and proves it before the next", async () => {
