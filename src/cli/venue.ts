@@ -12,7 +12,7 @@
 import { secp256k1 } from "@noble/curves/secp256k1.js";
 import { sha256 } from "@noble/hashes/sha2.js";
 import { bytesToHex, hexToBytes, utf8ToBytes } from "@noble/hashes/utils.js";
-import { existsSync, readdirSync } from "node:fs";
+import { existsSync, readdirSync, rmSync } from "node:fs";
 import { DatabaseSync } from "node:sqlite";
 import { DEFAULT_ERGO_DEPTH, ErgoVenue, ergoAnchorContext, syncCaughtUp, type ErgoCatchUpReport } from "../ergo.js";
 import { parseErgoHeader } from "../ergo-headers.js";
@@ -24,6 +24,7 @@ import { testExhaustionSet, type ExhaustionSet, type ExhaustionSupplier } from "
 import { ExhaustionServer } from "../ergo-exhaustion-server.js";
 import { ErgoVenueJournal } from "../ergo-store.js";
 import { EvidenceRefusal } from "../pool/v3/refusals.js";
+import { ReplayStore } from "../pool/v3/replay-store.js";
 import { exhaustionClient } from "../pool/v3/service-client.js";
 import type { ExhaustionSource } from "../pool/v3/service-http.js";
 import { ergoNodeSupplier, nodeText, parseNodeJson, type ErgoSupplier } from "../ergo-supplier.js";
@@ -242,15 +243,51 @@ export interface View {
   following<T>(read: () => Promise<T>): Promise<T>;
   close(): void;
 }
+/** The exhaustion sets a succinct directory dropped (`exhaustion.json`): a transaction showed each unsound (succinct-read
+ * §2 rule 7), so its view reads without it from then on. */
+function droppedSets(directory: Directory): string[] {
+  const held = readOptional(directory.file("exhaustion.json"));
+  if (held === undefined) return [];
+  try {
+    const value = JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(held)) as { dropped?: unknown };
+    if (Array.isArray(value.dropped) && value.dropped.every(set => typeof set === "string")) return value.dropped as string[];
+  } catch { /* refused below */ }
+  throw new CommandError("INVALID", `${directory.file("exhaustion.json")} is not { dropped }: correct or remove it`);
+}
+/** A succinct view whose set disagreed: the set is dropped for the directory, and the view's file and every answer kept
+ * under it (the reader's `replay.db`, a wallet's `wallet.db.replay`) are discarded (§6), so the next view reads natively. */
+function dropSet(directory: Directory, set: Uint8Array): void {
+  const name = bytesToHex(set), dropped = droppedSets(directory);
+  if (!dropped.includes(name)) writeReplace(directory.file("exhaustion.json"), `${JSON.stringify({ dropped: [...dropped, name] }, null, 2)}\n`);
+  for (const kept of ["replay.db", "wallet.db.replay"]) {
+    if (!existsSync(directory.file(kept))) continue;
+    const store = new ReplayStore(directory.file(kept), { digest: directory.file(`${kept}.sha256`) });
+    try { store.discardKept(); } finally { store.close(); }
+  }
+  for (const suffix of ["", "-wal", "-shm"]) rmSync(directory.file(`${viewFile(directory)}${suffix}`), { force: true });
+  event({ event: "exhaustion-dropped", set: name });
+}
+
 export function openView(directory: Directory): View {
-  const file = requireVenue(directory), journal = new ErgoVenueJournal(directory.file(viewFile(directory)), file.id);
+  const file = requireVenue(directory);
+  let journal = new ErgoVenueJournal(directory.file(viewFile(directory)), file.id);
   try {
     const set = directory.succinct ? exhaustionSet(file) : undefined;
-    const venue = new ErgoVenue(file.profile, readContext(directory), {}, undefined, journal, set === undefined ? undefined : { set }), sources = suppliers(directory);
+    const open = () => new ErgoVenue(file.profile, readContext(directory), {}, undefined, journal, set === undefined ? undefined : { set });
+    let venue = open();
+    if (venue.disagreed()) {
+      journal.close();
+      dropSet(directory, set!.identity);
+      journal = new ErgoVenueJournal(directory.file(viewFile(directory)), file.id);
+      venue = open();
+    }
+    // A dropped set is asked of no replica: the view reads every index natively.
+    const asked = set !== undefined && !droppedSets(directory).includes(bytesToHex(set.identity));
+    const sources = suppliers(directory);
     const sync = () => {
       if (set !== undefined) for (const subject of keptSubjects(directory, file)) venue.follow(subject);
       return syncCaughtUp(venue, sources, pass => event({ event: "syncing", witnessedIndex: pass.witnessedIndex, tipHeight: pass.tipHeight }),
-        set === undefined ? [] : exhaustionSuppliers(directory, set.identity));
+        asked ? exhaustionSuppliers(directory, set!.identity) : []);
     };
     const syncWitnessed = async () => {
       const synced = await sync(), at = synced.witnessedIndex;
@@ -264,13 +301,18 @@ export function openView(directory: Directory): View {
           if (!(error instanceof EvidenceRefusal && error.status === "unresolved-evidence") || wanted.length === 0) throw error;
           for (const subject of wanted) venue.follow(subject);
           await sync();
-          // A sync that followed nothing new (no supplier served the exhaustion) leaves the read as it was.
-          if (venue.followed().length === before) throw error;
+          // A sync that followed nothing new (no replica served a fold reaching the indices read succinctly) leaves the
+          // read unresolved for the view's own reason, which no evidence source is charged with.
+          if (venue.followed().length === before) {
+            throw new CommandError("UNAVAILABLE", `the view does not yet hold ${wanted.map(bytesToHex).join(", ")}: no replica served a fold reaching ` +
+              "the indices it read succinctly; read again once one does");
+          }
           event({ event: "following", subjects: wanted.map(bytesToHex) });
         }
       }
     };
-    return { file, venue, journal, sync, syncWitnessed, following, close: () => journal.close() };
+    const own = venue, ownJournal = journal;
+    return { file, venue: own, journal: ownJournal, sync, syncWitnessed, following, close: () => ownJournal.close() };
   } catch (error) { journal.close(); throw error; }
 }
 

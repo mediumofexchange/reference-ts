@@ -69,7 +69,8 @@ export class ExhaustionServer implements ExhaustionSupplier {
 
   async key(endHeight: bigint, key: bigint, from: bigint): Promise<KeyAnswer | undefined> {
     // The map moves only when a fold is sealed, so it stands at the latest fold's end.
-    if (this.#fold === undefined || this.#fold.inputs.endHeight !== endHeight) return undefined;
+    // Between a period's blocks and its proof the map is past the fold: no path is answered then.
+    if (this.#fold === undefined || this.#fold.inputs.endHeight !== endHeight || this.#map.end.height !== endHeight) return undefined;
     return { path: this.#map.path(key), entries: this.#map.entries(key, from) };
   }
 

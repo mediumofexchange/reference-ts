@@ -2,7 +2,7 @@ import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
 import { join, resolve, sep } from "node:path";
 import { sha256 } from "@noble/hashes/sha2.js";
 import { afterEach, beforeAll, describe, expect, it } from "vitest";
-import { ErgoVenue } from "../src/ergo.js";
+import { ErgoVenue, syncCaughtUp } from "../src/ergo.js";
 import { subjectKey, testExhaustionSet, type ExhaustionSupplier, type Fold } from "../src/ergo-exhaustion.js";
 import { ExhaustionServer, type ServedBlock } from "../src/ergo-exhaustion-server.js";
 import { ergoProfileIdentity, transactionsRoot, type ErgoTransactionView } from "../src/ergo-profile.js";
@@ -256,5 +256,24 @@ describe("a succinct Ergo view (succinct-read §4)", () => {
       expect(sectionsAsked(native)).toBe(7);
       expect(expectSame(venue, await complete(30), [s])).toBeGreaterThan(5);
     } finally { await new Promise(done => listener.close(done)); }
+  });
+
+  it("catches up past a succinct pass that spent the section budget, and answers no path while a period is being proved", async () => {
+    const x = await server(20), journal = undefined;
+    const venue = new ErgoVenue(profile, chain.context, { sectionBytesPerSync: 3000 }, undefined, journal, { set });
+    venue.follow(s);
+    const report = await syncCaughtUp(venue, [node(36)], undefined, [x]);
+    expect(report.witnessedIndex).toBe(32n);
+    expect(expectSame(venue, await complete(36), [s])).toBeGreaterThan(5);
+    // Between a period's blocks and its proof, the key answers nothing rather than a path past the fold.
+    let release!: () => void;
+    const held = new Promise<void>(done => { release = done; });
+    const slow = new ExhaustionServer({ start: { id: anchor.id, height: A }, foldKeyHash: set.foldKeyHash,
+      prove: async (first, inputs) => { if (!first) await held; return set.prove(first, inputs); } });
+    await slow.extend(blocks.slice(0, 10).map(served));
+    const sealing = slow.extend(blocks.slice(10, 20).map(served));
+    expect(await slow.key(A + 10n, subjectKey(s), 0n)).toBeUndefined();
+    release(); await sealing;
+    expect(await slow.key(A + 20n, subjectKey(s), 0n)).toEqual(await x.key(A + 20n, subjectKey(s), 0n));
   });
 });

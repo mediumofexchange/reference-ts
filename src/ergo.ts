@@ -213,7 +213,8 @@ interface SuccinctPass {
 }
 /** A view whose succinct state shows the set unsound refuses every read: what it derived under the set is discarded
  * with the file (succinct-read §6). */
-const DISAGREEMENT = "the exhaustion set disagreed with an included transaction (succinct-read §2 rule 7): remove this view and sync it again";
+const DISAGREEMENT = "the exhaustion set disagreed with an included transaction (succinct-read §2 rule 7): this view refuses every read; its owner discards it, " +
+  "with what it derived under the set, and reads without the set";
 /** A supplier's header pass: its report, the ids of the headers it added,
  * and, where the header budget stopped it before its tip, its last header. */
 interface HeaderPass {
@@ -755,6 +756,12 @@ export class ErgoVenue implements RecordVenue, RecordPublisher {
     return [...(this.succinct?.wanted.values() ?? [])].map(copyBytes);
   }
 
+  /** Whether a transaction showed this succinct view's set unsound (succinct-read §2 rule 7), committed: the view then
+   * refuses every read, and its owner discards it with what it derived under the set (§6). */
+  disagreed(): boolean {
+    return this.succinct?.disagreement === true;
+  }
+
   /** What this succinct view rests on, for a read's output: its set, how many subjects it follows and how many indices it
    * read succinctly; undefined for a view that reads every section. */
   succinctSummary(): { readonly set: Uint8Array; readonly followed: number; readonly succinctIndices: bigint } | undefined {
@@ -1062,8 +1069,9 @@ export async function syncCaughtUp(venue: ErgoVenue, suppliers: readonly ErgoSup
   onPass?: (report: ErgoSyncReport) => void, exhaustion: readonly ExhaustionSupplier[] = []): Promise<ErgoCatchUpReport> {
   for (let passes = 1; ; passes++) {
     const report = await venue.sync(suppliers, exhaustion);
+    // A succinct pass that read indices made progress as a section did, though it spent the budget itself.
     const more = report.suppliers.some(supplier => supplier.stopped === "header budget") ||
-      (report.unresolvedReason === "section budget" && report.sectionsRead > 0);
+      (report.unresolvedReason === "section budget" && (report.sectionsRead > 0 || (report.succinct?.indicesRead ?? 0) > 0));
     if (!more) return Object.freeze({ ...report, passes });
     onPass?.(report);
   }

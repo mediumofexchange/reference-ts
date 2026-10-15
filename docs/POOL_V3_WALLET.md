@@ -668,8 +668,9 @@ reads sections natively above the fold, or wherever no replica serves one that c
 it does not follow (an operator a replacement names) follows it, syncs and reads again; a subject followed later is
 read from the venue's first index. A read's `read.venue` names the exhaustion set, the subjects followed and the
 indices read succinctly. The set is a test set whose folds anyone can make (succinct-read §1), so until one is adopted a
-replica could hide a record from a succinct view; a transaction that contradicts a fold's map (§2 rule 7) makes the view
-refuse every read until its file is removed and synced again.
+replica could hide a record from a succinct view; a transaction that contradicts a fold's map (§2 rule 7) fails that
+command, and the next drops the set for the directory (`exhaustion.json`), discards the view and the answers kept under
+it, and reads natively from then on. A read that needs a subject no replica can serve yet refuses `UNAVAILABLE`.
 
 ### Transport
 
