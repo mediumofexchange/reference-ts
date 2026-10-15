@@ -360,6 +360,15 @@ describe("Ergo venue-profile candidate", () => {
     expect(profile.attributeSection(base, null as unknown as profile.ErgoTransactionView[], root)).toBeUndefined();
     expect(profile.attributeSection(base, transactions, b(0, 31))).toBeUndefined();
     expect(profile.attributeSection(base, transactions, root)).toEqual(full);
+    // The ids rule over two ids is the witness rule over the first id and the second as a 32-byte "witness id": only
+    // the widths separate the rules, so they are judged on owned copies, and a view whose `length` claims 31 is no view.
+    const pair = transactions.slice(0, 2), idsRoot = profile.transactionsRoot(1n, pair.map(committed)), second = committed(pair[1]!).id;
+    expect(profile.attributeSection(base, pair, idsRoot)).toBeDefined();
+    class Lying extends Uint8Array { override get length(): number { return 31; } }
+    const lying = new Lying(32); lying.set(second);
+    expect(profile.attributeSection(base, [{ unsigned: pair[0]!.unsigned, witnessId: lying }], idsRoot)).toBeUndefined();
+    expect(profile.sectionMatchesRoot([{ id: committed(pair[0]!).id, witnessId: second }], idsRoot)).toBe(false);
+    expect(() => profile.transactionsRoot(2n, [{ id: committed(pair[0]!).id, witnessId: second }])).toThrow(/witness id 31/);
   });
 
   it("owns the profile and each transaction view: a later read changes no attribution", () => {

@@ -346,7 +346,7 @@ export interface ErgoNodeSupplierOptions {
 }
 /** Consensus caps a block near 8 MB; its JSON is at most a few times that. */
 const DEFAULT_MAX_RESPONSE_BYTES = 64 * 1024 * 1024;
-const DEFAULT_BATCH = 500n;
+const DEFAULT_BATCH = 500n, MAX_CHAIN_SLICE = 16_384n;
 
 /** A supplier over one node's REST API (`/info`, `/blocks/chainSlice`,
  * `/blocks/{id}/transactions`), GET only. The node is untrusted: what it
@@ -357,7 +357,8 @@ export function ergoNodeSupplier(baseUrl: string, options: ErgoNodeSupplierOptio
   const fetcher = options.fetch ?? ((url: string, init: { signal: AbortSignal }) => fetch(url, init));
   const timeoutMs = options.timeoutMs ?? 30_000, maxBytes = options.maxResponseBytes ?? DEFAULT_MAX_RESPONSE_BYTES;
   const batch = options.batch ?? DEFAULT_BATCH;
-  if (batch < 1n) throw new RangeError("a header batch is positive");
+  // The node answers no chainSlice wider than 16,384 heights (BlocksApiRoute's MaxHeaders).
+  if (batch < 1n || batch > MAX_CHAIN_SLICE) throw new RangeError("a header batch is 1 to 16,384 heights");
   /** The body as text, or undefined where the node answers 404. */
   const get = (path: string): Promise<string | undefined> =>
     nodeText(fetcher, `${base}${path}`, path, { signal: AbortSignal.timeout(timeoutMs) }, maxBytes);

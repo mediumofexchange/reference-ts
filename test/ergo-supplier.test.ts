@@ -205,6 +205,12 @@ describe("the node supplier over HTTP", () => {
     expect(seen).toEqual(["/info", `/blocks/chainSlice?fromHeight=${height - 1n}&toHeight=${height + 1n}`]);
   });
 
+  it("takes a header batch only as wide as the node's chainSlice answers", () => {
+    expect(() => ergoNodeSupplier("http://node", { batch: 16_385n })).toThrow(/1 to 16,384/);
+    expect(() => ergoNodeSupplier("http://node", { batch: 0n })).toThrow(/1 to 16,384/);
+    expect(ergoNodeSupplier("http://node", { batch: 16_384n }).name).toBe("http://node");
+  });
+
   it("refuses a response over its byte budget and an error status", async () => {
     const big = ergoNodeSupplier("http://node", { maxResponseBytes: 10, fetch: served({ "/info": json({ headersHeight: 123456789012n }) }) });
     await expect(big.tipHeight()).rejects.toThrow(/over 10 bytes/);
