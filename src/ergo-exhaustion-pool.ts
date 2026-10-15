@@ -15,8 +15,9 @@ import { mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { randomUUID } from "node:crypto";
 import { join } from "node:path";
 import { gunzipSync } from "node:zlib";
-import { UltraHonkVerifierBackend, type Barretenberg } from "@aztec/bb.js";
+import type { Barretenberg } from "@aztec/bb.js";
 import { Noir, type CompiledCircuit, type InputMap } from "@noir-lang/noir_js";
+import { blake2b } from "@noble/hashes/blake2b.js";
 import { sha256 } from "@noble/hashes/sha2.js";
 import { bytesToHex } from "@noble/hashes/utils.js";
 import { ByteWriter, compareBytes, copyBytes, EncodingError } from "./bytes.js";
@@ -26,7 +27,7 @@ import { foldStateInputs, isPeriodEnd, leavesOf, stateEnd, stateHash, type Exhau
 import type { ServedBlock } from "./ergo-exhaustion-server.js";
 import { fieldToBytes, fieldToHex, limbsOf } from "./pool/field.js";
 import { EXHAUSTION_PARAMETERS } from "./pool/parameters.js";
-import { isMalformedProofFailure, keyedVerifier, PROOF_OPTIONS, startExhaustionBackend, type CompiledProgram, type KeyedVerifier, type ProvingParameters }
+import { keyedVerifier, startExhaustionBackend, type CompiledProgram, type KeyedVerifier, type ProvingParameters }
   from "./pool/proof-verifier.js";
 
 /** The exhaustion circuits (§4.3): the three leaves, the node, the first and the next fold. */
@@ -123,19 +124,21 @@ const RECURSIVE_SETTINGS = Object.freeze({ ipaAccumulation: false, oracleHashTyp
 /** The pool's backend: noir_js witnesses and native proofs on an instance started from `parameters` at the first proof
  * and again after any failure, which retires the instance that failed (as the trail aggregator does). Each proof is
  * made with the circuit's built key (bb.js's `generateProof` passes none and derives it again at every proof, about
- * two fifths of a leaf's time) and verified under it here. */
+ * two fifths of a leaf's time). Proofs are verified apart from the prover, under the built keys on verifying instances
+ * of their own (`keyedVerifier`, which reads the started instance's `[1]_1` and `[x]_2` once): bytes that are no proof
+ * verify as false and retire only a verifying instance, never the one proving. */
 export function nativeExhaustionBackend(circuits: ExhaustionCircuits, parameters: () => Promise<ProvingParameters>,
     options: { readonly threads?: number } = {}): ExhaustionBackend {
   const noir = new Map(EXHAUSTION_CIRCUITS.map(name => [name, new Noir(circuits.circuits[name].program as unknown as CompiledCircuit)] as const));
   const bytecode = new Map(EXHAUSTION_CIRCUITS.map(name =>
     [name, gunzipSync(Buffer.from(circuits.circuits[name].program.bytecode, "base64"))] as const));
-  type Instance = { readonly api: Barretenberg; readonly verifier: UltraHonkVerifierBackend };
+  type Instance = { readonly api: Barretenberg };
   // One instance at a time: concurrent calls share the start in flight, and a failure retires only the instance it ran on.
-  let current: Promise<Instance> | undefined;
+  let current: Promise<Instance> | undefined, verifying: Promise<KeyedVerifier> | undefined;
   const instance = (): Promise<Instance> => {
     current ??= (async () => {
       const api = await startExhaustionBackend(await parameters(), options.threads === undefined ? {} : { threads: options.threads });
-      return { api, verifier: new UltraHonkVerifierBackend(api) };
+      return { api };
     })();
     const started = current;
     started.catch(() => { if (current === started) current = undefined; });
@@ -159,21 +162,19 @@ export function nativeExhaustionBackend(circuits: ExhaustionCircuits, parameters
       made.proof.forEach((field, i) => proof.set(field, 32 * i));
       return { proof, publicInputs: made.publicInputs.map(field => BigInt(`0x${Buffer.from(field).toString("hex")}`)) };
     }),
-    // Bytes that are no proof (a point off the curve, an element past its modulus) verify as false; the backend throws
-    // them, and the instance stays (as `keyedVerifier` reads them). Any other failure retires it.
     async verify(circuit, proof, publicInputs) {
-      if (proof.length !== EXHAUSTION_PROOF_BYTES) return false;
-      const used = instance();
-      try {
-        return await (await used).verifier.verifyProof({ proof: copyBytes(proof), publicInputs: publicInputs.map(fieldToHex),
-          verificationKey: circuits.circuits[circuit].vk }, PROOF_OPTIONS);
-      } catch (error) {
-        if (isMalformedProofFailure(error)) return false;
-        await retire(used);
-        throw error;
+      if (verifying === undefined) {
+        const made = verifying = instance().then(on => keyedVerifier(on.api, EXHAUSTION_CIRCUITS.map((name, kind) =>
+          ({ kind, vk: circuits.circuits[name].vk, publicInputs: name.startsWith("fold") ? 8 : 3 })), EXHAUSTION_PROOF_BYTES));
+        made.catch(() => { if (verifying === made) verifying = undefined; });
       }
+      return (await verifying).verify(EXHAUSTION_CIRCUITS.indexOf(circuit), publicInputs, proof);
     },
-    close: () => retire(),
+    async close() {
+      const verifier = verifying;
+      verifying = undefined;
+      await Promise.all([retire(), verifier?.then(v => v.close(), () => {}).catch(() => {})]);
+    },
   };
 }
 
@@ -267,8 +268,15 @@ export class ExhaustionPool {
 
   /** The period's leaves, checked to end where `inputs` say with the map's root: a disagreement refuses `PERIOD`. */
   leaves(inputs: FoldInputs, period: ServedPeriod): PeriodLeaves {
+    // Each header must be its block's and name the one before as its parent: the circuits refuse a break at its leaf,
+    // after the leaves before it are proved.
+    let parent = period.begin.id;
     const blocks = period.blocks.map(block => {
       if (!(block.header instanceof Uint8Array)) throw new ExhaustionProverError("PERIOD", "a period's block carries no header bytes");
+      if (block.header.length < 97 || compareBytes(blake2b(block.header, { dkLen: 32 }), block.id) !== 0 || compareBytes(block.header.subarray(1, 33), parent) !== 0) {
+        throw new ExhaustionProverError("PERIOD", "a period's headers do not chain from its start");
+      }
+      parent = block.id;
       return { header: block.header, transactions: block.section };
     });
     let run: PeriodLeaves;

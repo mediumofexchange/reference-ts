@@ -11,8 +11,8 @@
     "scripts/venue/exhaustion-circuits/blake2b.nr": "2c021e29c19bd09b735354d8ac80effb8772f014c0d6e2c4a60472929d7c5100",
     "src/pool/circuits/vendor/poseidon2.nr": "44f3a3d1abe7d5fa2da5c0339e52018195d55f295c320e530d355f9cc62159d8",
     "src/ergo-exhaustion-prover.ts": "5f743571d6b40242781a2d65dd7aad22867c6d4eb05ebc28a8afb11d08d41cf4",
-    "src/ergo-exhaustion-pool.ts": "322796d5ebe52578a23e1513c4dc381a92ca989321ed0c2645b0799d1d952621",
-    "src/ergo-exhaustion-server.ts": "52cf252c38cd11eb9ebcb082b304643f1b061ef366adaa28d2638fde333ad75a",
+    "src/ergo-exhaustion-pool.ts": "0c2259145853e1affa91b8f49c2c8dc053716ae71c7158206c7954c17c6f4139",
+    "src/ergo-exhaustion-server.ts": "bd75e7ab93c50864b50bf9fec0332045bd266b3e2be11b6c4fea14316f36a24f",
     "src/ergo-exhaustion.ts": "943ed44ba9ef458c7c058104401e1a4838971695a258d4cb8097e1a0e6b191de",
     "src/ergo-scan.ts": "73352b1f5412cc13ac8bede4387007196f6beace1462a7db0d016969673417e7",
     "src/ergo-synthetic.ts": "659d27646efef374f7224c536206cbe6ad0783a7fb8aa4015440033444d314e8",
@@ -93,7 +93,7 @@
       "nodes": 7,
       "made": 0,
       "kept": 16,
-      "seconds": 3.78
+      "seconds": 4.89
     },
     {
       "blocks": 16,
@@ -106,7 +106,7 @@
       "nodes": 39,
       "made": 0,
       "kept": 80,
-      "seconds": 2.413
+      "seconds": 3.41
     },
     {
       "blocks": 16,
@@ -119,13 +119,13 @@
       "nodes": 25,
       "made": 0,
       "kept": 52,
-      "seconds": 1.508
+      "seconds": 2.414
     }
   ],
   "resume": {
     "made": 0,
     "kept": 148,
-    "seconds": 7.4
+    "seconds": 9.6
   },
   "checks": [
     {
@@ -134,7 +134,7 @@
       "detail": {
         "made": 0,
         "kept": 148,
-        "seconds": 7.4
+        "seconds": 9.6
       }
     },
     {
@@ -142,15 +142,15 @@
       "ok": true
     },
     {
-      "name": "the reader takes period 0's first fold to 1894841 (241 ms)",
+      "name": "the reader takes period 0's first fold to 1894841 (204 ms)",
       "ok": true
     },
     {
-      "name": "the reader takes period 1's next fold to 1894857 (37 ms)",
+      "name": "the reader takes period 1's next fold to 1894857 (29 ms)",
       "ok": true
     },
     {
-      "name": "the reader takes period 2's next fold to 1894873 (38 ms)",
+      "name": "the reader takes period 2's next fold to 1894873 (27 ms)",
       "ok": true
     },
     {
@@ -198,9 +198,9 @@
     "test": true
   },
   "result": "pass",
-  "minutes": 0.3,
+  "minutes": 0.4,
   "proving": {
-    "note": "This run reused the proofs a run of the same command on these sources (0fa8127) made; that run resumed 29 proofs kept by two earlier runs of this branch (all of period 0, 13 of period 1) and made the other 119. Times are that run's; the least available memory free(1) showed during proving was 5.4 GiB.",
+    "note": "This run reused proofs made by the same command on the branch's earlier revision 0fa8127 (the pool before its read-back fixes: verification moved to verifying instances of its own, headers checked to chain, blocks read at the call; no proof's statement changed). That run resumed 29 proofs kept by two earlier runs (all of period 0, 13 of period 1) and made the other 119. Times are that run's; the least available memory free(1) showed during proving was 5.4 GiB.",
     "leafProofWithNextWitness": {
       "n": 51,
       "mean": 77.7,

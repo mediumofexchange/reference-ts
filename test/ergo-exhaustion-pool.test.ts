@@ -238,6 +238,10 @@ describe("the exhaustion prover pool (succinct-read §4.3)", () => {
     expect(await reason(false, three.inputs, { ...three.period, previous: two.period.previous })).toMatch(/does not begin where its previous fold ends/);
     const other = { ...two.period.previous!, inputs: { ...two.period.previous!.inputs, startHeight: start.height + 1n } };
     expect(await reason(false, three.inputs, { ...three.period, previous: other })).toMatch(/of another start or key/);
+    // Headers that do not chain from the period's start (blocks out of order, a header not its block's).
+    expect(await reason(true, one.inputs, { ...one.period, blocks: [...one.period.blocks].reverse() })).toMatch(/headers do not chain from its start/);
+    const swapped = one.period.blocks.map((b, k) => (k === 1 ? { ...b, header: three.period.blocks[0]!.header! } : b));
+    expect(await reason(true, one.inputs, { ...one.period, blocks: swapped })).toMatch(/headers do not chain from its start/);
     expect(model.calls.witness).toBe(0);
     expect(one.first && !two.first && !three.first).toBe(true);
   });
@@ -262,7 +266,11 @@ describe("the exhaustion prover pool (succinct-read §4.3)", () => {
     // A malformed block after good ones: nothing appended, nothing pending.
     const before = server.height;
     const more = chain(8).blocks;
-    await expect(server.extend([more[6]!, { ...more[7]!, id: new Uint8Array(31) }])).rejects.toThrow("invalid exhaustion block");
+    // Refused at the call, not when its turn comes.
+    let refusedNow = false;
+    server.extend([more[6]!, { ...more[7]!, id: new Uint8Array(31) }]).catch(() => { refusedNow = true; });
+    await Promise.resolve(); await Promise.resolve();
+    expect(refusedNow).toBe(true);
     expect(server.height).toBe(before);
     expect(server.pending).toBeUndefined();
   });

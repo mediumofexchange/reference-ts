@@ -89,14 +89,18 @@ export class ExhaustionServer implements ExhaustionSupplier {
   /** Append `blocks`, the next after the map's end in order, and seal a fold at the last: a period. A pending period is
    * proved first; with no blocks, only it is. Every block is checked before any is appended. */
   extend(blocks: readonly ServedBlock[]): Promise<Fold> {
-    const run = this.#queue.then(() => this.#extend(blocks));
+    // Read and checked now, not when the call's turn comes (hours later behind a pool).
+    let owned: readonly ServedBlock[];
+    try {
+      if (!Array.isArray(blocks)) throw new EncodingError("invalid exhaustion period");
+      owned = blocks.map(ownBlock);
+    } catch (error) { return Promise.reject(error); }
+    const run = this.#queue.then(() => this.#extend(owned));
     this.#queue = run.catch(() => {});
     return run;
   }
 
-  async #extend(blocks: readonly ServedBlock[]): Promise<Fold> {
-    if (!Array.isArray(blocks)) throw new EncodingError("invalid exhaustion period");
-    const owned = blocks.map(ownBlock);
+  async #extend(owned: readonly ServedBlock[]): Promise<Fold> {
     if (this.#pending !== undefined) await this.#seal();
     if (owned.length === 0) {
       if (this.#fold !== undefined) return this.#fold;
@@ -118,7 +122,13 @@ export class ExhaustionServer implements ExhaustionSupplier {
   /** Prove the pending period's fold, then bring the served map to its end; on failure it stays pending. */
   async #seal(): Promise<Fold> {
     const { inputs, period } = this.#pending!, first = period.previous === undefined;
-    const proof = copyBytes(await this.#options.prove(first, inputs, period));
+    // `prove` is handed copies: what it does to them cannot reach the served map or the transactions served.
+    const handed: ServerPeriod = { begin: { ...period.begin, id: copyBytes(period.begin.id) }, blocks: period.blocks.map(ownBlock),
+      updates: period.updates.map(u => ({ entry: { ...u.entry, subject: copyBytes(u.entry.subject) }, before: { ...u.before, siblings: [...u.before.siblings] } })),
+      previous: period.previous === undefined ? undefined : { ...period.previous,
+        inputs: { ...period.previous.inputs, startId: copyBytes(period.previous.inputs.startId), endId: copyBytes(period.previous.inputs.endId) },
+        proof: copyBytes(period.previous.proof) } };
+    const proof = copyBytes(await this.#options.prove(first, inputs, handed));
     for (const block of period.blocks) this.#served.appendBlock(block.id, block.section.map(t => t.unsigned));
     this.#fold = Object.freeze({ first, inputs, proof });
     this.#pending = undefined;
