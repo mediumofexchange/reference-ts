@@ -29,6 +29,9 @@ bounds who uses the operator's connections, not who reads published evidence, wh
 | `GET /evidence` | `?backing=` with 64 lowercase hex digits naming a backing the served commitment carries, then `&after=` with the decimal sequence the reader's evidence was served through (0 for none), then optionally `&form=proof-free` | a byte stream: selection metadata naming that backing, the read's own package, then the evidence parts served after that sequence; with `form=proof-free`, each trail in [succinct reading](https://github.com/mediumofexchange/money-from-first-principles/blob/cb84f04/succinct-read.md)'s proof-free frame (§3.3), which a source of pool-v3 trails alone serves (another refuses `UNSUPPORTED` before the stream) |
 | `GET /proofs/<hash>` | 64 lowercase hex digits of a `proofHash`, then `?segment=` (64 hex digits), `&position=` (a record's position, from 1) and `&evidence=` (64 hex digits: its chain value there) | the proof field of the record kept at that place under that chain value, where its SHA-256 is `hash`, as bytes, or `NOT_FOUND`: other forks kept at the place cannot hide it |
 | `GET /covers/<set>/<digest>` | a check set's identity and a span's digest, 64 lowercase hex digits each | a check proof kept for that digest under that set, as bytes, or `NOT_FOUND`; a journal keeps none, a replica keeps what its prover made |
+| `GET /exhaustion/<set>/fold` | an exhaustion set's identity (64 lowercase hex digits), then `?max=` a decimal height | a replica's latest fold ending at or below that height (`src/ergo-exhaustion-wire.ts`'s frame), or `NOT_FOUND`; a journal serves none |
+| `GET /exhaustion/<set>/key/<end>/<key>` | the fold's end height and a subject key (decimal), then `?from=` a decimal count | the key's path at that fold and its entries after the first `from`, or `NOT_FOUND` |
+| `GET /exhaustion/<set>/transaction/<height>/<position>` | a block's height and a transaction's position (decimal) | its unsigned bytes and inclusion path, or `NOT_FOUND` |
 
 Every successful command reply also carries version 1 and the same profile. Byte fields
 are lowercase hex. Commit identifiers match `[A-Za-z0-9._:-]{1,128}`. Records,
@@ -40,6 +43,8 @@ The three reads serve a succinct reader (slice 37): every answer authenticates i
 cover by its verification under the reader's pinned keys, so the place and set only say where to look. A replica's
 listener answers them with no credential, as it serves evidence. A reader's supply (`serviceSupply`) asks the source
 that answered last first, and asks none again whose answer was wrong or malformed ([audit 34](../decisions/2026-10.md#2026-10-14--ask-the-source-that-answered-last-first-and-drop-a-lying-one-refuse-a-trail-form-a-sources-construction-lacks-establish-trails-in-flat-arrays-and-prove-cis-covers-as-a-replica-does-audit-34)).
+The exhaustion's three reads serve a succinct view (succinct-read §4.7, slice 43) under the same terms: every value is
+recomputed or compared by §4's rules, so a malformed or wrong answer is the replica's failure and the view reads natively.
 Kind-7 requests are not segment admissions. Unexpected fields, malformed UTF-8,
 compressed bodies and oversized envelopes refuse. The transport signs no JSON
 and adds no protocol bytes.

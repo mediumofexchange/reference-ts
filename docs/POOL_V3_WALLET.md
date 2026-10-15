@@ -660,6 +660,17 @@ a complete wallet does. A directory reads one way for its life; a holder who wan
 service (with its credential), for covers and for the proofs no cover reaches; a proof is asked for by its segment and
 position, which every backing of the scope shares.
 
+A succinct directory reads its venue succinctly too (succinct-read §4, [slice 43 decision](../decisions/2026-10.md#2026-10-15--read-the-venue-succinctly-in-a-succinct-directorys-view-its-backings-subjects-below-a-replicas-fold-and-sections-natively-above-it-slice-43-next-12)):
+its view, kept in `succinct-venue.db` (never the complete `venue.db`), checks every header as a complete view does, but
+below the latest fold its replicas serve it reads only the subjects it follows (each kept backing, its operator and
+its obligor) from the fold, each key's path and entries and the transactions holding them with inclusion paths, and
+reads sections natively above the fold, or wherever no replica serves one that checks. A read that asks of a subject
+it does not follow (an operator a replacement names) follows it, syncs and reads again; a subject followed later is
+read from the venue's first index. A read's `read.venue` names the exhaustion set, the subjects followed and the
+indices read succinctly. The set is a test set whose folds anyone can make (succinct-read §1), so until one is adopted a
+replica could hide a record from a succinct view; a transaction that contradicts a fold's map (§2 rule 7) makes the view
+refuse every read until its file is removed and synced again.
+
 ### Transport
 
 A holder reaches an operator that is not on its own machine as a Tor onion service
@@ -718,6 +729,10 @@ evidence that does not frame or assemble is passed over; the holder's own proxy 
 Evidence is public, so a replica sees only which backing a connection syncs and when, as the operator does; it sees no
 submission. A replica the holder lists that withholds while the operator is down leaves reads unresolved until the
 operator answers again or the holder lists another (Limits in the decision).
+
+Every replica also keeps the venue's subject map over its own view, from the venue's anchor, and serves it with a
+test-set fold at the end of each round's sync to succinct directories' views (`GET /exhaustion`, slice 43); a line
+`exhaustion` says where its latest fold ends. It rebuilds the map from its rows when it starts.
 
 With `--prove [--parameters <dir>]` a replica also proves covers for succinct readers (slice 38): after each round it
 walks its kept pool-v3 trails, checks each statement proof natively and proves a leaf over it, then a node over each two
