@@ -1,9 +1,12 @@
+import { mkdtempSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { sha256 } from "@noble/hashes/sha2.js";
 import { describe, expect, it } from "vitest";
 import { foldPublicInputs, type Fold, type FoldInputs } from "../src/ergo-exhaustion.js";
 import {
   EXHAUSTION_CIRCUITS, EXHAUSTION_PROOF_BYTES, ExhaustionPool, ExhaustionProverError, type ExhaustionBackend, type ExhaustionCircuit,
-  type ExhaustionCircuits, type ExhaustionProof, type ProofStore,
+  proofDirectory, type ExhaustionCircuits, type ExhaustionProof, type ProofStore,
 } from "../src/ergo-exhaustion-pool.js";
 import { ExhaustionServer, type ServedBlock } from "../src/ergo-exhaustion-server.js";
 import { fieldToHex } from "../src/pool/field.js";
@@ -33,7 +36,9 @@ const hexOf = (fields: string[]): Uint8Array => Buffer.concat(fields.map(f => Bu
 const big = (x: unknown): bigint => BigInt(x as string);
 
 /** The model: witnesses carry their inputs; proofs check what the circuit's recursion checks. */
-function modelBackend(options: { failProve?: (n: number, circuit: ExhaustionCircuit) => boolean; tamper?: ExhaustionCircuit } = {}) {
+function modelBackend(options: {
+  failProve?: (n: number, circuit: ExhaustionCircuit) => boolean; tamper?: ExhaustionCircuit; unverified?: ExhaustionCircuit; damagedThrows?: boolean;
+} = {}) {
   const calls = { witness: 0, prove: 0 };
   /** Every proof the model made, by its bytes: what a recursive verifier would accept. */
   const made = new Map<string, { circuit: ExhaustionCircuit; publicInputs: readonly bigint[] }>();
@@ -77,7 +82,13 @@ function modelBackend(options: { failProve?: (n: number, circuit: ExhaustionCirc
       made.set(Buffer.from(proof).toString("hex"), { circuit, publicInputs });
       return { proof, publicInputs };
     },
-    async verify(circuit, proof, publicInputs) { return Buffer.from(proof).equals(Buffer.from(modelProof(circuit, publicInputs))); },
+    async verify(circuit, proof, publicInputs) {
+      if (options.unverified === circuit) return false;
+      const ok = Buffer.from(proof).equals(Buffer.from(modelProof(circuit, publicInputs)));
+      // The native backend throws on bytes that are no proof; the pool must not take that as a failure of its period.
+      if (!ok && options.damagedThrows) throw new Error("Deserialized point is not on the curve");
+      return ok;
+    },
     async close() {},
   };
   return { backend, calls };
@@ -147,7 +158,7 @@ describe("the exhaustion prover pool (succinct-read §4.3)", () => {
     const flipped = new Uint8Array(damaged.proof);
     flipped[100]! ^= 1;
     store.kept.set(label, { ...damaged, proof: flipped });
-    const c = modelBackend(), repaired = new ExhaustionPool({ circuits, backend: c.backend, proofs: store }), third = served(repaired, start);
+    const c = modelBackend({ damagedThrows: true }), repaired = new ExhaustionPool({ circuits, backend: c.backend, proofs: store }), third = served(repaired, start);
     await third.extend(blocks.slice(0, 2));
     const fixed = await third.extend(blocks.slice(2));
     expect(c.calls.prove).toBe(1);
@@ -191,14 +202,85 @@ describe("the exhaustion prover pool (succinct-read §4.3)", () => {
     expect(await refused({ endId: blocks[1]!.id })).toBe("PERIOD");
     expect(await refused({ foldKeyHash: 7n })).toBe("PERIOD");
     expect(await refused({}, { ...period!, blocks: period!.blocks.map(({ header: _, ...b }) => b) })).toBe("PERIOD");
-    await expect(pool.fold(false, inputs!, period!)).rejects.toThrow("a first fold continues no fold");
+    const nextRefused = await pool.fold(false, inputs!, period!).catch((e: unknown) => e);
+    expect((nextRefused as ExhaustionProverError).code).toBe("PERIOD");
+    expect((nextRefused as Error).message).toMatch(/of a next fold continues no fold/);
     expect(model.calls.witness).toBe(0);
+    const unverified = await new ExhaustionPool({ circuits, backend: modelBackend({ unverified: "leaf-m" }).backend }).fold(true, inputs!, period!)
+      .catch((e: unknown) => e);
+    expect((unverified as ExhaustionProverError).code).toBe("UNVERIFIED");
     for (const tamper of ["leaf-t", "node", "fold-first"] as const) {
       const bad = new ExhaustionPool({ circuits, backend: modelBackend({ tamper }).backend });
       const error = await bad.fold(true, inputs!, period!).catch((e: unknown) => e);
       expect((error as ExhaustionProverError).code).toBe("PUBLIC_INPUTS");
     }
     expect(checked({ first: true, inputs: inputs!, proof: await pool.fold(true, inputs!, period!) })).toBe(true);
+  });
+
+  it("refuses before any witness a period that does not continue what its fold continues", async () => {
+    const { start, blocks } = chain(6);
+    const handed: { first: boolean; inputs: FoldInputs; period: Parameters<ExhaustionPool["fold"]>[2] }[] = [];
+    const real = new ExhaustionPool({ circuits, backend: modelBackend().backend });
+    const server = new ExhaustionServer({ start, foldKeyHash: real.foldKeyHash,
+      prove: async (first, inputs, period) => { handed.push({ first, inputs, period }); return real.fold(first, inputs, period); } });
+    await server.extend(blocks.slice(0, 2));
+    await server.extend(blocks.slice(2, 4));
+    await server.extend(blocks.slice(4));
+    const [one, two, three] = handed as [typeof handed[0], typeof handed[0], typeof handed[0]];
+    const model = modelBackend(), pool = new ExhaustionPool({ circuits, backend: model.backend });
+    const reason = async (first: boolean, inputs: FoldInputs, period: typeof one.period) => {
+      const error = await pool.fold(first, inputs, period).catch((e: unknown) => e);
+      expect((error as ExhaustionProverError).code).toBe("PERIOD");
+      return (error as Error).message;
+    };
+    expect(await reason(true, two.inputs, { ...two.period, previous: undefined })).toMatch(/does not begin at the start with the empty map/);
+    expect(await reason(false, three.inputs, { ...three.period, previous: { ...three.period.previous!, first: true } })).toMatch(/proof does not verify/);
+    expect(await reason(false, three.inputs, { ...three.period, previous: two.period.previous })).toMatch(/does not begin where its previous fold ends/);
+    const other = { ...two.period.previous!, inputs: { ...two.period.previous!.inputs, startHeight: start.height + 1n } };
+    expect(await reason(false, three.inputs, { ...three.period, previous: other })).toMatch(/of another start or key/);
+    expect(model.calls.witness).toBe(0);
+    expect(one.first && !two.first && !three.first).toBe(true);
+  });
+
+  it("proves concurrent extends one after another, refuses a malformed block before appending any, and keeps the chain whole", async () => {
+    const { start, blocks } = chain(6);
+    const { backend } = modelBackend({ failProve: (n) => n === 9 });
+    const pool = new ExhaustionPool({ circuits, backend, proofs: memoryStore() }), ends: bigint[][] = [];
+    const server = new ExhaustionServer({ start, foldKeyHash: pool.foldKeyHash,
+      prove: (first, inputs, period) => { ends.push([period.begin.height, inputs.endHeight, period.previous?.inputs.endHeight ?? -1n]); return pool.fold(first, inputs, period); } });
+    const a = server.extend(blocks.slice(0, 2)), b = server.extend(blocks.slice(2, 4)), c = server.extend(blocks.slice(4));
+    const settled = await Promise.allSettled([a, b, c]);
+    expect(settled.map(r => r.status)).toContain("rejected");
+    // Each period is handed over once, in order, from where the last fold ended; a failed one is proved again first.
+    const H = start.height;
+    expect(ends[0]).toEqual([H, H + 2n, -1n]);
+    for (const [k, e] of ends.entries()) if (k > 0) expect(e[0]! === ends[k - 1]![1]! || e[0] === ends[k - 1]![0]).toBe(true);
+    while (server.pending !== undefined) await server.extend([]).catch(() => {});
+    const last = server.latest!;
+    expect(checked(last)).toBe(true);
+    expect(server.height).toBe(last.inputs.endHeight);
+    // A malformed block after good ones: nothing appended, nothing pending.
+    const before = server.height;
+    const more = chain(8).blocks;
+    await expect(server.extend([more[6]!, { ...more[7]!, id: new Uint8Array(31) }])).rejects.toThrow("invalid exhaustion block");
+    expect(server.height).toBe(before);
+    expect(server.pending).toBeUndefined();
+  });
+
+  it("keeps proofs in a directory and passes over a file that does not read as one", () => {
+    const directory = mkdtempSync(join(tmpdir(), "moe-pool-")), store = proofDirectory(directory);
+    try {
+      const proof: ExhaustionProof = { circuit: "node", proof: modelProof("node", [1n, 2n, 3n]), publicInputs: [1n, 2n, 3n] };
+      store.put("a", proof);
+      expect(store.get("a")).toEqual(proof);
+      expect(Object.isFrozen(store.get("a"))).toBe(true);
+      writeFileSync(join(directory, "b.json"), "{\"circuit\":\"node\",\"proof\":\"AAAA\",\"publicInputs\":[]}");
+      writeFileSync(join(directory, "c.json"), "not json");
+      expect(store.get("b")).toBeUndefined();
+      expect(store.get("c")).toBeUndefined();
+      expect(store.get("d")).toBeUndefined();
+      expect(readdirSync(directory).filter(f => f.endsWith(".tmp"))).toEqual([]);
+    } finally { rmSync(directory, { recursive: true, force: true }); }
   });
 });
 

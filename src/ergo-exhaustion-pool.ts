@@ -7,11 +7,12 @@
 // Leaves and nodes are independent proofs: one prover proves them one at a time while it computes the next leaf's
 // witness, which takes less time than a proof; provers on several machines share a period by the same tree. Each proof
 // is kept under the hash of its circuit and inputs (`proofs`), so a prover that stops resumes where it stood and a
-// period proved again costs only its witnesses' state and a verification a proof, not its proofs.
+// period proved again costs a verification of each kept proof, not the proofs.
 //
 // No set is adopted (§6): `circuitExhaustionSet` names a test set over built circuits, whose folds are real proofs a
 // reader verifies under the pinned fold keys, and which no reader may rely on until an adoption names its identities.
 import { mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
+import { randomUUID } from "node:crypto";
 import { join } from "node:path";
 import { gunzipSync } from "node:zlib";
 import { UltraHonkVerifierBackend, type Barretenberg } from "@aztec/bb.js";
@@ -19,13 +20,13 @@ import { Noir, type CompiledCircuit, type InputMap } from "@noir-lang/noir_js";
 import { sha256 } from "@noble/hashes/sha2.js";
 import { bytesToHex } from "@noble/hashes/utils.js";
 import { ByteWriter, compareBytes, copyBytes, EncodingError } from "./bytes.js";
-import { foldPublicInputs, type ExhaustionSet, type Fold, type FoldInputs, type MapUpdate } from "./ergo-exhaustion.js";
+import { EMPTY_SUBTREES, foldPublicInputs, MAP_DEPTH, type ExhaustionSet, type Fold, type FoldInputs, type MapUpdate } from "./ergo-exhaustion.js";
 import { foldStateInputs, isPeriodEnd, leavesOf, stateEnd, stateHash, type ExhaustionLeaf, type LeafSizes, type PeriodLeaves }
   from "./ergo-exhaustion-prover.js";
 import type { ServedBlock } from "./ergo-exhaustion-server.js";
 import { fieldToBytes, fieldToHex, limbsOf } from "./pool/field.js";
 import { EXHAUSTION_PARAMETERS } from "./pool/parameters.js";
-import { keyedVerifier, PROOF_OPTIONS, startExhaustionBackend, type CompiledProgram, type KeyedVerifier, type ProvingParameters }
+import { isMalformedProofFailure, keyedVerifier, PROOF_OPTIONS, startExhaustionBackend, type CompiledProgram, type KeyedVerifier, type ProvingParameters }
   from "./pool/proof-verifier.js";
 
 /** The exhaustion circuits (§4.3): the three leaves, the node, the first and the next fold. */
@@ -75,7 +76,9 @@ export function circuitIdentities(circuits: ExhaustionCircuits): Readonly<Record
 
 /**
  * A test set over built circuits from `start` (§§1, 6): its identity frames `moe/succinct/v1/set`, the label `test`,
- * each circuit's identities in §4.3's order, the proving points' hash and the start; a fold verifies under the pinned
+ * each circuit's name, decoded bytecode's and key's SHA-256 and key hash in §4.3's order, the proving points' hash and
+ * the start (not the sources, compiler or backend, which an adoption names, nor a check that each key hash derives from
+ * its key: whoever builds the files chooses the set); a fold verifies under the pinned
  * first-fold or next-fold key on instances of `api`'s (which reads only `[1]_1` and `[x]_2`). `close` ends its verifier.
  */
 export function circuitExhaustionSet(circuits: ExhaustionCircuits, start: { readonly id: Uint8Array; readonly height: bigint },
@@ -93,7 +96,8 @@ export function circuitExhaustionSet(circuits: ExhaustionCircuits, start: { read
   return Object.freeze({
     identity: sha256(w.finish()), test: true, start: Object.freeze({ id: copyBytes(start.id), height: start.height }),
     foldKeyHash: circuits.circuits["fold-next"].keyHash,
-    verifyFold: (first: boolean, inputs: readonly bigint[], proof: Uint8Array) => verifier.verify(first ? 1 : 2, inputs, proof),
+    verifyFold: async (first: boolean, inputs: readonly bigint[], proof: Uint8Array) =>
+      proof instanceof Uint8Array && proof.length === EXHAUSTION_PROOF_BYTES && await verifier.verify(first ? 1 : 2, inputs, proof),
     close: () => verifier.close(),
   });
 }
@@ -125,20 +129,26 @@ export function nativeExhaustionBackend(circuits: ExhaustionCircuits, parameters
   const noir = new Map(EXHAUSTION_CIRCUITS.map(name => [name, new Noir(circuits.circuits[name].program as unknown as CompiledCircuit)] as const));
   const bytecode = new Map(EXHAUSTION_CIRCUITS.map(name =>
     [name, gunzipSync(Buffer.from(circuits.circuits[name].program.bytecode, "base64"))] as const));
-  let current: { api: Barretenberg; verifier: UltraHonkVerifierBackend } | undefined;
-  const instance = async () => {
-    if (current !== undefined) return current;
-    const api = await startExhaustionBackend(await parameters(), options.threads === undefined ? {} : { threads: options.threads });
-    current = { api, verifier: new UltraHonkVerifierBackend(api) };
-    return current;
+  type Instance = { readonly api: Barretenberg; readonly verifier: UltraHonkVerifierBackend };
+  // One instance at a time: concurrent calls share the start in flight, and a failure retires only the instance it ran on.
+  let current: Promise<Instance> | undefined;
+  const instance = (): Promise<Instance> => {
+    current ??= (async () => {
+      const api = await startExhaustionBackend(await parameters(), options.threads === undefined ? {} : { threads: options.threads });
+      return { api, verifier: new UltraHonkVerifierBackend(api) };
+    })();
+    const started = current;
+    started.catch(() => { if (current === started) current = undefined; });
+    return started;
   };
-  const retire = async (): Promise<void> => {
-    const retired = current;
-    current = undefined;
-    if (retired !== undefined) await retired.api.destroy().catch(() => {});
+  const retire = async (which: Promise<Instance> | undefined = current): Promise<void> => {
+    if (which === undefined) return;
+    if (current === which) current = undefined;
+    await which.then(on => on.api.destroy(), () => {}).catch(() => {});
   };
-  const guarded = async <T>(task: (on: NonNullable<typeof current>) => Promise<T>): Promise<T> => {
-    try { return await task(await instance()); } catch (error) { await retire(); throw error; }
+  const guarded = async <T>(task: (on: Instance) => Promise<T>): Promise<T> => {
+    const used = instance();
+    try { return await task(await used); } catch (error) { await retire(used); throw error; }
   };
   return {
     async witness(circuit, inputs) { return (await noir.get(circuit)!.execute(inputs)).witness; },
@@ -149,9 +159,21 @@ export function nativeExhaustionBackend(circuits: ExhaustionCircuits, parameters
       made.proof.forEach((field, i) => proof.set(field, 32 * i));
       return { proof, publicInputs: made.publicInputs.map(field => BigInt(`0x${Buffer.from(field).toString("hex")}`)) };
     }),
-    verify: (circuit, proof, publicInputs) => guarded(({ verifier }) =>
-      verifier.verifyProof({ proof: copyBytes(proof), publicInputs: publicInputs.map(fieldToHex), verificationKey: circuits.circuits[circuit].vk }, PROOF_OPTIONS)),
-    close: retire,
+    // Bytes that are no proof (a point off the curve, an element past its modulus) verify as false; the backend throws
+    // them, and the instance stays (as `keyedVerifier` reads them). Any other failure retires it.
+    async verify(circuit, proof, publicInputs) {
+      if (proof.length !== EXHAUSTION_PROOF_BYTES) return false;
+      const used = instance();
+      try {
+        return await (await used).verifier.verifyProof({ proof: copyBytes(proof), publicInputs: publicInputs.map(fieldToHex),
+          verificationKey: circuits.circuits[circuit].vk }, PROOF_OPTIONS);
+      } catch (error) {
+        if (isMalformedProofFailure(error)) return false;
+        await retire(used);
+        throw error;
+      }
+    },
+    close: () => retire(),
   };
 }
 
@@ -169,11 +191,11 @@ export function proofDirectory(directory: string): ProofStore {
         const kept = JSON.parse(readFileSync(join(directory, `${label}.json`), "utf8")) as { circuit: ExhaustionCircuit; proof: string; publicInputs: string[] };
         const proof = new Uint8Array(Buffer.from(kept.proof, "base64"));
         if (!EXHAUSTION_CIRCUITS.includes(kept.circuit) || proof.length !== EXHAUSTION_PROOF_BYTES || !Array.isArray(kept.publicInputs)) return undefined;
-        return { circuit: kept.circuit, proof, publicInputs: kept.publicInputs.map(x => BigInt(x)) };
+        return Object.freeze({ circuit: kept.circuit, proof, publicInputs: Object.freeze(kept.publicInputs.map(x => BigInt(x))) });
       } catch { return undefined; }
     },
     put(label, { circuit, proof, publicInputs }) {
-      const file = join(directory, `${label}.json`), temporary = `${file}.${process.pid}.tmp`;
+      const file = join(directory, `${label}.json`), temporary = `${file}.${randomUUID()}.tmp`;
       writeFileSync(temporary, JSON.stringify({ circuit, proof: Buffer.from(proof).toString("base64"), publicInputs: publicInputs.map(fieldToHex) }));
       renameSync(temporary, file);
     },
@@ -199,8 +221,8 @@ export interface PeriodProved {
 }
 
 export class ExhaustionProverError extends Error {
-  constructor(readonly code: "PERIOD" | "PUBLIC_INPUTS" | "UNVERIFIED", message: string) {
-    super(message); this.name = "ExhaustionProverError";
+  constructor(readonly code: "PERIOD" | "PUBLIC_INPUTS" | "UNVERIFIED", message: string, options?: ErrorOptions) {
+    super(message, options); this.name = "ExhaustionProverError";
   }
 }
 
@@ -249,7 +271,10 @@ export class ExhaustionPool {
       if (!(block.header instanceof Uint8Array)) throw new ExhaustionProverError("PERIOD", "a period's block carries no header bytes");
       return { header: block.header, transactions: block.section };
     });
-    const run = leavesOf({ begin: period.begin, blocks, updates: period.updates }, this.sizes, this.nodeKeyHash);
+    let run: PeriodLeaves;
+    try { run = leavesOf({ begin: period.begin, blocks, updates: period.updates }, this.sizes, this.nodeKeyHash); } catch (error) {
+      throw new ExhaustionProverError("PERIOD", `the period's leaves cannot be built: ${(error as Error).message}`, { cause: error });
+    }
     const end = stateEnd(run.end);
     if (!isPeriodEnd(run.end) || end.height !== inputs.endHeight || compareBytes(end.id, inputs.endId) !== 0 || run.end.u.root !== inputs.mapRoot) {
       throw new ExhaustionProverError("PERIOD", `the period's leaves do not end at the fold's end header ${inputs.endHeight} with its map root`);
@@ -257,12 +282,37 @@ export class ExhaustionPool {
     return run;
   }
 
+  /** Whether the period continues what its fold continues: a first fold's from the start with the empty map, a next
+   * fold's from its previous fold's end with that fold's root, under the same start and key hash, the previous fold's
+   * proof verifying under its key. The circuits check the same, but only at the fold, after every leaf is proved. */
+  async #continues(first: boolean, inputs: FoldInputs, period: ServedPeriod): Promise<void> {
+    const { begin, previous } = period;
+    const refuse = (why: string): never => { throw new ExhaustionProverError("PERIOD", `the period ${why}`); };
+    if (first) {
+      if (previous !== undefined) refuse("of a first fold continues a fold");
+      if (begin.height !== inputs.startHeight || compareBytes(begin.id, inputs.startId) !== 0 || begin.root !== EMPTY_SUBTREES[MAP_DEPTH]) {
+        refuse("of a first fold does not begin at the start with the empty map");
+      }
+      return;
+    }
+    if (previous === undefined) return refuse("of a next fold continues no fold");
+    const before = foldPublicInputs(previous.inputs);
+    if (before === undefined || previous.inputs.startHeight !== inputs.startHeight || compareBytes(previous.inputs.startId, inputs.startId) !== 0 ||
+        previous.inputs.foldKeyHash !== inputs.foldKeyHash) refuse("continues a fold of another start or key");
+    if (previous.inputs.endHeight !== begin.height || compareBytes(previous.inputs.endId, begin.id) !== 0 || previous.inputs.mapRoot !== begin.root) {
+      refuse("does not begin where its previous fold ends");
+    }
+    if (await this.#options.backend.verify(previous.first ? "fold-first" : "fold-next", previous.proof, before!) !== true) {
+      refuse("continues a fold whose proof does not verify");
+    }
+  }
+
   /** The fold proof for `inputs` over `period`. */
   async fold(first: boolean, inputs: FoldInputs, period: ServedPeriod): Promise<Uint8Array> {
     const started = Date.now();
-    if (first !== (period.previous === undefined)) throw new ExhaustionProverError("PERIOD", "a first fold continues no fold, and a next fold one");
     const publicInputs = foldPublicInputs(inputs);
     if (publicInputs === undefined || inputs.foldKeyHash !== this.foldKeyHash) throw new ExhaustionProverError("PERIOD", "fold inputs this set does not prove");
+    await this.#continues(first, inputs, period);
     const run = this.leaves(inputs, period);
     const counts = { t: 0, m: 0, u: 0 };
     for (const leaf of run.leaves) counts[leaf.kind]++;
@@ -328,7 +378,8 @@ export class ExhaustionPool {
     const name = bytesToHex(sha256(new TextEncoder().encode(`${circuit}\n${JSON.stringify(inputs)}`)));
     // A kept proof is verified again (a second against a proof's minute): a damaged file is proved again, not folded.
     const held = proofs?.get(name);
-    if (held !== undefined && held.circuit === circuit && same(held.publicInputs, expected) && await backend.verify(circuit, held.proof, expected) === true) {
+    if (held !== undefined && held.circuit === circuit && same(held.publicInputs, expected) &&
+        await backend.verify(circuit, held.proof, expected).catch(() => false) === true) {
       tally(false);
       return held;
     }
@@ -339,7 +390,7 @@ export class ExhaustionPool {
     const t2 = Date.now();
     const made = await backend.prove(circuit, witness);
     if (!same(made.publicInputs, expected)) throw new ExhaustionProverError("PUBLIC_INPUTS", `the ${circuit} proof does not carry its place's public inputs`);
-    if (made.proof.length !== EXHAUSTION_PROOF_BYTES) throw new ExhaustionProverError("PUBLIC_INPUTS", `a ${circuit} proof of ${made.proof.length} bytes`);
+    if (made.proof.length !== EXHAUSTION_PROOF_BYTES) throw new ExhaustionProverError("UNVERIFIED", `a ${circuit} proof of ${made.proof.length} bytes`);
     // A proof that does not verify under its own key would fail only at the fold, and kept, at every later attempt.
     if (await backend.verify(circuit, made.proof, made.publicInputs) !== true) throw new ExhaustionProverError("UNVERIFIED", `a ${circuit} proof does not verify`);
     const proof: ExhaustionProof = Object.freeze({ circuit, proof: copyBytes(made.proof), publicInputs: Object.freeze([...made.publicInputs]) });

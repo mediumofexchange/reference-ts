@@ -57,9 +57,13 @@ report.circuits = { sizes: circuits.sizes, identities: circuitIdentities(circuit
 await prepareExhaustionParameters(crs, { log });
 const parameters = () => readExhaustionParameters(crs);
 
+// A stopped run ends its native instance rather than leaving it proving (its kept proofs stay for the next run).
+let running;
+for (const signal of ["SIGINT", "SIGTERM"]) process.on(signal, () => { void Promise.resolve(running?.close()).finally(() => process.exit(130)); });
+
 /** Prove every period through a server and pool over `proofs`; the folds and each period's record. */
 async function run(label) {
-  const backend = nativeExhaustionBackend(circuits, parameters, { threads: os.cpus().length });
+  const backend = running = nativeExhaustionBackend(circuits, parameters, { threads: os.cpus().length });
   const pool = new ExhaustionPool({ circuits, backend, proofs: proofDirectory(proofDir), log: line => log(`${label}: ${line}`) });
   const server = new ExhaustionServer({ start: recorded.start, foldKeyHash: pool.foldKeyHash, prove: (first, inputs, period) => pool.fold(first, inputs, period) });
   const folds = [], records = [];
