@@ -4,7 +4,9 @@
 // test set), natively where bb.js bundles a native backend and on WebAssembly elsewhere (slice 42); a holder restored from the same seed with `--read succinct` syncs and reads the same holdings from the
 // covers, fetching no proof; it pays a succinct shop, which fulfills, reading the tail natively; a succinct reader's
 // supply equals a complete reader's. A succinct directory serves no replica (SUCCINCT), and no process that proves
-// nothing loads `@noir-lang`. The commands run from the build (`dist/cli/moe.js`); the release's own install drill is
+// nothing loads `@noir-lang`. The replica also serves the venue's exhaustion (succinct-read §4, slice 43, a test set):
+// each succinct directory's view reads its backing's subjects below the replica's fold, no section there, and sections
+// natively above it. The commands run from the build (`dist/cli/moe.js`); the release's own install drill is
 // command-drill.mjs.
 //
 // Usage: node scripts/pool/v3/succinct-drill.mjs   (after npm run build and scripts/pool/prepare-crs.mjs)
@@ -203,6 +205,13 @@ try {
     assert(Number(view.json.read.coversTaken) >= 1, JSON.stringify(view.json.read));
     assert.equal(view.json.read.proofsFetched, 0);
     assert.equal(view.noir, false, "a succinct read loads no prover");
+    // The venue below the replica's fold was read succinctly under the set the replica serves: the backing, its
+    // operator and its obligor followed.
+    const folded = replica.lines.filter(line => line.status === "exhaustion");
+    assert(folded.length >= 1, "the replica serves the exhaustion");
+    assert.equal(view.json.read.venue.exhaustionSet, folded.at(-1).set);
+    assert.equal(view.json.read.venue.followed, 3);
+    assert(Number(view.json.read.venue.succinctIndices) >= 1, JSON.stringify(view.json.read.venue));
   });
 
   await check("the succinct holder pays a succinct shop, which fulfills over the tail's fetched proof", async () => {
@@ -232,6 +241,7 @@ try {
     const after = await ok(wallet("sync", HS, backing));
     assert.equal(after.available, "11");
     assert.equal(after.read.judgment, "succinct");
+    assert(Number(after.read.venue.succinctIndices) >= 1, JSON.stringify(after.read.venue));
   });
 
   await check("a succinct reader's supply equals a complete reader's", async () => {
@@ -245,6 +255,7 @@ try {
     const same = value => ({ issued: value.issued, burned: value.burned, supply: value.supply, checkpoint: value.checkpoint, judgingIndex: value.judgingIndex });
     assert.deepEqual(same(read.json), same(complete));
     assert.equal(read.json.read.judgment, "succinct");
+    assert(Number(read.json.read.venue.succinctIndices) >= 1, JSON.stringify(read.json.read.venue));
     assert.equal(read.noir, false);
   });
 

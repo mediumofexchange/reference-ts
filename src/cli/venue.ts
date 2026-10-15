@@ -12,7 +12,7 @@
 import { secp256k1 } from "@noble/curves/secp256k1.js";
 import { sha256 } from "@noble/hashes/sha2.js";
 import { bytesToHex, hexToBytes, utf8ToBytes } from "@noble/hashes/utils.js";
-import { existsSync } from "node:fs";
+import { existsSync, readdirSync, rmSync } from "node:fs";
 import { DatabaseSync } from "node:sqlite";
 import { DEFAULT_ERGO_DEPTH, ErgoVenue, ergoAnchorContext, syncCaughtUp, type ErgoCatchUpReport } from "../ergo.js";
 import { parseErgoHeader } from "../ergo-headers.js";
@@ -20,12 +20,19 @@ import { ERGO_SYNTHETIC_REFERENCE, ERGO_TESTNET_REFERENCE, ergoProfileIdentity, 
   type ErgoReferenceContext } from "../ergo-profile.js";
 import { ErgoPublisher, ergoNodePublisher, payToPublicKeyTree, readPlainBox, rowOutbox, verifyErgoProof, type ErgoPublisherPersistence,
   type ErgoPublishingSupplier } from "../ergo-publisher.js";
+import { testExhaustionSet, type ExhaustionSet, type ExhaustionSupplier } from "../ergo-exhaustion.js";
+import { ExhaustionServer } from "../ergo-exhaustion-server.js";
 import { ErgoVenueJournal } from "../ergo-store.js";
+import { EvidenceRefusal } from "../pool/v3/refusals.js";
+import { ReplayStore } from "../pool/v3/replay-store.js";
+import { exhaustionClient } from "../pool/v3/service-client.js";
+import type { ExhaustionSource } from "../pool/v3/service-http.js";
 import { ergoNodeSupplier, nodeText, parseNodeJson, type ErgoSupplier } from "../ergo-supplier.js";
 import { MempoolNode } from "../ergo-synthetic.js";
 import type { RecordKind } from "../record-range.js";
 import type { VenueReference } from "../pool/v3/guard.js";
 import { VenueError } from "../venue-error.js";
+import { keptTerms } from "./terms.js";
 import { CommandError, event, fresh, openDirectory, parseArguments, print, readJson, readOptional, readSecret, required, UsageError, writeExclusive,
   writeReplace, type Directory } from "./common.js";
 
@@ -182,30 +189,159 @@ export async function createVenue(directory: Directory, options: { readonly synt
   return { venue, created: true };
 }
 
-/** The directory's own view, restored from `venue.db`, with an optional publisher attached later. */
+/** The exhaustion set a succinct directory reads its venue under and a replica serves (succinct-read §4, slice 43): a
+ * test set (no set is adopted, §6), whose start is the venue's anchor, so every party computes it from the venue file. */
+export function exhaustionSet(file: VenueFile): ExhaustionSet & { prove: ReturnType<typeof testExhaustionSet>["prove"] } {
+  return testExhaustionSet("moe/cli", { id: file.profile.anchor, height: file.anchorHeight });
+}
+/** The file a directory keeps its view in: a succinct directory's (`--read succinct`) is a succinct view of its own
+ * (succinct-read §4), never the complete `venue.db`, which neither form's view opens as the other. */
+export const viewFile = (directory: Pick<Directory, "succinct">): string => directory.succinct ? "succinct-venue.db" : "venue.db";
+/** Every replica URL the directory keeps, for any operator, each once: a succinct view asks each for the exhaustion. */
+function exhaustionSuppliers(directory: Directory, set: Uint8Array): ExhaustionSupplier[] {
+  let names: string[];
+  try { names = readdirSync(directory.file("replicas")); } catch { return []; }
+  const urls = new Set<string>();
+  for (const name of names.filter(n => /^[0-9a-f]{64}\.json$/.test(n)).sort()) {
+    try {
+      const value = JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(readOptional(directory.file(`replicas/${name}`)) ?? new Uint8Array())) as { urls?: unknown };
+      for (const url of Array.isArray(value.urls) ? value.urls : []) if (typeof url === "string") urls.add(url);
+    } catch { /* a replicas file that does not parse is refused by the command that reads it */ }
+  }
+  const out: ExhaustionSupplier[] = [];
+  for (const url of urls) { try { out.push(exhaustionClient(url, set)); } catch { /* not a replica URL */ } }
+  return out;
+}
+/** The subjects a succinct view follows for the directory's kept backings: each backing (replacements, publications),
+ * its terms' operator (commitments) and obligor (revocations). Terms that do not authenticate are passed over: the
+ * command reading them refuses them. */
+function keptSubjects(directory: Directory, file: VenueFile): Uint8Array[] {
+  let names: string[];
+  try { names = readdirSync(directory.file("terms")); } catch { return []; }
+  const subjects: Uint8Array[] = [];
+  for (const name of names.filter(n => /^[0-9a-f]{64}$/.test(n))) {
+    try {
+      const kept = keptTerms(directory, hexToBytes(name), file);
+      subjects.push(kept.backing, kept.terms.operator, kept.terms.obligor);
+    } catch { /* refused where read */ }
+  }
+  return subjects;
+}
+
+/** The directory's own view, restored from its file (`viewFile`), with an optional publisher attached later. */
 export interface View {
   readonly file: VenueFile;
   readonly venue: ErgoVenue;
   readonly journal: ErgoVenueJournal;
-  /** Sync until the view is caught up (`syncCaughtUp`), noting each pass another follows as a progress event. */
+  /** Sync until the view is caught up (`syncCaughtUp`), noting each pass another follows as a progress event. A
+   * succinct view first follows its kept backings' subjects and asks its replicas for the exhaustion. */
   sync(): Promise<ErgoCatchUpReport>;
   /** `sync`, refusing a venue that has witnessed nothing yet: its clock then stands on a block. */
   syncWitnessed(): Promise<ErgoCatchUpReport & { readonly witnessedIndex: bigint }>;
+  /** Run `read`; where a succinct view leaves it unresolved for subjects it does not follow (an operator a replacement
+   * names), follow them, sync and run it again, while each round follows a new subject. A complete view runs it once. */
+  following<T>(read: () => Promise<T>): Promise<T>;
   close(): void;
 }
-export function openView(directory: Directory): View {
-  const file = requireVenue(directory), journal = new ErgoVenueJournal(directory.file("venue.db"), file.id);
+/** The exhaustion sets a succinct directory dropped (`exhaustion.json`): a transaction showed each unsound (succinct-read
+ * §2 rule 7), so its view reads without it from then on. */
+function droppedSets(directory: Directory): string[] {
+  const held = readOptional(directory.file("exhaustion.json"));
+  if (held === undefined) return [];
   try {
-    const venue = new ErgoVenue(file.profile, readContext(directory), {}, undefined, journal), sources = suppliers(directory);
-    const sync = () => syncCaughtUp(venue, sources, pass =>
-      event({ event: "syncing", witnessedIndex: pass.witnessedIndex, tipHeight: pass.tipHeight }));
+    const value = JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(held)) as { dropped?: unknown };
+    if (Array.isArray(value.dropped) && value.dropped.every(set => typeof set === "string")) return value.dropped as string[];
+  } catch { /* refused below */ }
+  throw new CommandError("INVALID", `${directory.file("exhaustion.json")} is not { dropped }: correct or remove it`);
+}
+/** A succinct view whose set disagreed: the set is dropped for the directory, and the view's file and every answer kept
+ * under it (the reader's `replay.db`, a wallet's `wallet.db.replay`) are discarded (§6), so the next view reads natively. */
+function dropSet(directory: Directory, set: Uint8Array): void {
+  const name = bytesToHex(set), dropped = droppedSets(directory);
+  if (!dropped.includes(name)) writeReplace(directory.file("exhaustion.json"), `${JSON.stringify({ dropped: [...dropped, name] }, null, 2)}\n`);
+  for (const kept of ["replay.db", "wallet.db.replay"]) {
+    if (!existsSync(directory.file(kept))) continue;
+    const store = new ReplayStore(directory.file(kept), { digest: directory.file(`${kept}.sha256`) });
+    try { store.discardKept(); } finally { store.close(); }
+  }
+  // The view's -wal and -shm first: a crash after them leaves the main file, its disagreement and spans checkpointed,
+  // which the next opening drops again.
+  for (const suffix of ["-wal", "-shm", ""]) rmSync(directory.file(`${viewFile(directory)}${suffix}`), { force: true });
+  event({ event: "exhaustion-dropped", set: name });
+}
+
+export function openView(directory: Directory): View {
+  const file = requireVenue(directory);
+  let journal = new ErgoVenueJournal(directory.file(viewFile(directory)), file.id);
+  try {
+    const set = directory.succinct ? exhaustionSet(file) : undefined;
+    const open = () => new ErgoVenue(file.profile, readContext(directory), {}, undefined, journal, set === undefined ? undefined : { set });
+    let venue = open();
+    // A view holding indices read under a dropped set (one restored from before the drop) is dropped again.
+    const dropped = set !== undefined && droppedSets(directory).includes(bytesToHex(set.identity));
+    if (venue.disagreed() || (dropped && venue.succinctSummary()!.succinctIndices > 0n)) {
+      journal.close();
+      dropSet(directory, set!.identity);
+      journal = new ErgoVenueJournal(directory.file(viewFile(directory)), file.id);
+      venue = open();
+    }
+    // A dropped set is asked of no replica: the view reads every index natively.
+    const asked = set !== undefined && !droppedSets(directory).includes(bytesToHex(set.identity));
+    const sources = suppliers(directory);
+    const sync = () => {
+      if (set !== undefined) for (const subject of keptSubjects(directory, file)) venue.follow(subject);
+      return syncCaughtUp(venue, sources, pass => event({ event: "syncing", witnessedIndex: pass.witnessedIndex, tipHeight: pass.tipHeight }),
+        asked ? exhaustionSuppliers(directory, set!.identity) : []);
+    };
     const syncWitnessed = async () => {
       const synced = await sync(), at = synced.witnessedIndex;
       if (at === undefined) throw new CommandError("UNAVAILABLE", "the venue has witnessed nothing yet: its first index is final once the depth is mined above it");
       return { ...synced, witnessedIndex: at };
     };
-    return { file, venue, journal, sync, syncWitnessed, close: () => journal.close() };
+    const following = async <T>(read: () => Promise<T>): Promise<T> => {
+      for (;;) {
+        // Only what this read asks counts: a subject an earlier read wanted is not this read's reason.
+        venue.forgetWanted();
+        try { return await read(); } catch (error) {
+          const wanted = venue.wanted(), before = venue.followed().length;
+          if (!(error instanceof EvidenceRefusal && error.status === "unresolved-evidence") || wanted.length === 0) throw error;
+          for (const subject of wanted) venue.follow(subject);
+          await sync();
+          // A sync that followed nothing new (no replica served a fold reaching the indices read succinctly) leaves the
+          // read unresolved for the view's own reason, which no evidence source is charged with.
+          if (venue.followed().length === before) {
+            throw new CommandError("UNAVAILABLE", `the view does not yet hold ${wanted.map(bytesToHex).join(", ")}: no replica served a fold reaching ` +
+              "the indices it read succinctly; read again once one does");
+          }
+          event({ event: "following", subjects: wanted.map(bytesToHex) });
+        }
+      }
+    };
+    const own = venue, ownJournal = journal;
+    return { file, venue: own, journal: ownJournal, sync, syncWitnessed, following, close: () => ownJournal.close() };
   } catch (error) { journal.close(); throw error; }
+}
+
+/** A replica's exhaustion over its own view (succinct-read §4.7, slice 43): the map from the set's start, extended
+ * after each sync by the indices the view newly read, a fold sealed at the last; transactions come from the view's
+ * rows. `advance` extends it; `source` is what the replica's listener serves. */
+export function exhaustionOver(view: View): { readonly source: ExhaustionSource; advance(): Promise<void> } {
+  const set = exhaustionSet(view.file), anchorHeight = view.file.anchorHeight;
+  const block = (height: bigint) => view.venue.section(height - anchorHeight - 1n);
+  const server = new ExhaustionServer({ start: set.start, foldKeyHash: set.foldKeyHash, prove: (first, inputs) => set.prove(first, inputs), block,
+    name: "replica" });
+  return {
+    source: { set: set.identity, supplier: server },
+    async advance() {
+      const top = anchorHeight + 1n + view.venue.witnessedIndex(), blocks = [];
+      for (let height = server.height + 1n; height <= top; height++) {
+        const read = block(height);
+        if (read === undefined) return;
+        blocks.push(read);
+      }
+      if (blocks.length > 0) await server.extend(blocks);
+    },
+  };
 }
 
 /** The directory's view read beside the process that owns and syncs it (`moe operator prepare` beside `serve`,
@@ -232,7 +368,7 @@ export function besideView(directory: Directory): { readonly file: VenueFile; re
 export async function venueAudit(argv: readonly string[]): Promise<void> {
   if (argv[0] !== "audit") throw new UsageError("moe venue audit --dir <directory>");
   const args = parseArguments(argv.slice(1), { dir: "value" }, 0), directory = openDirectory(required(args, "dir"), "any");
-  if (!existsSync(directory.file("venue.db"))) throw new CommandError("ABSENT", "the directory keeps no view (venue.db): nothing to audit");
+  if (!existsSync(directory.file(viewFile(directory)))) throw new CommandError("ABSENT", `the directory keeps no view (${viewFile(directory)}): nothing to audit`);
   const view = openView(directory);
   try {
     let witnessed: bigint;

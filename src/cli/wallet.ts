@@ -218,7 +218,10 @@ async function withEvidence<T>(opened: Opened, args: Arguments, kept: KeptTerms,
     return reading === undefined ? from : Object.defineProperty(from, "read", { enumerable: true, get: () => (reading.out() as { read?: object }).read });
   };
   const file = flag(args, "package");
-  if (file !== undefined) return use({ bytes: readRequired(file, "package file", PACKAGE_FILE_LIMIT), source: "file", from: passed([]) });
+  if (file !== undefined) {
+    const bytes = readRequired(file, "package file", PACKAGE_FILE_LIMIT);
+    return opened.view.following(() => use({ bytes, source: "file", from: passed([]) }));
+  }
   const last = opened.directory.file(`packages/${hex(kept.backing)}`);
   const sources = sourcesOf(opened.directory, kept, opened.view,
     (client, full) => opened.wallet.supply(store => client.sync(kept.backing, store, { full })), [], opened.wallet.reading);
@@ -226,7 +229,9 @@ async function withEvidence<T>(opened: Opened, args: Arguments, kept: KeptTerms,
     if ("served" in synced) {
       // Kept only once a read over it resolved, so a source's refused answer never becomes the fallback (audit 32).
       const bytes = synced.served.package;
-      const result = await use({ bytes, source: synced.origin, from: passed(synced.skipped, synced.origin === "replica" ? { replica: synced.url } : {}) });
+      // A succinct view follows a subject the read asks of it and does not hold yet (an operator a replacement names).
+      const result = await opened.view.following(() =>
+        use({ bytes, source: synced.origin, from: passed(synced.skipped, synced.origin === "replica" ? { replica: synced.url } : {}) }));
       // Best effort, as the command has answered: a package not kept leaves the last one kept as the fallback.
       try {
         mkdirSync(opened.directory.file("packages"), { recursive: true, mode: 0o700 });
@@ -236,7 +241,7 @@ async function withEvidence<T>(opened: Opened, args: Arguments, kept: KeptTerms,
     }
     const bytes = readOptional(last);
     if (bytes === undefined) throw new CommandError("UNAVAILABLE", "no source answered and no earlier sync kept a package");
-    return use({ bytes, source: "kept", from: passed(synced.skipped) });
+    return opened.view.following(() => use({ bytes, source: "kept", from: passed(synced.skipped) }));
   }, repairRecord(opened.directory, kept.backing));
 }
 

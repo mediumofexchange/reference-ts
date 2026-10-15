@@ -23,7 +23,7 @@ import { initRole, keptBackings, keptReplay, openEvidence, originOf, passedOver,
   serviceCommand, supplyCommand, supplyOf, termsCommand } from "./read.js";
 import { closeListener, listenLoopback, SERVE_FLAGS, serveFlags, untilStopped } from "./serve.js";
 import { keptTerms } from "./terms.js";
-import { openView, requireVenue } from "./venue.js";
+import { exhaustionOver, openView, requireVenue } from "./venue.js";
 
 /** How long a replica proves new covers after each round (`serve --prove`) before it syncs again: about ten leaves on
  * four cores with the WebAssembly backend (slice 36), twenty natively (slice 42). */
@@ -81,7 +81,9 @@ async function serve(argv: readonly string[]): Promise<void> {
     if (has(args, "prove")) covers = await openCoverProver(directory, verifier!, flag(args, "parameters"), native, line => process.stderr.write(`${line}\n`));
   } catch (error) { await covers?.close(); await verifier?.close(); evidence?.close(); view.close(); throw error; }
   const replica = new V3Replica(directory.file("evidence.db"), evidence, view.venue.id);
-  const server = createV3EvidenceService(replica);
+  // The venue's exhaustion under the directory's set, kept over the view's own rows (succinct-read §4.7, slice 43).
+  const exhaustion = exhaustionOver(view);
+  const server = createV3EvidenceService(replica, exhaustion.source);
   // A stream its file could not finish (storage damage) ended short; the replica's owner is told.
   server.on("evidenceError", (error: unknown) => { event({ event: "evidence", code: "STORAGE", message: (error as Error).message }); });
   let listened: number;
@@ -92,7 +94,11 @@ async function serve(argv: readonly string[]): Promise<void> {
   print({ status: "serving", url, port: listened, prover: covers?.prover.backend ?? null, backings: keptBackings(directory).map(hex),
     served: keptBackings(directory).map(backing => ({ backing, sequence: replica.selection(backing)?.selection.sequence ?? null })) });
   const round = async (): Promise<void> => {
-    const synced = await view.syncWitnessed(), at = synced.witnessedIndex;
+    const synced = await view.syncWitnessed(), at = synced.witnessedIndex, folded = exhaustion.source.supplier;
+    const before = (await folded.fold(1n << 62n))?.inputs.endHeight;
+    await exhaustion.advance();
+    const after = (await folded.fold(1n << 62n))?.inputs.endHeight;
+    if (after !== undefined && after !== before) print({ status: "exhaustion", set: hex(exhaustion.source.set), foldIndex: after - venue.anchorHeight - 1n });
     for (const backing of keptBackings(directory)) {
       if (stopping()) return;
       try {

@@ -55,6 +55,8 @@ function encodeViews(views: readonly ErgoTransactionView[]): Uint8Array {
   }
   return out;
 }
+/** A row read succinctly keeps no views: no block's section is empty. */
+const NO_VIEWS = encodeViews([]);
 function decodeViews(bytes: Uint8Array): ErgoTransactionView[] {
   const data = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength), views: ErgoTransactionView[] = [];
   const take = (at: number): { value: Uint8Array; next: number } => {
@@ -85,6 +87,53 @@ export interface ErgoSideCharge { readonly name: string; readonly charge: bigint
 /** A header a supplier's last pass reached, kept through pruning under that supplier's name; a list keeps each
  * name's headers oldest first. */
 export interface ErgoProtectedHeader { readonly name: string; readonly id: Uint8Array }
+/** A key's count and chain value at a fold's end, as a succinct view keeps it (succinct-read §4.4). */
+export interface ErgoKeptRow { readonly key: bigint; readonly count: bigint; readonly chain: bigint; readonly endHeight: bigint; readonly endId: Uint8Array }
+/** Indices from `from` through `to` read succinctly: their rows hold only the followed subjects' objects. */
+export interface ErgoSuccinctSpan { readonly from: bigint; readonly to: bigint }
+/** A transaction a succinct read fetched, at its index and position, with its inclusion path (lone children null). */
+export interface ErgoIncludedRow { readonly index: bigint; readonly position: bigint; readonly unsigned: Uint8Array; readonly steps: readonly (Uint8Array | null)[] }
+/** A succinct view's state (succinct-read §4): the set it reads under, whether a transaction showed that set unsound
+ * (§2 rule 7), the subjects it follows, its kept tuples and the spans it read succinctly. */
+export interface ErgoSuccinctState {
+  readonly identity: Uint8Array;
+  readonly disagreement: boolean;
+  readonly followed: readonly Uint8Array[];
+  readonly kept: readonly ErgoKeptRow[];
+  readonly spans: readonly ErgoSuccinctSpan[];
+}
+/** A sync's succinct changes: subjects newly followed, kept tuples replaced, a new span, the transactions it fetched
+ * and the objects newly followed subjects hold at indices already kept. */
+export interface ErgoSuccinctCommit {
+  readonly identity: Uint8Array;
+  readonly disagreement: boolean;
+  readonly followed: readonly Uint8Array[];
+  readonly kept: readonly ErgoKeptRow[];
+  readonly span?: ErgoSuccinctSpan;
+  readonly included: readonly ErgoIncludedRow[];
+  readonly backfill: readonly (AttributedObject & { readonly index: bigint })[];
+}
+
+/** An inclusion path's steps as one blob: per step a flag byte (0 a lone child, 1 a sibling) and the sibling's bytes. */
+function encodeSteps(steps: readonly (Uint8Array | null)[]): Uint8Array {
+  const out = new Uint8Array(steps.reduce((n, s) => n + (s === null ? 1 : 33), 0));
+  let at = 0;
+  for (const step of steps) {
+    if (step === null) { out[at++] = 0; continue; }
+    out[at] = 1; out.set(step, at + 1); at += 33;
+  }
+  return out;
+}
+function decodeSteps(bytes: Uint8Array): (Uint8Array | null)[] {
+  const steps: (Uint8Array | null)[] = [];
+  for (let at = 0; at < bytes.length;) {
+    if (bytes[at] === 0) { steps.push(null); at++; continue; }
+    requireStored(bytes[at] === 1 && at + 33 <= bytes.length);
+    steps.push(bytes.slice(at + 1, at + 33)); at += 33;
+  }
+  return steps;
+}
+
 /** The view's state beside its rows. */
 export interface ErgoViewState {
   readonly witnessed: bigint | undefined;
@@ -96,9 +145,15 @@ export interface ErgoViewState {
   readonly retained: number;
   readonly charges: readonly ErgoSideCharge[];
   readonly protectedHeaders: readonly ErgoProtectedHeader[];
+  /** A succinct view's state; undefined for a view that reads every section. */
+  readonly succinct?: ErgoSuccinctState;
 }
-/** One sync's commit: its new sections, after the last held, and the state after it. */
-export interface ErgoViewCommit extends ErgoViewState { readonly sections: readonly ErgoSectionRow[] }
+/** One sync's commit: its new sections, after the last held, and the state after it. A succinct view's sections read
+ * succinctly carry no views and only the followed subjects' objects. */
+export interface ErgoViewCommit extends Omit<ErgoViewState, "succinct"> {
+  readonly sections: readonly ErgoSectionRow[];
+  readonly succinct?: ErgoSuccinctCommit;
+}
 /** An object as a range reads it. */
 export interface ErgoObjectRow { readonly index: bigint; readonly ordinal: bigint; readonly record: Uint8Array }
 
@@ -280,7 +335,14 @@ export class ErgoVenueJournal {
         CREATE TABLE IF NOT EXISTS objects (idx INTEGER NOT NULL, position INTEGER NOT NULL, kind INTEGER NOT NULL, subject BLOB NOT NULL,
           ordinal INTEGER NOT NULL, record BLOB NOT NULL, key BLOB NOT NULL, PRIMARY KEY(idx, position)) STRICT, WITHOUT ROWID;
         CREATE INDEX IF NOT EXISTS objects_subject ON objects(kind, subject, idx);
-        CREATE INDEX IF NOT EXISTS objects_key ON objects(key, idx);`);
+        CREATE INDEX IF NOT EXISTS objects_key ON objects(key, idx);
+        CREATE TABLE IF NOT EXISTS succinct (id INTEGER PRIMARY KEY CHECK(id=1), identity BLOB NOT NULL, disagreement INTEGER NOT NULL) STRICT;
+        CREATE TABLE IF NOT EXISTS followed (subject BLOB PRIMARY KEY) STRICT, WITHOUT ROWID;
+        CREATE TABLE IF NOT EXISTS kept (key INTEGER PRIMARY KEY, count TEXT NOT NULL, chain TEXT NOT NULL, end_height INTEGER NOT NULL,
+          end_id BLOB NOT NULL) STRICT;
+        CREATE TABLE IF NOT EXISTS spans (from_idx INTEGER PRIMARY KEY, to_idx INTEGER NOT NULL) STRICT;
+        CREATE TABLE IF NOT EXISTS included (idx INTEGER NOT NULL, position INTEGER NOT NULL, unsigned BLOB NOT NULL, steps BLOB NOT NULL,
+          PRIMARY KEY(idx, position)) STRICT, WITHOUT ROWID;`);
       this.db.prepare(`INSERT OR IGNORE INTO meta VALUES(1,'${FORMAT}','${ERGO_VIEW_RULES}',?,0,NULL,NULL,NULL,NULL,0)`).run(this.identity);
       const row = this.meta();
       requireStored(row?.format === FORMAT && row.venue === this.identity &&
@@ -355,10 +417,42 @@ export class ErgoVenueJournal {
     const protectedHeaders = this.db.prepare("SELECT name, id FROM protected ORDER BY name, age").all().map(p => {
       requireStored(typeof p.name === "string"); return { name: p.name as string, id: blob(p.id, 32) };
     });
+    const succinct = this.succinctState(witnessed);
     this.rows = new JournalHeaderRows(this.db);
     return { rows: this.rows, state: { witnessed, pin: row.pin === null ? undefined : blob(row.pin, 32), buried: row.buried === null ? undefined : blob(row.buried, 32),
       failure: row.failure === null ? undefined : FAILURE, retained: Number(integer(row.retained, BigInt(Number.MAX_SAFE_INTEGER))), protectedHeaders,
-      charges: charges.all().map(c => { requireStored(typeof c.name === "string"); return { name: c.name as string, charge: decimal(c.charge), height: integer(c.height, MAX_HEIGHT) }; }) } };
+      charges: charges.all().map(c => { requireStored(typeof c.name === "string"); return { name: c.name as string, charge: decimal(c.charge), height: integer(c.height, MAX_HEIGHT) }; }),
+      ...(succinct === undefined ? {} : { succinct }) } };
+  }
+  /** A succinct view's stored state, checked as far as is cheap: spans are disjoint, within the clock, and each of
+   * their rows holds no views; included transactions lie in spans. Undefined for a view that reads every section (a
+   * file kept before succinct views has none of these tables, which only an owner's opening adds). */
+  private succinctState(witnessed: bigint | undefined): ErgoSuccinctState | undefined {
+    if (this.db.prepare("SELECT 1 FROM sqlite_master WHERE name='succinct'").get() === undefined) return undefined;
+    const meta = this.db.prepare("SELECT identity, disagreement FROM succinct WHERE id=1"); meta.setReadBigInts(true);
+    const row = meta.get();
+    if (row === undefined) {
+      requireStored(this.db.prepare("SELECT 1 FROM spans UNION ALL SELECT 1 FROM followed UNION ALL SELECT 1 FROM kept UNION ALL SELECT 1 FROM included LIMIT 1").get() === undefined);
+      return undefined;
+    }
+    requireStored(row.disagreement === 0n || row.disagreement === 1n);
+    const spansQuery = this.db.prepare("SELECT from_idx, to_idx FROM spans ORDER BY from_idx"); spansQuery.setReadBigInts(true);
+    const spans: ErgoSuccinctSpan[] = [];
+    for (const s of spansQuery.all()) {
+      const from = integer(s.from_idx, MAX_INDEX), to = integer(s.to_idx, MAX_INDEX), last = spans[spans.length - 1];
+      requireStored(from <= to && witnessed !== undefined && to <= witnessed && (last === undefined || last.to < from));
+      spans.push({ from, to });
+    }
+    const views = this.db.prepare("SELECT count(*) AS n FROM sections WHERE idx BETWEEN ? AND ? AND views=?"); views.setReadBigInts(true);
+    for (const { from, to } of spans) requireStored(views.get(from, to, NO_VIEWS)!.n === to - from + 1n);
+    const keptQuery = this.db.prepare("SELECT key, count, chain, end_height, end_id FROM kept ORDER BY key"); keptQuery.setReadBigInts(true);
+    const kept = keptQuery.all().map(k => ({ key: integer(k.key, 0xffff_ffffn), count: decimal(k.count), chain: decimal(k.chain),
+      endHeight: integer(k.end_height, MAX_HEIGHT), endId: blob(k.end_id, 32) }));
+    const outside = this.db.prepare("SELECT count(*) AS n FROM included WHERE NOT EXISTS (SELECT 1 FROM spans WHERE idx BETWEEN from_idx AND to_idx)");
+    outside.setReadBigInts(true);
+    requireStored(outside.get()!.n === 0n);
+    return { identity: blob(row.identity, 32), disagreement: row.disagreement === 1n, spans, kept,
+      followed: this.db.prepare("SELECT subject FROM followed ORDER BY subject").all().map(f => blob(f.subject, 32)) };
   }
   /** One sync's rows and state, in one transaction. A throw leaves the transaction rolled back or uncertain; the
    * caller fails its view. */
@@ -375,6 +469,7 @@ export class ErgoVenueJournal {
         section.run(row.index, row.header, encodeViews(row.views));
         row.objects.forEach((o, position) => object.run(row.index, position, o.kind, o.subject, o.ordinal, o.record, objectKey(o.kind, o.subject, o.record)));
       }
+      if (state.succinct !== undefined) this.commitSuccinct(state.succinct, object);
       this.db.prepare("DELETE FROM protected").run();
       const keep = this.db.prepare("INSERT OR IGNORE INTO protected VALUES(?,?,?)");
       state.protectedHeaders.forEach(({ name, id }, age) => keep.run(name, id, age));
@@ -389,6 +484,34 @@ export class ErgoVenueJournal {
       throw error;
     }
     this.rows.written();
+  }
+  /** A succinct sync's rows, inside the commit's transaction. A newly followed subject's objects at kept indices take
+   * positions after those already there, so each index keeps them in the order they were read. */
+  private commitSuccinct(state: ErgoSuccinctCommit, object: StatementSync): void {
+    this.db.prepare("INSERT INTO succinct VALUES(1,?,?) ON CONFLICT(id) DO UPDATE SET disagreement=excluded.disagreement")
+      .run(state.identity, state.disagreement ? 1 : 0);
+    const follow = this.db.prepare("INSERT OR IGNORE INTO followed VALUES(?)");
+    for (const subject of state.followed) follow.run(subject);
+    const keep = this.db.prepare("INSERT OR REPLACE INTO kept VALUES(?,?,?,?,?)");
+    for (const k of state.kept) keep.run(k.key, k.count.toString(), k.chain.toString(), k.endHeight, k.endId);
+    if (state.span !== undefined) this.db.prepare("INSERT INTO spans VALUES(?,?)").run(state.span.from, state.span.to);
+    const include = this.db.prepare("INSERT OR IGNORE INTO included VALUES(?,?,?,?)");
+    for (const t of state.included) include.run(t.index, t.position, t.unsigned, encodeSteps(t.steps));
+    const next = this.db.prepare("SELECT coalesce(max(position) + 1, 0) AS next FROM objects WHERE idx=?"); next.setReadBigInts(true);
+    for (const o of state.backfill) object.run(o.index, next.get(o.index)!.next as bigint, o.kind, o.subject, o.ordinal, o.record, objectKey(o.kind, o.subject, o.record));
+  }
+  /** The section read natively at `index`: its header id and views; undefined for an index not kept or read succinctly. */
+  section(index: bigint): { readonly header: Uint8Array; readonly views: readonly ErgoTransactionView[] } | undefined {
+    const row = this.db.prepare("SELECT header, views FROM sections WHERE idx=?").get(index);
+    if (row === undefined) return undefined;
+    const views = decodeViews(blob(row.views));
+    return views.length === 0 ? undefined : { header: blob(row.header, 32), views };
+  }
+  /** The transactions a succinct read fetched at `index`, in position order, for an audit. */
+  included(index: bigint): ErgoIncludedRow[] {
+    if (this.db.prepare("SELECT 1 FROM sqlite_master WHERE name='included'").get() === undefined) return [];
+    const q = this.db.prepare("SELECT position, unsigned, steps FROM included WHERE idx=? ORDER BY position"); q.setReadBigInts(true);
+    return q.all(index).map(t => ({ index, position: integer(t.position, 0xffff_ffffn), unsigned: blob(t.unsigned), steps: decodeSteps(blob(t.steps)) }));
   }
   /** The objects of one kind and subject at indices `from` to `to`, in index and section order. Read one at a time
    * and refused (`RangeLimitError`) as soon as they pass the answer's budget, so no read holds more than an answer

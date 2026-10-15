@@ -2,6 +2,8 @@ import { sha256 } from "@noble/hashes/sha2.js";
 import { bytesToHex as hex, concatBytes, hexToBytes } from "@noble/hashes/utils.js";
 import { fieldToBytes } from "../field.js";
 import { compareBytes, copyUnshared, EncodingError } from "../../bytes.js";
+import type { ExhaustionSupplier, Fold, IncludedTransaction, KeyAnswer } from "../../ergo-exhaustion.js";
+import { decodeFold, decodeIncluded, decodeKeyAnswer, MAX_FOLD_PROOF_BYTES, MAX_KEY_ANSWER_BYTES, MAX_TRANSACTION_BYTES } from "../../ergo-exhaustion-wire.js";
 import { decodeCommitment, verifyCommitment, type Commitment } from "../../venue-records.js";
 import { POOL_V3, type Construction, type OperatorReceipt } from "./construction.js";
 import { EVIDENCE_QUOTA, evidenceName, wholePackage, type EvidenceStore } from "./evidence-store.js";
@@ -388,6 +390,34 @@ export class V3ServiceClient {
     const result = await this.served(identifier(backing), 0n, maxBytes, (served, parts) => wholePackage(served.package, parts, this.#construction));
     return { selection: result.served.selection, package: result.taken };
   }
+}
+
+/**
+ * A replica's exhaustion (succinct-read §4.7) under the set whose identity is `set`, over its listener at `baseUrl`
+ * (loopback or v3 onion, with no credential): `NOT_FOUND` is no answer (undefined); a frame that does not decode, a
+ * refusal or no answer at all rejects, which a succinct view reads as a supplier that did not supply. An onion
+ * replica's proxy is read when first asked.
+ */
+export function exhaustionClient(baseUrl: string, set: Uint8Array): ExhaustionSupplier {
+  const listener = listenerUrl(baseUrl), own = identifier(set);
+  if (listener === undefined) throw new EncodingError("a local or onion URL required");
+  const url = listener.url.href, onion = listener.onion, prefix = `/exhaustion/${hex(own)}/`;
+  const fetched = <T>(path: string, maximum: number, decode: (bytes: Uint8Array) => T): Promise<T | undefined> =>
+    exchangeWith(url, onion, `${prefix}${path}`, undefined, undefined, "application/octet-stream", response => body(response, maximum))
+      .then(decode, (error: unknown) => {
+        if (error instanceof V3ServiceClientError && error.code === "NOT_FOUND") return undefined;
+        throw error;
+      });
+  const height = (value: bigint): string => { if (typeof value !== "bigint" || value < 0n || value >= 1n << 64n) throw new TypeError("a height is a u64"); return value.toString(); };
+  const u32 = (value: bigint): string => { if (typeof value !== "bigint" || value < 0n || value >= 1n << 32n) throw new TypeError("a key or position is a u32"); return value.toString(); };
+  return {
+    name: url,
+    fold: (maxHeight: bigint): Promise<Fold | undefined> => fetched(`fold?max=${height(maxHeight)}`, MAX_FOLD_PROOF_BYTES + 256, decodeFold),
+    key: (endHeight: bigint, key: bigint, from: bigint): Promise<KeyAnswer | undefined> =>
+      fetched(`key/${height(endHeight)}/${u32(key)}?from=${height(from)}`, MAX_KEY_ANSWER_BYTES, decodeKeyAnswer),
+    transaction: (at: bigint, position: bigint): Promise<IncludedTransaction | undefined> =>
+      fetched(`transaction/${height(at)}/${u32(position)}`, MAX_TRANSACTION_BYTES + 4 + 1 + 33 * 32, decodeIncluded),
+  };
 }
 
 /** What a supply asks of a source: a client, or one made when first asked (an onion source needs the holder's proxy). */

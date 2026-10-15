@@ -140,7 +140,11 @@ The six exhaustion circuits (§4.3, [succinct-read 282c925](https://github.com/m
 executes them over synthetic and mainnet periods with hostile witnesses ([report](ergo-exhaustion-check-verification.json)) and
 `exhaustion-prove.mjs` proves two periods end to end at full size, the reader taking the last fold
 ([report](ergo-exhaustion-prove-verification.json); [slice 43](../decisions/2026-10.md#2026-10-15--prove-the-exhaustions-six-circuits-in-production-form-end-to-end-and-keep-up-with-a-heavy-ergo-day-one-and-a-half-times-on-one-prover-slice-43-next-12)).
-Their keys are a test set's (none is adopted); no supplier serves folds or paths and no venue read calls the reader yet.
+Their keys are a test set's (none is adopted). The Ergo view reads the venue succinctly where its owner asks
+(`ErgoVenue`'s `succinct` option): headers natively, the subjects it follows below an exhaustion supplier's fold, sections
+natively above; a replica serves its map and test-set folds (`reader serve`, `ExhaustionServer`, `GET /exhaustion`) and a
+`--read succinct` directory's view reads them, which `npm test` holds to the complete view and CI's `succinct` group
+drives through the commands ([slice 43](../decisions/2026-10.md#2026-10-15--read-the-venue-succinctly-in-a-succinct-directorys-view-its-backings-subjects-below-a-replicas-fold-and-sections-natively-above-it-slice-43-next-12)).
 
 The holder's read path also runs in a browser engine (slice 39, [probes](POOL_DEPLOYMENT_PROBES.md#the-holders-read-path-in-a-browser-engine-slice-39)):
 `scripts/browser/build.mjs` bundles the library with `src/browser/`'s substitutes for node:sqlite (SQLite's
