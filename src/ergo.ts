@@ -50,11 +50,18 @@ import { bytesToHex } from "@noble/hashes/utils.js";
 import { arrayLength, byteLength, compareBytes, copyBytes, copyUnshared, EncodingError } from "./bytes.js";
 import { decodeCompactBits, ergoHeaderStore, parseErgoHeader, ANCHOR_CONTEXT, INITIAL_DIFFICULTY, type ErgoHeaderStore } from "./ergo-headers.js";
 import {
-  attributeSection, ERGO_SYNTHETIC_REFERENCE, ERGO_TESTNET_REFERENCE, ergoProfileIdentity, orderedEntries, ownErgoProfile, type AttributedObject, type ErgoProfile, type ErgoTransactionView,
+  attributeSection, attributeTransaction, ERGO_SYNTHETIC_REFERENCE, ERGO_TESTNET_REFERENCE, ergoProfileIdentity, orderedEntries, ownErgoProfile, type AttributedObject, type ErgoProfile, type ErgoTransactionView,
 } from "./ergo-profile.js";
 import type { ErgoPublication, ErgoPublisher, ErgoRecordRequest } from "./ergo-publisher.js";
 import type { ErgoSupplier } from "./ergo-supplier.js";
-import { ErgoVenueJournal, FAILURE, objectKey, type ErgoSectionRow, type ErgoViewState } from "./ergo-store.js";
+import {
+  checkFold, inclusionRoot, readSubject, subjectKey, type ExhaustionSet, type ExhaustionSupplier, type FetchedTransaction, type FoldInputs, type IndexedObject,
+  type KeyAnswer, type KeptTuple, type ReaderChain,
+} from "./ergo-exhaustion.js";
+import {
+  ErgoVenueJournal, FAILURE, objectKey, type ErgoIncludedRow, type ErgoKeptRow, type ErgoSectionRow, type ErgoSuccinctCommit, type ErgoSuccinctSpan,
+  type ErgoViewState,
+} from "./ergo-store.js";
 import {
   copyLimits, copyRequest, encodeRangeAnswer, MAX_RANGE_RECORD_BYTES, RANGE_FRAME_BYTES, type RangeLimits, type RangeRequest, type RecordKind,
 } from "./record-range.js";
@@ -148,6 +155,20 @@ export interface ErgoSyncReport {
   /** The first index past the clock not read in this sync, and why. */
   readonly unresolvedIndex: bigint | undefined;
   readonly unresolvedReason?: "no section" | "section budget" | "retained budget";
+  /** A succinct view's pass (succinct-read §4); absent for a view that reads every section. */
+  readonly succinct?: ErgoSuccinctReport;
+}
+/** What a succinct view's sync took from exhaustion suppliers. */
+export interface ErgoSuccinctReport {
+  /** The fold whose end the pass read through, as an index, and its supplier; absent where no fold was used. */
+  readonly foldIndex?: bigint;
+  readonly supplier?: string;
+  /** Indices read succinctly, subjects newly followed and transactions fetched. */
+  readonly indicesRead: number;
+  readonly followed: number;
+  readonly transactionsFetched: number;
+  /** Each supplier not used, and why. */
+  readonly refused: readonly { readonly name: string; readonly reason: string }[];
 }
 export interface ErgoSupplierReport {
   readonly name: string;
@@ -162,6 +183,35 @@ interface Snapshot {
   readonly witnessed: bigint;
   readonly witnessedHeaderId: Uint8Array;
 }
+/** A succinct view's state as its rows hold it after the last commit, and the subjects asked of it since. */
+interface SuccinctState {
+  readonly set: ExhaustionSet;
+  /** Whether a transaction showed the set unsound (succinct-read §2 rule 7): the view then refuses every read. */
+  disagreement: boolean;
+  readonly followed: Map<string, Uint8Array>;
+  readonly kept: Map<bigint, KeptTuple>;
+  /** Disjoint and ascending. */
+  readonly spans: ErgoSuccinctSpan[];
+  /** Subjects to follow from the next sync. */
+  readonly pending: Map<string, Uint8Array>;
+  /** Subjects a read asked where the view read succinctly and follows them not. */
+  readonly wanted: Map<string, Uint8Array>;
+}
+/** What a succinct pass read: rows above the clock, newly followed subjects' objects below it, and its rows' changes. */
+interface SuccinctPass {
+  readonly rows: readonly ErgoSectionRow[];
+  readonly backfill: readonly IndexedObject[];
+  readonly followed: readonly Uint8Array[];
+  readonly kept: readonly KeptTuple[];
+  readonly included: readonly ErgoIncludedRow[];
+  readonly span?: ErgoSuccinctSpan;
+  readonly bytes: number;
+  readonly disagreement?: boolean;
+  readonly report: ErgoSuccinctReport;
+}
+/** A view whose succinct state shows the set unsound refuses every read: what it derived under the set is discarded
+ * with the file (succinct-read §6). */
+const DISAGREEMENT = "the exhaustion set disagreed with an included transaction (succinct-read §2 rule 7): remove this view and sync it again";
 /** A supplier's header pass: its report, the ids of the headers it added,
  * and, where the header budget stopped it before its tip, its last header. */
 interface HeaderPass {
@@ -223,10 +273,14 @@ export class ErgoVenue implements RecordVenue, RecordPublisher {
   private failure: string | undefined;
   /** Where this view's own records go out; a view without one only reads. */
   private publisher: ErgoPublisher | undefined;
+  /** A succinct view's state (succinct-read §4); undefined for a view that reads every section. */
+  private readonly succinct: SuccinctState | undefined;
 
-  /** A view keeps its rows in `journal`, attached to it alone, or without one in a private in-memory database. */
+  /** A view keeps its rows in `journal`, attached to it alone, or without one in a private in-memory database. With
+   * `succinct`, it reads below an exhaustion set's folds only the subjects it follows (succinct-read §4): a file keeps
+   * one set from its first sync, and a view that read every section is never opened succinctly, nor the reverse. */
   constructor(profile: ErgoProfile, anchorContext: readonly Uint8Array[], policy: Partial<ErgoReaderPolicy> = {}, publisher?: ErgoPublisher,
-    journal?: ErgoVenueJournal) {
+    journal?: ErgoVenueJournal, succinct?: { readonly set: ExhaustionSet }) {
     this.publisher = publisher;
     this.profile = ownErgoProfile(profile);
     this.venueId = ergoProfileIdentity(this.profile);
@@ -273,6 +327,7 @@ export class ErgoVenue implements RecordVenue, RecordPublisher {
     if (store === undefined) throw new Error("the anchor context authenticated once and not again");
     this.store = store;
     this.restore(state);
+    this.succinct = this.restoreSuccinct(state, succinct);
     // A copied or restored view is audited before any read (slice 13 M13e): reopening checks only what is cheap.
     if (this.journal.copied()) {
       try {
@@ -338,16 +393,48 @@ export class ErgoVenue implements RecordVenue, RecordPublisher {
     this.failure = state.failure;
   }
 
+  /** A succinct view's state from its rows, or a fresh one for a file that has read nothing. */
+  private restoreSuccinct(state: ErgoViewState, option: { readonly set: ExhaustionSet } | undefined): SuccinctState | undefined {
+    if (option === undefined) {
+      if (state.succinct !== undefined) throw new VenueError("this view reads succinctly under an exhaustion set (succinct-read §4): open it with that set");
+      return undefined;
+    }
+    const { set } = option;
+    if (set === null || typeof set !== "object" || !(set.identity instanceof Uint8Array) || set.identity.length !== 32) throw new TypeError("invalid exhaustion set");
+    const kept = state.succinct, fresh: SuccinctState = { set, disagreement: false, followed: new Map(), kept: new Map(), spans: [], pending: new Map(), wanted: new Map() };
+    if (kept === undefined) {
+      if (state.witnessed !== undefined) throw new VenueError("this view reads every section; a succinct view keeps a file of its own from its anchor");
+      return fresh;
+    }
+    if (compareBytes(kept.identity, set.identity) !== 0) {
+      throw new VenueError("this view was read under another exhaustion set (succinct-read §2 rule 8); remove it and sync again");
+    }
+    for (const subject of kept.followed) fresh.followed.set(bytesToHex(subject), subject);
+    for (const k of kept.kept) fresh.kept.set(k.key, Object.freeze({ identity: copyBytes(set.identity), ...k }));
+    fresh.spans.push(...kept.spans);
+    fresh.disagreement = kept.disagreement;
+    return fresh;
+  }
+  /** The succinct rows' unchanged part of a commit: the set and whether it disagreed. */
+  private succinctCommit(pass?: SuccinctPass): ErgoSuccinctCommit | undefined {
+    const state = this.succinct;
+    if (state === undefined) return undefined;
+    const rows: ErgoKeptRow[] = (pass?.kept ?? []).map(({ key, count, chain, endHeight, endId }) => ({ key, count, chain, endHeight, endId }));
+    return { identity: copyBytes(state.set.identity), disagreement: state.disagreement || pass?.disagreement === true, followed: pass?.followed ?? [],
+      kept: rows, ...(pass?.span === undefined ? {} : { span: pass.span }), included: pass?.included ?? [], backfill: pass?.backfill ?? [] };
+  }
+
   /** Write one sync's sections and the state after it, in one transaction. */
-  private persist(snapshot: Snapshot | undefined, sections: readonly ErgoSectionRow[]): void {
+  private persist(snapshot: Snapshot | undefined, sections: readonly ErgoSectionRow[], pass?: SuccinctPass): void {
     if (snapshot !== undefined) {
       // A pin the best chain buries at the depth takes its tip as the burying header; otherwise, as when a heavier but
       // shorter chain leads, the pin has not moved and the earlier burying header still descends from it.
       const tip = this.store.tip(), height = tip.anchorHeight + 1n + snapshot.witnessed;
       if (this.failure === undefined && tip.height >= height + this.profile.depth) this.buried = tip.id;
     }
+    const succinct = this.succinctCommit(pass);
     this.journal.commit({ sections, witnessed: snapshot?.witnessed, pin: snapshot?.witnessedHeaderId, buried: snapshot === undefined ? undefined : this.buried,
-      failure: this.failure, retained: this.retained,
+      failure: this.failure, retained: this.retained, ...(succinct === undefined ? {} : { succinct }),
       charges: [...this.sideHeaders].map(([name, { charge, height }]) => ({ name, charge, height })),
       protectedHeaders: [...this.protectedHeaders].flatMap(([name, ids]) => [...ids.values()].map(id => ({ name, id }))) });
   }
@@ -376,16 +463,22 @@ export class ErgoVenue implements RecordVenue, RecordPublisher {
    * only when complete, with no await in between; reads meanwhile answer from
    * the previous one.
    *
+   * A succinct view reads, before sections, the indices above the clock
+   * through a fold's end from `exhaustion`'s first supplier that serves them
+   * (`readSuccinct`), and sections natively above it.
+   *
    * Rejects with VenueError on a reorganization past the depth (the venue's
-   * failure, after which every read refuses) and on a concurrent sync. Any
-   * other rejection is the view's own failure, after which it refuses too.
+   * failure, after which every read refuses), on a transaction that shows the
+   * exhaustion set unsound (likewise) and on a concurrent sync. Any other
+   * rejection is the view's own failure, after which it refuses too.
    */
-  async sync(suppliers: readonly ErgoSupplier[]): Promise<ErgoSyncReport> {
+  async sync(suppliers: readonly ErgoSupplier[], exhaustion: readonly ExhaustionSupplier[] = []): Promise<ErgoSyncReport> {
     if (this.failure !== undefined) throw new VenueError(this.failure);
     if (this.syncing) throw new VenueError("a sync is already in progress");
     // The caller's list is read once, before the sync starts, so a list that is not one is the caller's error alone;
     // each supplier's name once, for its report.
     const sources = Array.from(suppliers, supplier => ({ supplier, name: nameOf(supplier) }));
+    const exhaustionSources = Array.from(exhaustion, supplier => ({ supplier, name: nameOf(supplier) }));
     // A supplier's name keys its quota and protection in the rows, so it must store as itself.
     for (const { name } of sources) {
       try { encodeURIComponent(name); } catch { throw new TypeError("a supplier's name is not well-formed text"); }
@@ -455,9 +548,18 @@ export class ErgoVenue implements RecordVenue, RecordPublisher {
         const forkIndex = fork - anchorHeight - 1n;
         if (forkIndex >= clock && forkIndex < bound) bound = forkIndex;
       }
+      // A succinct view's indices through a fold's end, for the subjects it follows (succinct-read §4.4).
+      const pass = this.succinct === undefined ? undefined : await this.readSuccinct(exhaustionSources, clock, bound);
+      if (pass?.disagreement === true) {
+        // §2 rule 7's evidence: the set is unsound, and what the view derived under it is discarded with the file.
+        this.succinct!.disagreement = true;
+        this.persist(previous, [], pass);
+        throw new VenueError(DISAGREEMENT);
+      }
+      for (const row of pass?.rows ?? []) read.push(row);
       const missed = new Set<ErgoSupplier>();
-      let spent = 0, sectionsRead = 0, unresolved: bigint | undefined, reason: ErgoSyncReport["unresolvedReason"];
-      for (let index = clock + 1n; index <= bound; index++) {
+      let spent = pass?.bytes ?? 0, sectionsRead = 0, unresolved: bigint | undefined, reason: ErgoSyncReport["unresolvedReason"];
+      for (let index = clock + 1n + BigInt(read.length); index <= bound; index++) {
         // Checked before each section, so one larger than the budget is still read, alone in its sync.
         if (spent >= this.policy.sectionBytesPerSync) { unresolved = index; reason = "section budget"; break; }
         const header = this.store.bestAt(anchorHeight + 1n + index)!;
@@ -486,8 +588,9 @@ export class ErgoVenue implements RecordVenue, RecordPublisher {
         this.store.prune(next.witnessedHeaderId, [...this.protectedHeaders.values()].flatMap(ids => [...ids.values()]));
       }
       // No await: commit evidence and pin before exposing the new snapshot.
-      this.persist(next, read);
+      this.persist(next, read, pass);
       this.snapshot = next;
+      if (pass !== undefined) this.applySuccinct(pass);
       const snapshot = this.snapshot;
       // The publisher forgets what this view now holds, in its own queue: it never fails or holds up the sync.
       if (this.publisher !== undefined && snapshot !== undefined) this.publisher.settle(request => this.holds(request)).catch(() => {});
@@ -495,6 +598,7 @@ export class ErgoVenue implements RecordVenue, RecordPublisher {
         witnessedIndex: snapshot?.witnessed, witnessedHeaderId: snapshot === undefined ? undefined : copyBytes(snapshot.witnessedHeaderId),
         chainWitnessedIndex: chainWitnessed >= 0n ? chainWitnessed : undefined, tipHeight: this.store.tip().height, suppliers: Object.freeze(passes.map(({ pass }) => pass.report)),
         sectionsRead, unresolvedIndex: unresolved, ...(reason === undefined ? {} : { unresolvedReason: reason }),
+        ...(pass === undefined ? {} : { succinct: pass.report }),
       });
     } catch (error) {
       // Suppliers' failures are answers, so whatever reaches here is the view's own: it may have read sections past
@@ -506,6 +610,150 @@ export class ErgoVenue implements RecordVenue, RecordPublisher {
     } finally {
       this.syncing = false;
     }
+  }
+
+  /**
+   * A succinct view's pass (succinct-read §4.4 over the subjects it follows). The first exhaustion supplier whose fold
+   * checks under §4.3, ends within what this sync may witness (`bound`) and answers every path, entry list and
+   * transaction it is asked gives the indices above the clock through the fold's end, each row holding the followed
+   * subjects' objects alone, and each subject newly followed its objects at the indices already read succinctly. A
+   * supplier that fails or answers what does not check is passed over, and where none serves the sync reads
+   * sections natively (§4.6). A subject followed before any index was read succinctly needs no earlier read.
+   */
+  private async readSuccinct(sources: readonly { readonly supplier: ExhaustionSupplier; readonly name: string }[], clock: bigint, bound: bigint):
+      Promise<SuccinctPass> {
+    const state = this.succinct!, anchorHeight = this.store.tip().anchorHeight;
+    const spanTop = state.spans.length === 0 ? -1n : state.spans[state.spans.length - 1]!.to;
+    const promoted = spanTop < 0n ? [...state.pending.values()] : [], newcomers = spanTop < 0n ? [] : [...state.pending.values()];
+    const refused: { name: string; reason: string }[] = [];
+    const none = (disagreement = false): SuccinctPass => ({ rows: [], backfill: [], followed: disagreement ? [] : promoted, kept: [], included: [], bytes: 0,
+      ...(disagreement ? { disagreement } : {}), report: Object.freeze({ indicesRead: 0, followed: disagreement ? 0 : promoted.length, transactionsFetched: 0, refused }) });
+    if (bound <= clock && newcomers.length === 0) return none();
+    if (state.set.start.height > anchorHeight) {
+      // The set's map starts above the anchor: its entries cannot cover the venue's first indices (§4.4).
+      refused.push({ name: "set", reason: "start" });
+      return none();
+    }
+    const chain: ReaderChain = {
+      at: height => { const header = this.store.bestAt(height); return header === undefined ? undefined : { id: header.id, transactionsRoot: header.transactionsRoot }; },
+      tipHeight: this.store.tip().height,
+    };
+    for (const { supplier, name } of sources) {
+      const answer = await supplied(() => supplier.fold(anchorHeight + 1n + bound), this.policy.supplierTimeoutMs);
+      if (!answer.ok) { refused.push({ name, reason: answer.failure }); continue; }
+      if (answer.value === undefined) { refused.push({ name, reason: "no fold" }); continue; }
+      const checked = await checkFold(state.set, answer.value, chain, this.profile.depth);
+      if ("refused" in checked) { refused.push({ name, reason: checked.refused }); continue; }
+      const top = checked.inputs.endHeight - anchorHeight - 1n;
+      // A fold past what this sync may witness (a supplier's fork bounds the clock below the reader's depth) waits.
+      if (top > bound) { refused.push({ name, reason: "fold past the clock's bound" }); continue; }
+      const forward = top > clock, backfill = newcomers.length > 0 && top >= spanTop;
+      if (!forward && !backfill) { refused.push({ name, reason: "fold at or below the clock" }); continue; }
+      const read = await this.readFold(supplier, checked.inputs, chain, clock, top, backfill ? newcomers : [], promoted);
+      if ("refused" in read) {
+        if (read.refused === "disagreement") return none(true);
+        refused.push({ name, reason: read.refused });
+        continue;
+      }
+      const followed = [...promoted, ...(backfill ? newcomers : [])];
+      return { ...read, followed, report: Object.freeze({ foldIndex: top, supplier: name, indicesRead: read.rows.length, followed: followed.length,
+        transactionsFetched: read.included.length, refused }) };
+    }
+    return none();
+  }
+
+  /** One supplier's reads at a checked fold ending at index `top`: each followed subject over `clock + 1` through
+   * `top` from its kept tuple, where the fold is above the clock, and each newcomer over every index through `top` it
+   * is not already held natively at. */
+  private async readFold(supplier: ExhaustionSupplier, inputs: FoldInputs, chain: ReaderChain, clock: bigint, top: bigint,
+      newcomers: readonly Uint8Array[], promoted: readonly Uint8Array[]):
+      Promise<Omit<SuccinctPass, "followed" | "report"> | { readonly refused: string }> {
+    const state = this.succinct!, anchorHeight = this.store.tip().anchorHeight, timeout = this.policy.supplierTimeoutMs, E = inputs.endHeight;
+    const keys = new Map<string, KeyAnswer | undefined>(), fetched = new Map<string, FetchedAnswer | undefined>();
+    let bytes = 0;
+    const keyAnswer = async (key: bigint, from: bigint): Promise<KeyAnswer | undefined> => {
+      const id = `${key}:${from}`;
+      if (!keys.has(id)) {
+        const answer = await supplied(() => supplier.key(E, key, from), timeout), owned = answer.ok ? ownKeyAnswer(answer.value) : undefined;
+        bytes += owned === undefined ? 0 : PATH_BYTES + ENTRY_BYTES * owned.entries.length;
+        keys.set(id, owned);
+      }
+      return keys.get(id);
+    };
+    const transaction = async (height: bigint, position: bigint): Promise<FetchedAnswer | undefined> => {
+      const id = `${height}:${position}`;
+      if (!fetched.has(id)) {
+        const answer = await supplied(() => supplier.transaction(height, position), timeout), owned = answer.ok ? ownTransactionAnswer(answer.value) : undefined;
+        bytes += owned === undefined ? 0 : owned.unsigned.length + 33 * owned.steps.length;
+        fetched.set(id, owned);
+      }
+      return fetched.get(id);
+    };
+    const reads: { readonly subject: Uint8Array; readonly from: bigint; readonly kept?: KeptTuple }[] = [];
+    if (top > clock) {
+      for (const subject of [...state.followed.values(), ...promoted]) {
+        const kept = state.kept.get(subjectKey(subject));
+        reads.push({ subject, from: clock + 1n, ...(kept === undefined ? {} : { kept }) });
+      }
+    }
+    for (const subject of newcomers) reads.push({ subject, from: 0n });
+    const spans = state.spans, skip = (index: bigint): boolean => index <= clock && !spanHolds(spans, index);
+    const objects: IndexedObject[] = [], included = new Map<string, ErgoIncludedRow>(), kept = new Map<bigint, KeptTuple>();
+    for (const { subject, from, kept: tuple } of reads) {
+      const key = subjectKey(subject), answer = await keyAnswer(key, tuple?.count ?? 0n);
+      if (answer === undefined) return { refused: "path" };
+      const read = await readSubject(subject, from, top, inputs, { profile: this.profile, anchorHeight, set: state.set, chain, path: answer.path,
+        entries: answer.entries, ...(tuple === undefined ? {} : { kept: tuple }), transaction }, skip);
+      if ("refused" in read) return read;
+      for (const object of read.objects) objects.push(object);
+      for (const t of read.transactions) included.set(`${t.index}:${t.position}`, t);
+      kept.set(key, read.kept);
+    }
+    const size = objects.reduce((total, object) => total + retainedSize(object), 0);
+    if (this.retained + size > this.policy.retainedBytes) return { refused: "retained budget" };
+    this.retained += size;
+    const rows: ErgoSectionRow[] = [], byIndex = new Map<bigint, AttributedObject[]>();
+    for (const { index, ...object } of objects) if (index > clock) byIndex.set(index, [...(byIndex.get(index) ?? []), object]);
+    for (let index = clock + 1n; index <= top; index++) {
+      rows.push({ index, header: this.store.bestAt(anchorHeight + 1n + index)!.id, views: [], objects: byIndex.get(index) ?? [] });
+    }
+    return { rows, backfill: objects.filter(o => o.index <= clock), kept: [...kept.values()], included: [...included.values()], bytes,
+      ...(top > clock ? { span: { from: clock + 1n, to: top } } : {}) };
+  }
+
+  /** A committed pass's changes to the state in memory. */
+  private applySuccinct(pass: SuccinctPass): void {
+    const state = this.succinct!;
+    for (const subject of pass.followed) {
+      const key = bytesToHex(subject);
+      state.followed.set(key, subject); state.pending.delete(key); state.wanted.delete(key);
+    }
+    for (const tuple of pass.kept) state.kept.set(tuple.key, tuple);
+    if (pass.span !== undefined) state.spans.push(pass.span);
+  }
+
+  /**
+   * Follow `subject` from the next sync (a succinct view; a no-op for one that reads every section). Below its folds'
+   * ends a succinct view holds only the subjects it follows, and a read of another there is unresolved; the next sync
+   * reads a newly followed subject at every index already read succinctly.
+   */
+  follow(subject: Uint8Array): void {
+    const owned = copyUnshared(subject);
+    if (owned.length !== 32) throw new EncodingError("a subject is 32 bytes");
+    const state = this.succinct, key = bytesToHex(owned);
+    if (state === undefined || state.followed.has(key)) return;
+    state.pending.set(key, owned);
+  }
+
+  /** The subjects a read asked of this succinct view where it read succinctly and follows them not, to follow before
+   * reading again; empty for a view that reads every section. */
+  wanted(): Uint8Array[] {
+    return [...(this.succinct?.wanted.values() ?? [])].map(copyBytes);
+  }
+
+  /** The subjects this succinct view follows, as of its last sync; empty for a view that reads every section. */
+  followed(): Uint8Array[] {
+    return [...(this.succinct?.followed.values() ?? [])].map(copyBytes);
   }
 
   /** Whether a supplier's outstanding side-branch charge has reached its quota, as of the last sync it took part in. */
@@ -624,6 +872,26 @@ export class ErgoVenue implements RecordVenue, RecordPublisher {
     try { for (const section of this.journal.sections()) {
       const header = this.store.bestAt(anchorHeight + 1n + section.index);
       if (section.index !== next || header === undefined || compareBytes(header.id, section.header) !== 0) refuse(`section ${section.index} is not the best chain's next`);
+      const succinct = this.succinct !== undefined && spanHolds(this.succinct.spans, section.index);
+      if (succinct !== (section.views.length === 0)) refuse(`section ${section.index} is read ${succinct ? "succinctly" : "natively"} and keeps ${succinct ? "" : "no "}views`);
+      if (succinct) {
+        // What a succinct row holds is re-derived from the transactions its reads fetched; that those were all the
+        // followed subjects' rests on the fold, paths and entries the reads checked, which the rows do not keep.
+        const followed = this.succinct!.followed, derived: AttributedObject[] = [];
+        for (const t of this.journal.included(section.index)) {
+          const root = inclusionRoot(blake2b(t.unsigned, { dkLen: 32 }), Number(t.position), t.steps);
+          if (root === undefined || compareBytes(root, header!.transactionsRoot) !== 0) refuse(`section ${section.index}'s transaction ${t.position} is not included in its header`);
+          for (const object of attributeTransaction(this.profile, t.unsigned, Number(t.position))) if (followed.has(bytesToHex(object.subject))) derived.push(object);
+        }
+        const keyOf = (o: AttributedObject): string => `${bytesToHex(objectKey(o.kind, o.subject, o.record))}:${o.ordinal}`;
+        const kept = section.objects.map(keyOf).sort(), found = derived.map(keyOf).sort();
+        if (kept.join() !== found.join() || section.objects.some(o => compareBytes(o.key, objectKey(o.kind, o.subject, o.record)) !== 0)) {
+          refuse(`section ${section.index}'s objects are not those its fetched transactions attribute`);
+        }
+        for (const object of derived) retained += retainedSize(object);
+        objects += BigInt(derived.length); next++;
+        continue;
+      }
       const derived = attributeSection(this.profile, section.views, header!.transactionsRoot);
       if (derived === undefined) refuse(`section ${section.index} does not reproduce its header's root`);
       const same = derived!.length === section.objects.length && derived!.every((object, i) => {
@@ -650,6 +918,7 @@ export class ErgoVenue implements RecordVenue, RecordPublisher {
   private requireSnapshot(): Snapshot {
     this.journal.assertOwner();
     if (this.failure !== undefined) throw new VenueError(this.failure);
+    if (this.succinct?.disagreement === true) throw new VenueError(DISAGREEMENT);
     if (this.snapshot === undefined) throw new VenueError("this view has no settled snapshot");
     return this.snapshot;
   }
@@ -663,7 +932,9 @@ export class ErgoVenue implements RecordVenue, RecordPublisher {
    * request is malformed, names another venue or reaches past the clock; an
    * answer over `limits` throws `RangeLimitError` (`RecordVenue`). The answer
    * is the reader's own, computed from the verified sections, so a replay
-   * consumes it as its venue-evidence verifier's output (§12.1).
+   * consumes it as its venue-evidence verifier's output (§12.1). A succinct
+   * view answers a subject it does not follow only over indices it read
+   * natively; elsewhere it notes the subject (`wanted`) and answers nothing.
    */
   range(request: RangeRequest, limits: RangeLimits): Uint8Array | undefined {
     const snapshot = this.requireSnapshot();
@@ -673,6 +944,11 @@ export class ErgoVenue implements RecordVenue, RecordPublisher {
       throw error;
     }
     if (compareBytes(own.venue, this.venueId) !== 0 || own.toIndex > snapshot.witnessed) return undefined;
+    const state = this.succinct, subject = bytesToHex(own.subject);
+    if (state !== undefined && !state.followed.has(subject) && spansMeet(state.spans, own.fromIndex, own.toIndex)) {
+      state.wanted.set(subject, own.subject);
+      return undefined;
+    }
     const bound = copyLimits(limits);
     const objects = this.journal.objects(own.kind, own.subject, own.fromIndex, own.toIndex, bound);
     return encodeRangeAnswer({ request: own, entries: orderedEntries(own.kind, objects) }, bound);
@@ -771,6 +1047,61 @@ export async function syncCaughtUp(venue: ErgoVenue, suppliers: readonly ErgoSup
 }
 
 
+/** What a key's answer and an included transaction count against the section budget: a path's 32 siblings, an
+ * entry's subject and three indices, the transaction's bytes and its steps. */
+const PATH_BYTES = 33 * 32, ENTRY_BYTES = 44;
+/** An included transaction a supplier answered, owned. */
+type FetchedAnswer = { readonly unsigned: Uint8Array; readonly steps: readonly (Uint8Array | null)[] };
+/** A supplier's key answer read once into plain owned values, which `readSubject` then judges; undefined for an
+ * answer that is not an object or throws while read. */
+function ownKeyAnswer(answer: unknown): KeyAnswer | undefined {
+  try {
+    if (answer === null || typeof answer !== "object") return undefined;
+    const { path, entries } = answer as Record<string, unknown>;
+    if (path === null || typeof path !== "object" || !Array.isArray(entries)) return undefined;
+    const { count, chain, siblings } = path as Record<string, unknown>;
+    if (!Array.isArray(siblings)) return undefined;
+    const ownedEntries = Array.from(entries as unknown[], entry => {
+      if (entry === null || typeof entry !== "object") return undefined;
+      const { subject, height, position, output } = entry as Record<string, unknown>;
+      return isRealBytes(subject) ? { subject: copyBytes(subject), height, position, output } : undefined;
+    });
+    if (ownedEntries.some(entry => entry === undefined)) return undefined;
+    return { path: { count, chain, siblings: Array.from(siblings) } as KeyAnswer["path"], entries: ownedEntries as unknown as KeyAnswer["entries"] };
+  } catch { return undefined; }
+}
+/** A supplier's included transaction read once into owned bytes and steps; undefined for anything else. */
+function ownTransactionAnswer(answer: unknown): FetchedAnswer | undefined {
+  try {
+    if (answer === null || typeof answer !== "object") return undefined;
+    const { unsigned, steps } = answer as Record<string, unknown>;
+    if (!isRealBytes(unsigned) || !Array.isArray(steps) || steps.length > 64) return undefined;
+    const owned = Array.from(steps as unknown[], step => step === null ? null : isRealBytes(step) ? copyBytes(step) : undefined);
+    if (owned.some(step => step === undefined)) return undefined;
+    return { unsigned: copyBytes(unsigned), steps: owned as (Uint8Array | null)[] };
+  } catch { return undefined; }
+}
+/** Whether a disjoint ascending list of spans holds any index from `from` through `to`. */
+function spansMeet(spans: readonly ErgoSuccinctSpan[], from: bigint, to: bigint): boolean {
+  let low = 0, high = spans.length - 1;
+  // The first span ending at or after `from`.
+  while (low <= high) {
+    const middle = (low + high) >> 1;
+    if (spans[middle]!.to < from) low = middle + 1; else high = middle - 1;
+  }
+  return low < spans.length && spans[low]!.from <= to;
+}
+/** Whether a disjoint ascending list of spans holds `index`. */
+function spanHolds(spans: readonly ErgoSuccinctSpan[], index: bigint): boolean {
+  let low = 0, high = spans.length - 1;
+  while (low <= high) {
+    const middle = (low + high) >> 1, span = spans[middle]!;
+    if (index < span.from) high = middle - 1;
+    else if (index > span.to) low = middle + 1;
+    else return true;
+  }
+  return false;
+}
 /** A supplier's answer, or its failure: a supplier that throws, rejects or
  * does not settle within `timeoutMs` is one that did not supply. Only
  * supplier calls and the reading of their answers are guarded, so the
@@ -790,7 +1121,7 @@ async function supplied<T>(call: () => Promise<T>, timeoutMs: number): Promise<{
 function describe(error: unknown): string {
   try { return error instanceof Error ? String(error.message) : String(error); } catch { return "an unreadable error"; }
 }
-function nameOf(supplier: ErgoSupplier): string {
+function nameOf(supplier: { readonly name?: unknown }): string {
   try { return String(supplier.name); } catch { return "unnamed supplier"; }
 }
 const isRealBytes = (value: unknown): value is Uint8Array =>

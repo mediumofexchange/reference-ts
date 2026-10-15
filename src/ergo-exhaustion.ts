@@ -304,22 +304,44 @@ export interface KeptTuple {
 /** A transaction a supplier gives for a `(height, position)`: its unsigned bytes and an inclusion path (§4.5). */
 export interface IncludedTransaction { readonly unsigned: Uint8Array; readonly steps: readonly InclusionStep[] }
 
-/** What a succinct range read takes from suppliers and from the reader's own state. */
-export interface SuccinctRangeSources {
+/** A key's path at a fold and its entries after a given count, as a supplier gives them. */
+export interface KeyAnswer { readonly path: MapPath; readonly entries: readonly MapEntry[] }
+/**
+ * A supplier of the exhaustion's objects (§4.7): fold proofs, paths with entries, and transactions with inclusion
+ * paths. No reader trusts one: every value is recomputed or compared by §4's rules, and a supplier that fails, times
+ * out or answers what does not check is one that did not supply.
+ */
+export interface ExhaustionSupplier {
+  readonly name?: string;
+  /** Its latest fold whose end is at or below `maxHeight`, or undefined. */
+  fold(maxHeight: bigint): Promise<Fold | undefined>;
+  /** At the fold ending at `endHeight`: the path for `key` and the key's entries after its first `from`. */
+  key(endHeight: bigint, key: bigint, from: bigint): Promise<KeyAnswer | undefined>;
+  /** The transaction at `position` of the block at `height`, with an inclusion path. */
+  transaction(height: bigint, position: bigint): Promise<IncludedTransaction | undefined>;
+}
+
+/** Where a subject's objects are read from a checked fold (§4.4 steps 2–3): the profile, the venue's anchor, the set,
+ * the reader's chain and what suppliers give for the subject's key. */
+export interface SubjectSources {
   readonly profile: ErgoProfile;
   /** The venue's anchor height `A`: index `i` is height `A + 1 + i`. */
   readonly anchorHeight: bigint;
   readonly set: ExhaustionSet;
   readonly chain: ReaderChain;
-  readonly fold: Fold;
-  /** The path for the request subject's key at the fold. */
+  /** The path for the subject's key at the fold. */
   readonly path: MapPath;
   /** The key's entries after the kept count (all of them without `kept`), in chain order. */
   readonly entries: readonly MapEntry[];
-  /** A tuple kept from an earlier read of this key under the same set (§4.4), whose end lies below the request. */
+  /** A tuple kept from an earlier read of this key under the same set (§4.4), whose end lies below the window. */
   readonly kept?: KeptTuple;
   /** The transaction at `position` of the block at `height`, with an inclusion path, or undefined where withheld. */
   transaction(height: bigint, position: bigint): Promise<IncludedTransaction | undefined> | IncludedTransaction | undefined;
+}
+
+/** What a succinct range read takes from suppliers and from the reader's own state. */
+export interface SuccinctRangeSources extends SubjectSources {
+  readonly fold: Fold;
   /** Index `i`'s attributed objects, read natively from a section that reproduced its header's root (§4.6), or
    * undefined where no such section is held. */
   sectionAt(index: bigint): Promise<readonly AttributedObject[] | undefined> | readonly AttributedObject[] | undefined;
@@ -335,68 +357,74 @@ export type SuccinctRange =
   | { readonly entries: readonly RangeEntry[]; readonly kept: KeptTuple }
   | { readonly refused: SuccinctRangeRefusal };
 
+/** An object a subject read attributed, at its index, in index and section order. */
+export interface IndexedObject extends AttributedObject { readonly index: bigint }
+/** A transaction a subject read fetched and attributed, as it was included: its place and unsigned bytes. */
+export interface FetchedTransaction { readonly index: bigint; readonly position: bigint; readonly unsigned: Uint8Array; readonly steps: readonly InclusionStep[] }
+export type SubjectRead =
+  | { readonly objects: readonly IndexedObject[]; readonly transactions: readonly FetchedTransaction[]; readonly kept: KeptTuple }
+  | { readonly refused: Exclude<SuccinctRangeRefusal, FoldRefusal | "start" | "section"> };
+
 /**
- * §4.4: the request's range from a fold, a path, the key's entries and their transactions, and native sections above
- * the fold's end. The caller has checked the venue and that `toIndex` is witnessed (venue-ergo §2); the request is
- * owned. A refusal establishes nothing (succinct-read §2 rule 3).
+ * §4.4 steps 2–3 for one subject over a fold `checkFold` took: the key's chain recomputed from the entries, from the
+ * kept tuple or from nothing, to the path's leaf under the fold's root; then each transaction holding an entry for the
+ * subject at heights `A + 1 + fromIndex` through the lesser of `A + 1 + toIndex` and the fold's end, fetched with an
+ * inclusion path to its header on the reader's chain and attributed, every kind. `skip(index)` passes over indices the
+ * caller already holds natively. The caller has checked that the set's start is at or below the anchor. A refusal
+ * establishes nothing (succinct-read §2 rule 3).
  */
-export async function succinctRange(request: RangeRequest, sources: SuccinctRangeSources): Promise<SuccinctRange> {
+export async function readSubject(subject: Uint8Array, fromIndex: bigint, toIndex: bigint, inputs: FoldInputs, sources: SubjectSources,
+    skip: (index: bigint) => boolean = () => false): Promise<SubjectRead> {
   const profile = ownErgoProfile(sources.profile);
-  const { anchorHeight: A, set, chain, fold, kept: givenKept, path: givenPath, entries: givenEntries } = sources;
-  const refused = (reason: SuccinctRangeRefusal): SuccinctRange => ({ refused: reason });
-  // 1. The fold, and a start at or below the anchor.
-  const checked = await checkFold(set, fold, chain, profile.depth);
-  if ("refused" in checked) return refused(checked.refused);
-  const { inputs } = checked;
-  if (set.start.height > A) return refused("start");
-  const E = inputs.endHeight, first = A + 1n + request.fromIndex, last = A + 1n + request.toIndex;
-  // 2. The path, and the entries that make its leaf from the kept tuple or from nothing, each read once.
-  const key = subjectKey(request.subject);
-  if (givenPath === null || typeof givenPath !== "object") return refused("path");
+  const { anchorHeight: A, set, chain, kept: givenKept, path: givenPath, entries: givenEntries } = sources;
+  const E = inputs.endHeight, first = A + 1n + fromIndex, last = A + 1n + toIndex;
+  // The path, and the entries that make its leaf from the kept tuple or from nothing, each read once.
+  const key = subjectKey(subject);
+  if (givenPath === null || typeof givenPath !== "object") return { refused: "path" };
   const { count: pathCount, chain: pathChain, siblings } = givenPath;
-  if (!Array.isArray(siblings)) return refused("path");
+  if (!Array.isArray(siblings)) return { refused: "path" };
   const path: MapPath = { count: pathCount, chain: pathChain, siblings: Array.from(siblings) };
-  if (pathRoot(key, path) !== inputs.mapRoot) return refused("path");
+  if (pathRoot(key, path) !== inputs.mapRoot) return { refused: "path" };
   let count = 0n, value = 0n;
   if (givenKept !== undefined) {
-    if (givenKept === null || typeof givenKept !== "object") return refused("kept");
+    if (givenKept === null || typeof givenKept !== "object") return { refused: "kept" };
     const { identity, key: keptKey, count: keptCount, chain: keptChain, endHeight, endId } = givenKept;
-    if (!isBytes(identity) || !isBytes(endId, 32) || !below(keptCount, U64) || !isField(keptChain) || !below(endHeight, U32)) return refused("kept");
+    if (!isBytes(identity) || !isBytes(endId, 32) || !below(keptCount, U64) || !isField(keptChain) || !below(endHeight, U32)) return { refused: "kept" };
     // A kept tuple continues a later read of the same set and key only where the best chain still holds its end.
     const at = chain.at(endHeight);
-    if (!same(identity, set.identity) || keptKey !== key || endHeight > E || at === undefined || !same(at.id, endId)) return refused("kept");
+    if (!same(identity, set.identity) || keptKey !== key || endHeight > E || at === undefined || !same(at.id, endId)) return { refused: "kept" };
     if (first <= endHeight) throw new RangeError("a kept tuple serves only heights above its end");
     count = keptCount; value = keptChain;
   }
   const entries: MapEntry[] = [];
-  if (!Array.isArray(givenEntries)) return refused("entries");
+  if (!Array.isArray(givenEntries)) return { refused: "entries" };
   for (const entry of Array.from(givenEntries)) {
-    if (entry === null || typeof entry !== "object") return refused("entries");
-    const { subject, height, position, output } = entry;
-    if (!isBytes(subject, 32) || !below(height, U32) || !below(position, U32) || !below(output, U32)) return refused("entries");
-    const own = Object.freeze({ subject: copyBytes(subject), height, position, output });
-    if (subjectKey(own.subject) !== key) return refused("entries");
+    if (entry === null || typeof entry !== "object") return { refused: "entries" };
+    const { subject: entrySubject, height, position, output } = entry;
+    if (!isBytes(entrySubject, 32) || !below(height, U32) || !below(position, U32) || !below(output, U32)) return { refused: "entries" };
+    const own = Object.freeze({ subject: copyBytes(entrySubject), height, position, output });
+    if (subjectKey(own.subject) !== key) return { refused: "entries" };
     value = entryChain(value, own);
     count += 1n;
     entries.push(own);
   }
-  if (count !== path.count || value !== path.chain) return refused("entries");
-  // 3. Each transaction holding an entry for the subject in the window, fetched with its inclusion path.
-  const top = last < E ? last : E, objects: { index: bigint; ordinal: bigint; record: Uint8Array }[] = [];
+  if (count !== path.count || value !== path.chain) return { refused: "entries" };
+  // Each transaction holding an entry for the subject in the window, fetched with its inclusion path.
+  const top = last < E ? last : E, objects: IndexedObject[] = [], transactions: FetchedTransaction[] = [];
   const places = new Map<string, { height: bigint; position: bigint }>();
   for (const entry of entries) {
-    if (entry.height < first || entry.height > top || !same(entry.subject, request.subject)) continue;
+    if (entry.height < first || entry.height > top || !same(entry.subject, subject) || skip(entry.height - A - 1n)) continue;
     places.set(`${entry.height}:${entry.position}`, { height: entry.height, position: entry.position });
   }
   const ordered = [...places.values()].sort((x, y) => x.height === y.height ? Number(x.position - y.position) : x.height < y.height ? -1 : 1);
   for (const { height, position } of ordered) {
     const header = chain.at(height), included = await sources.transaction(height, position);
-    if (header === undefined || included === undefined || included === null || typeof included !== "object") return refused("transaction");
+    if (header === undefined || included === undefined || included === null || typeof included !== "object") return { refused: "transaction" };
     const { unsigned: givenBytes, steps: givenSteps } = included;
-    if (!isBytes(givenBytes) || !Array.isArray(givenSteps)) return refused("transaction");
+    if (!isBytes(givenBytes) || !Array.isArray(givenSteps)) return { refused: "transaction" };
     const unsigned = copyBytes(givenBytes), steps = Array.from(givenSteps, step => isBytes(step) ? copyBytes(step) : step);
     const root = inclusionRoot(blake2b(unsigned, { dkLen: 32 }), Number(position), steps);
-    if (root === undefined || !same(root, header.transactionsRoot)) return refused("transaction");
+    if (root === undefined || !same(root, header.transactionsRoot)) return { refused: "transaction" };
     // §2 rule 7: a transaction inside the grammar whose shaped outputs for this key, as the framer reads them (the
     // native check, not the scan the circuits evaluate), are not the entries the map names at its place shows the set
     // unsound.
@@ -404,25 +432,48 @@ export async function succinctRange(request: RangeRequest, sources: SuccinctRang
     if (shaped !== undefined) {
       const read = shaped.filter(e => subjectKey(e.subject) === key).map(e => `${e.output}:${bytesToHex(e.subject)}`);
       const named = entries.filter(e => e.height === height && e.position === position).map(e => `${e.output}:${bytesToHex(e.subject)}`);
-      if (read.join() !== named.join()) return refused("disagreement");
+      if (read.join() !== named.join()) return { refused: "disagreement" };
     }
+    const index = height - A - 1n;
+    transactions.push(Object.freeze({ index, position, unsigned, steps: Object.freeze(steps) }));
     for (const object of attributeTransaction(profile, unsigned, Number(position))) {
-      if (object.kind === request.kind && same(object.subject, request.subject)) objects.push({ index: height - A - 1n, ordinal: object.ordinal, record: object.record });
+      if (same(object.subject, subject)) objects.push(Object.freeze({ ...object, index }));
     }
   }
+  return {
+    objects: Object.freeze(objects), transactions: Object.freeze(transactions),
+    kept: Object.freeze({ identity: copyBytes(set.identity), key, count, chain: value, endHeight: E, endId: copyBytes(inputs.endId) }),
+  };
+}
+
+/**
+ * §4.4: the request's range from a fold, a path, the key's entries and their transactions, and native sections above
+ * the fold's end. The caller has checked the venue and that `toIndex` is witnessed (venue-ergo §2); the request is
+ * owned. A refusal establishes nothing (succinct-read §2 rule 3).
+ */
+export async function succinctRange(request: RangeRequest, sources: SuccinctRangeSources): Promise<SuccinctRange> {
+  const profile = ownErgoProfile(sources.profile);
+  const { anchorHeight: A, set, chain, fold } = sources;
+  // 1. The fold, and a start at or below the anchor.
+  const checked = await checkFold(set, fold, chain, profile.depth);
+  if ("refused" in checked) return checked;
+  const { inputs } = checked;
+  if (set.start.height > A) return { refused: "start" };
+  // 2–3. The subject's objects through the fold's end.
+  const read = await readSubject(request.subject, request.fromIndex, request.toIndex, inputs, sources);
+  if ("refused" in read) return read;
+  const objects: { index: bigint; ordinal: bigint; record: Uint8Array }[] = read.objects.filter(o => o.kind === request.kind);
   // 4. Every height above the fold's end, natively.
+  const E = inputs.endHeight;
   for (let index = (E - A > request.fromIndex ? E - A : request.fromIndex); index <= request.toIndex; index++) {
     const section = await sources.sectionAt(index);
-    if (section === undefined) return refused("section");
+    if (section === undefined) return { refused: "section" };
     for (const object of section) {
       if (object.kind === request.kind && same(object.subject, request.subject)) objects.push({ index, ordinal: object.ordinal, record: object.record });
     }
   }
   // 5. Entered as venue-ergo §7 enters them.
-  return {
-    entries: orderedEntries(request.kind, objects),
-    kept: Object.freeze({ identity: copyBytes(set.identity), key, count, chain: value, endHeight: E, endId: copyBytes(inputs.endId) }),
-  };
+  return { entries: orderedEntries(request.kind, objects), kept: read.kept };
 }
 
 /** A test set (§1): a fold proof is SHA-256 over a fixed context, the set, the circuit and the public inputs. Anyone
