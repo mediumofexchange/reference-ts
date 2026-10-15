@@ -39,7 +39,8 @@ let leastFree = os.freemem();
 const sampler = setInterval(() => { leastFree = Math.min(leastFree, os.freemem()); }, 2000);
 sampler.unref();
 let failed = 0;
-const report = { specification: EXHAUSTION_SPECIFICATION, sources: sourceHashes(), cpu: os.cpus()[0]?.model ?? "unknown", cores: os.cpus().length,
+const report = { specification: EXHAUSTION_SPECIFICATION, sources: sourceHashes(["scripts/venue/exhaustion-pool.mjs", "src/ergo-exhaustion-pool.ts", "src/ergo-exhaustion-server.ts",
+  "src/pool/parameters.ts", "src/pool/parameter-files.ts"]), cpu: os.cpus()[0]?.model ?? "unknown", cores: os.cpus().length,
   memoryGiB: +(os.totalmem() / 2 ** 30).toFixed(1), parameters: EXHAUSTION_PARAMETERS, blocks: {}, circuits: {}, periods: [], resume: {}, checks: [] };
 const check = (name, ok, detail) => { report.checks.push({ name, ok, ...(detail === undefined ? {} : { detail }) }); if (!ok) { failed++; console.error(`FAIL ${name}`); } else log(`ok ${name}`); };
 

@@ -1,24 +1,24 @@
 {
   "specification": "succinct-read 282c925",
   "sources": {
-    "scripts/venue/exhaustion-build.mjs": "6473cdb986d36a4152126ffb8c868f417a46b3346da0a729bb02d821887a65d6",
+    "scripts/venue/exhaustion-build.mjs": "ba912bc9901ccfeeb23cd965ecae00ed8feb0a265a0fd414679d6be5ea42d921",
     "scripts/venue/exhaustion-sources.mjs": "83f704dd827ef3117358c9668d8f4f3cc5dff68e3999227a086a74ab7610d1fe",
     "scripts/venue/exhaustion-periods.mjs": "3c35f414eee34dc0735bbe20a7fc7d72af3e674446c7d36dab4a2fcd866e1244",
     "scripts/venue/exhaustion-check.mjs": "ca2a817fc076ca3f5f0c9b0467a8c6d3a74c87837f0f7a43c227d5a27aaae639",
     "scripts/venue/exhaustion-prove.mjs": "f7c0263b971e5da6a97bebefa1eed17f41062aff9c06c4476e4d018164d171e8",
-    "scripts/venue/exhaustion-pool.mjs": "fdc2e65974d513ccb4bdc8ee58e8b7653b0baabe84c168a043163ab9a6c26c71",
     "scripts/venue/exhaustion-circuits/exhaustion.nr": "d245fd0162c9a998ece823a40e94973a01dd0a75684b9e9ddd5aeef99efc81d3",
     "scripts/venue/exhaustion-circuits/blake2b.nr": "2c021e29c19bd09b735354d8ac80effb8772f014c0d6e2c4a60472929d7c5100",
     "src/pool/circuits/vendor/poseidon2.nr": "44f3a3d1abe7d5fa2da5c0339e52018195d55f295c320e530d355f9cc62159d8",
     "src/ergo-exhaustion-prover.ts": "5f743571d6b40242781a2d65dd7aad22867c6d4eb05ebc28a8afb11d08d41cf4",
-    "src/ergo-exhaustion-pool.ts": "0c2259145853e1affa91b8f49c2c8dc053716ae71c7158206c7954c17c6f4139",
-    "src/ergo-exhaustion-server.ts": "bd75e7ab93c50864b50bf9fec0332045bd266b3e2be11b6c4fea14316f36a24f",
     "src/ergo-exhaustion.ts": "943ed44ba9ef458c7c058104401e1a4838971695a258d4cb8097e1a0e6b191de",
     "src/ergo-scan.ts": "73352b1f5412cc13ac8bede4387007196f6beace1462a7db0d016969673417e7",
     "src/ergo-synthetic.ts": "659d27646efef374f7224c536206cbe6ad0783a7fb8aa4015440033444d314e8",
     "src/ergo-profile.ts": "679161a58f56f7c1b16619e1a43c53c353929df130996218e92d4565a95e5c06",
     "src/pool/poseidon2.ts": "c33b48e98263bdf99efc9650b81f57d90136017be2c843963ef38043bb09f308",
     "src/pool/proof-verifier.ts": "be9c7f8557d4bf3301ac773af91006138ef01eb3b2aec009e5679ac7e3ceca34",
+    "scripts/venue/exhaustion-pool.mjs": "0fa5a970e7a7b7810725f557f1c0561c7293b55ee86a669470eebcd4b1cddaee",
+    "src/ergo-exhaustion-pool.ts": "0c2259145853e1affa91b8f49c2c8dc053716ae71c7158206c7954c17c6f4139",
+    "src/ergo-exhaustion-server.ts": "bd75e7ab93c50864b50bf9fec0332045bd266b3e2be11b6c4fea14316f36a24f",
     "src/pool/parameters.ts": "2824970cab95bab2aabd0e5994ef1523dcbbf305bf2c5f190ef52d8d715736ee",
     "src/pool/parameter-files.ts": "bc5f843d1c773f2de31974b0c5007279426fbbf570d80c0568ec37141399fdd4"
   },
@@ -93,7 +93,7 @@
       "nodes": 7,
       "made": 0,
       "kept": 16,
-      "seconds": 4.89
+      "seconds": 4.561
     },
     {
       "blocks": 16,
@@ -106,7 +106,7 @@
       "nodes": 39,
       "made": 0,
       "kept": 80,
-      "seconds": 3.41
+      "seconds": 3.327
     },
     {
       "blocks": 16,
@@ -119,13 +119,13 @@
       "nodes": 25,
       "made": 0,
       "kept": 52,
-      "seconds": 2.414
+      "seconds": 2.245
     }
   ],
   "resume": {
     "made": 0,
     "kept": 148,
-    "seconds": 9.6
+    "seconds": 10
   },
   "checks": [
     {
@@ -134,7 +134,7 @@
       "detail": {
         "made": 0,
         "kept": 148,
-        "seconds": 9.6
+        "seconds": 10
       }
     },
     {
@@ -142,15 +142,15 @@
       "ok": true
     },
     {
-      "name": "the reader takes period 0's first fold to 1894841 (204 ms)",
+      "name": "the reader takes period 0's first fold to 1894841 (225 ms)",
       "ok": true
     },
     {
-      "name": "the reader takes period 1's next fold to 1894857 (29 ms)",
+      "name": "the reader takes period 1's next fold to 1894857 (34 ms)",
       "ok": true
     },
     {
-      "name": "the reader takes period 2's next fold to 1894873 (27 ms)",
+      "name": "the reader takes period 2's next fold to 1894873 (31 ms)",
       "ok": true
     },
     {
