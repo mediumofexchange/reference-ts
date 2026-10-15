@@ -1,7 +1,7 @@
 {
   "specification": "succinct-read 282c925",
   "sources": {
-    "scripts/venue/exhaustion-build.mjs": "56a60dbf5bf197d812df0a39f44c847a23156ffa731778e0783ea9d682830724",
+    "scripts/venue/exhaustion-build.mjs": "ba912bc9901ccfeeb23cd965ecae00ed8feb0a265a0fd414679d6be5ea42d921",
     "scripts/venue/exhaustion-sources.mjs": "83f704dd827ef3117358c9668d8f4f3cc5dff68e3999227a086a74ab7610d1fe",
     "scripts/venue/exhaustion-periods.mjs": "3c35f414eee34dc0735bbe20a7fc7d72af3e674446c7d36dab4a2fcd866e1244",
     "scripts/venue/exhaustion-check.mjs": "ca2a817fc076ca3f5f0c9b0467a8c6d3a74c87837f0f7a43c227d5a27aaae639",
@@ -9,13 +9,13 @@
     "scripts/venue/exhaustion-circuits/exhaustion.nr": "d245fd0162c9a998ece823a40e94973a01dd0a75684b9e9ddd5aeef99efc81d3",
     "scripts/venue/exhaustion-circuits/blake2b.nr": "2c021e29c19bd09b735354d8ac80effb8772f014c0d6e2c4a60472929d7c5100",
     "src/pool/circuits/vendor/poseidon2.nr": "44f3a3d1abe7d5fa2da5c0339e52018195d55f295c320e530d355f9cc62159d8",
-    "src/ergo-exhaustion-prover.ts": "4b1e8910042664c1e738ce7ae345afae25a622954ce3df3a564dc4ae74f5f82f",
-    "src/ergo-exhaustion.ts": "3c015f24e43f3a6edc2db643bd325de8fafbed1a925871ee51d2eaf24ad86981",
+    "src/ergo-exhaustion-prover.ts": "5f743571d6b40242781a2d65dd7aad22867c6d4eb05ebc28a8afb11d08d41cf4",
+    "src/ergo-exhaustion.ts": "943ed44ba9ef458c7c058104401e1a4838971695a258d4cb8097e1a0e6b191de",
     "src/ergo-scan.ts": "73352b1f5412cc13ac8bede4387007196f6beace1462a7db0d016969673417e7",
     "src/ergo-synthetic.ts": "659d27646efef374f7224c536206cbe6ad0783a7fb8aa4015440033444d314e8",
     "src/ergo-profile.ts": "679161a58f56f7c1b16619e1a43c53c353929df130996218e92d4565a95e5c06",
     "src/pool/poseidon2.ts": "c33b48e98263bdf99efc9650b81f57d90136017be2c843963ef38043bb09f308",
-    "src/pool/proof-verifier.ts": "9b6feafb80bf932a084e392bfb724bb7735684720411f31194cdd0041b1248cc"
+    "src/pool/proof-verifier.ts": "be9c7f8557d4bf3301ac773af91006138ef01eb3b2aec009e5679ac7e3ceca34"
   },
   "sizes": {
     "t": 167,
@@ -31,211 +31,211 @@
       "bytecodeSha256": "82cd725db1094c67497372691c666dd08e5f007b2783343b9a2417c58e64e42c",
       "vkSha256": "a2c125ab2feca20af407697b6e1e6d99cba6a73ab65ec079a769be789e1ab4f2",
       "keyHash": "0x1ab2476249309e13f2afc6bbbc35e73c601605b0472281d56d82f18241d476eb",
-      "compileSeconds": 222.349
+      "compileSeconds": 5.467
     },
     "leaf-m": {
       "gates": 4143333,
       "bytecodeSha256": "9fae587c658321b9d420e27a619781681f42ebb6bc5f84fb30effe9ea6ca81c7",
       "vkSha256": "8ccc7ff201b41531ae8e2f752d8af6cf056d4fbdb89995e27804976e74bb4468",
       "keyHash": "0x08103c1cbb738a837b4e785ea379b9eaccb8f03dbf318ebe171694022af69ddc",
-      "compileSeconds": 166.966
+      "compileSeconds": 4.149
     },
     "leaf-u": {
       "gates": 4150381,
       "bytecodeSha256": "6a7b8d6fe23a3e7dbf0b9b63ab21c87ef007bde9e652ad964789aae427263823",
       "vkSha256": "219a3639bf3f8ff8ee49183496e56204a13ddc0e2bcdb6831a2c639fc14a2391",
       "keyHash": "0x0881a4e495405f03c9252c4ed9a06f273f41cac96fb95bb6697446ecc1adb703",
-      "compileSeconds": 39.577
+      "compileSeconds": 0.876
     },
     "node": {
       "gates": 1469901,
       "bytecodeSha256": "1df15219c293298eea602ed29021859a3d13625112f27effe8312f6144ab01e8",
       "vkSha256": "2ff0d792d5f34e9b9291b2b9f48378b0923eb030337a2c6ad4adce1f5f7bd445",
       "keyHash": "0x1dc2959b6e05b085ee869d71cd8fcf903e044a2f19dbb6a2d0da47a5be203081",
-      "compileSeconds": 0.322
+      "compileSeconds": 0.462
     },
     "fold-first": {
       "gates": 708272,
       "bytecodeSha256": "539398acab4641d1ee228a3f5d8f8e62b01e98a49d89974b6bbed64cdb178ebf",
       "vkSha256": "54ae6b9bd08d753ecde56e32e7aa3975015146db42efb019e8dcb7e1e1c02ce0",
       "keyHash": "0x128d1e3e96a79c134962c30cc773acc34f1c6923608a5b42ec734a3b0f9f8d12",
-      "compileSeconds": 0.319
+      "compileSeconds": 0.352
     },
     "fold-next": {
       "gates": 1474513,
       "bytecodeSha256": "f054df2a0b832b27f42054464d179fc91e63ff8eeee11d9b69f2d08ceafb9367",
       "vkSha256": "268f7cd52a3b16938158bb42b5dcfbab3fd6f00637848e9d1835a475e43a9814",
       "keyHash": "0x28042fd2c360b17a7254c3de948e5b45cd4d59c269a95c9500213750b598a7ee",
-      "compileSeconds": 0.344
+      "compileSeconds": 0.414
     }
   },
   "proofs": [
     {
       "circuit": "leaf-t",
       "label": "leaf-t",
-      "executeSeconds": 25.375,
-      "proveSeconds": 62.2,
+      "executeSeconds": 27.964,
+      "proveSeconds": 62.261,
       "proofBytes": 14656
     },
     {
       "circuit": "leaf-u",
       "label": "leaf-u",
-      "executeSeconds": 6.217,
-      "proveSeconds": 58.738,
+      "executeSeconds": 6.829,
+      "proveSeconds": 62.289,
       "proofBytes": 14656
     },
     {
       "circuit": "leaf-m",
       "label": "leaf-m",
-      "executeSeconds": 16.321,
-      "proveSeconds": 57.323,
+      "executeSeconds": 17.071,
+      "proveSeconds": 59.495,
       "proofBytes": 14656
     },
     {
       "circuit": "node",
       "label": "node",
       "executeSeconds": 0.014,
-      "proveSeconds": 18.151,
+      "proveSeconds": 20.107,
+      "proofBytes": 14656
+    },
+    {
+      "circuit": "node",
+      "label": "node",
+      "executeSeconds": 0.023,
+      "proveSeconds": 20.446,
+      "proofBytes": 14656
+    },
+    {
+      "circuit": "fold-first",
+      "label": "fold-first",
+      "executeSeconds": 0.017,
+      "proveSeconds": 10.453,
+      "proofBytes": 14656
+    },
+    {
+      "circuit": "leaf-t",
+      "label": "leaf-t",
+      "executeSeconds": 25.131,
+      "proveSeconds": 60.581,
+      "proofBytes": 14656
+    },
+    {
+      "circuit": "leaf-u",
+      "label": "leaf-u",
+      "executeSeconds": 6.747,
+      "proveSeconds": 61.824,
+      "proofBytes": 14656
+    },
+    {
+      "circuit": "leaf-m",
+      "label": "leaf-m",
+      "executeSeconds": 18.004,
+      "proveSeconds": 59.038,
       "proofBytes": 14656
     },
     {
       "circuit": "node",
       "label": "node",
       "executeSeconds": 0.015,
-      "proveSeconds": 18.334,
-      "proofBytes": 14656
-    },
-    {
-      "circuit": "fold-first",
-      "label": "fold-first",
-      "executeSeconds": 0.016,
-      "proveSeconds": 9.373,
-      "proofBytes": 14656
-    },
-    {
-      "circuit": "leaf-t",
-      "label": "leaf-t",
-      "executeSeconds": 23.036,
-      "proveSeconds": 61.111,
-      "proofBytes": 14656
-    },
-    {
-      "circuit": "leaf-u",
-      "label": "leaf-u",
-      "executeSeconds": 6.421,
-      "proveSeconds": 57.588,
-      "proofBytes": 14656
-    },
-    {
-      "circuit": "leaf-m",
-      "label": "leaf-m",
-      "executeSeconds": 15.963,
-      "proveSeconds": 57.755,
+      "proveSeconds": 20.048,
       "proofBytes": 14656
     },
     {
       "circuit": "node",
       "label": "node",
-      "executeSeconds": 0.019,
-      "proveSeconds": 18.182,
-      "proofBytes": 14656
-    },
-    {
-      "circuit": "node",
-      "label": "node",
-      "executeSeconds": 0.014,
-      "proveSeconds": 18.31,
+      "executeSeconds": 0.015,
+      "proveSeconds": 20.185,
       "proofBytes": 14656
     },
     {
       "circuit": "fold-next",
       "label": "fold-next",
       "executeSeconds": 0.023,
-      "proveSeconds": 18.095,
+      "proveSeconds": 20.297,
       "proofBytes": 14656
     },
     {
       "circuit": "node",
       "label": "hostile-node",
-      "executeSeconds": 0.014,
-      "proveSeconds": 18.177,
+      "executeSeconds": 0.015,
+      "proveSeconds": 20.122,
       "proofBytes": 14656
     },
     {
       "circuit": "leaf-t",
       "label": "one-block-leaf-t",
-      "executeSeconds": 22.252,
-      "proveSeconds": 59.714,
+      "executeSeconds": 25.534,
+      "proveSeconds": 62.969,
       "proofBytes": 14656
     },
     {
       "circuit": "leaf-m",
       "label": "one-block-leaf-m",
-      "executeSeconds": 16.257,
-      "proveSeconds": 58.447,
+      "executeSeconds": 17.317,
+      "proveSeconds": 60.239,
       "proofBytes": 14656
     },
     {
       "circuit": "node",
       "label": "one-block-node",
-      "executeSeconds": 0.023,
-      "proveSeconds": 18.417,
+      "executeSeconds": 0.017,
+      "proveSeconds": 21.4,
       "proofBytes": 14656
     },
     {
       "circuit": "fold-first",
       "label": "one-block-fold-first",
-      "executeSeconds": 0.016,
-      "proveSeconds": 9.155,
+      "executeSeconds": 0.018,
+      "proveSeconds": 10.118,
       "proofBytes": 14656
     },
     {
       "circuit": "leaf-t",
       "label": "other-key-leaf-t",
-      "executeSeconds": 23.328,
-      "proveSeconds": 58.487,
+      "executeSeconds": 26.711,
+      "proveSeconds": 64.998,
       "proofBytes": 14656
     },
     {
       "circuit": "leaf-m",
       "label": "other-key-leaf-m",
-      "executeSeconds": 16.187,
-      "proveSeconds": 58.365,
+      "executeSeconds": 18.958,
+      "proveSeconds": 61.523,
       "proofBytes": 14656
     },
     {
       "circuit": "node",
       "label": "other-key-node",
-      "executeSeconds": 0.015,
-      "proveSeconds": 18.062,
+      "executeSeconds": 0.03,
+      "proveSeconds": 20.624,
       "proofBytes": 14656
     },
     {
       "circuit": "fold-first",
       "label": "hostile-fold-first",
-      "executeSeconds": 0.016,
-      "proveSeconds": 9.428,
+      "executeSeconds": 0.024,
+      "proveSeconds": 10.645,
       "proofBytes": 14656
     },
     {
       "circuit": "fold-next",
       "label": "hostile-fold-next",
-      "executeSeconds": 0.025,
-      "proveSeconds": 18.382,
+      "executeSeconds": 0.039,
+      "proveSeconds": 20.969,
+      "proofBytes": 14656
+    },
+    {
+      "circuit": "fold-next",
+      "label": "hostile-fold-next",
+      "executeSeconds": 0.024,
+      "proveSeconds": 20.431,
       "proofBytes": 14656
     },
     {
       "circuit": "fold-next",
       "label": "hostile-fold-next",
       "executeSeconds": 0.023,
-      "proveSeconds": 18.181,
-      "proofBytes": 14656
-    },
-    {
-      "circuit": "fold-next",
-      "label": "hostile-fold-next",
-      "executeSeconds": 0.028,
-      "proveSeconds": 18.784,
+      "proveSeconds": 21.296,
       "proofBytes": 14656
     }
   ],
@@ -324,5 +324,5 @@
     }
   ],
   "result": "pass",
-  "minutes": 25.9
+  "minutes": 20.3
 }

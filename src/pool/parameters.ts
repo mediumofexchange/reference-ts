@@ -28,3 +28,15 @@ export const CHECK_SET_PARAMETERS = Object.freeze({
   points: 2097152,
   g1: "2bb84462a0bdad2f6e6dd6182c7779c30aac703115e28f32ca2cc3b57c140622",
 });
+
+/**
+ * The leading 2^22 points of the same transcript, in the same layout: what
+ * proving the venue exhaustion's circuits reads (succinct-read §§4.3, 6), each
+ * leaf filling 2^22 rows. `CHECK_SET_PARAMETERS.g1` is its prefix, and `[x]_2`
+ * is the same. Only a prover of exhaustion periods, or a party deriving their
+ * keys, loads it; verifying a fold reads `[1]_1` and `[x]_2`.
+ */
+export const EXHAUSTION_PARAMETERS = Object.freeze({
+  points: 4194304,
+  g1: "d777711ae9fb1951c47a0eaf7e0ebcaccc39e6731d9b3a560d7ff0c2fcdf2f0d",
+});

@@ -22,7 +22,7 @@
 import { sha256 } from "@noble/hashes/sha2.js";
 import { bytesToHex } from "@noble/hashes/utils.js";
 import { Barretenberg, BackendType, findBbBinary, UltraHonkBackend, UltraHonkVerifierBackend } from "@aztec/bb.js";
-import { BN254_PARAMETERS, CHECK_SET_PARAMETERS } from "./parameters.js";
+import { BN254_PARAMETERS, CHECK_SET_PARAMETERS, EXHAUSTION_PARAMETERS } from "./parameters.js";
 import { copyArray, copyBytes, copyUnshared, EncodingError } from "../bytes.js";
 import { fieldToHex, isField } from "./field.js";
 import { PACKAGED_BINARY_REFUSAL, packagedBinary } from "./packaged-binary.js";
@@ -254,6 +254,16 @@ export async function startBackend(parameters: ProvingParameters, options: Backe
  */
 export async function startCheckSetBackend(parameters: ProvingParameters, options: CheckSetBackendOptions = {}): Promise<Barretenberg> {
   return start(parameters, CHECK_SET_PARAMETERS, options?.native === true, options?.threads);
+}
+
+/**
+ * Start a native instance from the leading `EXHAUSTION_PARAMETERS.points` points instead, for a prover of the venue
+ * exhaustion's periods or a party deriving their keys (succinct-read §§4.3, 6); refused as `startBackend` refuses.
+ * Their leaves fill 2^22 rows, beyond what WebAssembly's memory holds, so the instance is always the bundled native
+ * binary.
+ */
+export async function startExhaustionBackend(parameters: ProvingParameters, options: BackendOptions = {}): Promise<Barretenberg> {
+  return start(parameters, EXHAUSTION_PARAMETERS, true, options?.threads);
 }
 
 async function start(parameters: ProvingParameters, size: { readonly points: number; readonly g1: string }, native: boolean,

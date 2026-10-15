@@ -10,7 +10,7 @@
 import { createHash, randomUUID } from "node:crypto";
 import { mkdir, open, rename, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { BN254_PARAMETERS, CHECK_SET_PARAMETERS } from "./parameters.js";
+import { BN254_PARAMETERS, CHECK_SET_PARAMETERS, EXHAUSTION_PARAMETERS } from "./parameters.js";
 
 const hosts = ["https://crs.aztec-cdn.foundation", "https://crs.aztec-labs.com"];
 // The last source: the transcript itself, where the CDN hosts are unreachable. Its points start after a 28-byte
@@ -171,5 +171,24 @@ export async function prepareCheckSetParameters(directory: string, options: Fetc
 export async function readCheckSetParameters(directory: string) {
   const [g1, g2] = await Promise.all(CHECK_SET_FILES.map(p => leading(join(directory, p.name), p.bytes)));
   if (g1 === undefined || g2 === undefined) throw new Error(`No check-set parameters in ${directory}`);
+  return { g1, g2 };
+}
+
+/** The exhaustion circuits' G1 points (succinct-read §§4.3, 6): a longer prefix again, so one cached copy serves all. */
+export const EXHAUSTION_G1_FILE: ParameterFile = Object.freeze({ ...PARAMETER_FILES[0]!, bytes: EXHAUSTION_PARAMETERS.points * 64,
+  sha256: EXHAUSTION_PARAMETERS.g1 });
+
+/** The exhaustion circuits' parameter files: their G1 prefix and `[x]_2`. */
+export const EXHAUSTION_FILES: readonly ParameterFile[] = Object.freeze([EXHAUSTION_G1_FILE, PARAMETER_FILES[1]!]);
+
+/** Cache the exhaustion circuits' parameters in `directory`, fetching what is missing. */
+export async function prepareExhaustionParameters(directory: string, options: FetchOptions = {}): Promise<void> {
+  for (const parameter of EXHAUSTION_FILES) await ensureParameter(directory, parameter, options);
+}
+
+/** The exhaustion circuits' parameter bytes as `startExhaustionBackend` takes them, unjudged here. */
+export async function readExhaustionParameters(directory: string) {
+  const [g1, g2] = await Promise.all(EXHAUSTION_FILES.map(p => leading(join(directory, p.name), p.bytes)));
+  if (g1 === undefined || g2 === undefined) throw new Error(`No exhaustion parameters in ${directory}`);
   return { g1, g2 };
 }

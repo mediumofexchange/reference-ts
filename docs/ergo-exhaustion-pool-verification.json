@@ -1,0 +1,267 @@
+{
+  "specification": "succinct-read 282c925",
+  "sources": {
+    "scripts/venue/exhaustion-build.mjs": "ba912bc9901ccfeeb23cd965ecae00ed8feb0a265a0fd414679d6be5ea42d921",
+    "scripts/venue/exhaustion-sources.mjs": "83f704dd827ef3117358c9668d8f4f3cc5dff68e3999227a086a74ab7610d1fe",
+    "scripts/venue/exhaustion-periods.mjs": "3c35f414eee34dc0735bbe20a7fc7d72af3e674446c7d36dab4a2fcd866e1244",
+    "scripts/venue/exhaustion-check.mjs": "ca2a817fc076ca3f5f0c9b0467a8c6d3a74c87837f0f7a43c227d5a27aaae639",
+    "scripts/venue/exhaustion-prove.mjs": "f7c0263b971e5da6a97bebefa1eed17f41062aff9c06c4476e4d018164d171e8",
+    "scripts/venue/exhaustion-circuits/exhaustion.nr": "d245fd0162c9a998ece823a40e94973a01dd0a75684b9e9ddd5aeef99efc81d3",
+    "scripts/venue/exhaustion-circuits/blake2b.nr": "2c021e29c19bd09b735354d8ac80effb8772f014c0d6e2c4a60472929d7c5100",
+    "src/pool/circuits/vendor/poseidon2.nr": "44f3a3d1abe7d5fa2da5c0339e52018195d55f295c320e530d355f9cc62159d8",
+    "src/ergo-exhaustion-prover.ts": "5f743571d6b40242781a2d65dd7aad22867c6d4eb05ebc28a8afb11d08d41cf4",
+    "src/ergo-exhaustion.ts": "943ed44ba9ef458c7c058104401e1a4838971695a258d4cb8097e1a0e6b191de",
+    "src/ergo-scan.ts": "73352b1f5412cc13ac8bede4387007196f6beace1462a7db0d016969673417e7",
+    "src/ergo-synthetic.ts": "659d27646efef374f7224c536206cbe6ad0783a7fb8aa4015440033444d314e8",
+    "src/ergo-profile.ts": "679161a58f56f7c1b16619e1a43c53c353929df130996218e92d4565a95e5c06",
+    "src/pool/poseidon2.ts": "c33b48e98263bdf99efc9650b81f57d90136017be2c843963ef38043bb09f308",
+    "src/pool/proof-verifier.ts": "be9c7f8557d4bf3301ac773af91006138ef01eb3b2aec009e5679ac7e3ceca34",
+    "scripts/venue/exhaustion-pool.mjs": "0fa5a970e7a7b7810725f557f1c0561c7293b55ee86a669470eebcd4b1cddaee",
+    "src/ergo-exhaustion-pool.ts": "0c2259145853e1affa91b8f49c2c8dc053716ae71c7158206c7954c17c6f4139",
+    "src/ergo-exhaustion-server.ts": "bd75e7ab93c50864b50bf9fec0332045bd266b3e2be11b6c4fea14316f36a24f",
+    "src/pool/parameters.ts": "2824970cab95bab2aabd0e5994ef1523dcbbf305bf2c5f190ef52d8d715736ee",
+    "src/pool/parameter-files.ts": "bc5f843d1c773f2de31974b0c5007279426fbbf570d80c0568ec37141399fdd4"
+  },
+  "cpu": "Intel(R) Xeon(R) Processor @ 2.10GHz",
+  "cores": 4,
+  "memoryGiB": 15.7,
+  "parameters": {
+    "points": 4194304,
+    "g1": "d777711ae9fb1951c47a0eaf7e0ebcaccc39e6731d9b3a560d7ff0c2fcdf2f0d"
+  },
+  "blocks": {
+    "file": "blocks-48.json",
+    "from": 1894826,
+    "to": 1894873,
+    "count": 48,
+    "transactions": 425,
+    "unsignedBytes": 1399622,
+    "periods": [
+      16,
+      16,
+      16
+    ]
+  },
+  "circuits": {
+    "sizes": {
+      "t": 167,
+      "m": 380,
+      "u": 746
+    },
+    "identities": {
+      "leaf-t": {
+        "bytecode": "82cd725db1094c67497372691c666dd08e5f007b2783343b9a2417c58e64e42c",
+        "vk": "a2c125ab2feca20af407697b6e1e6d99cba6a73ab65ec079a769be789e1ab4f2",
+        "keyHash": "0x1ab2476249309e13f2afc6bbbc35e73c601605b0472281d56d82f18241d476eb"
+      },
+      "leaf-m": {
+        "bytecode": "9fae587c658321b9d420e27a619781681f42ebb6bc5f84fb30effe9ea6ca81c7",
+        "vk": "8ccc7ff201b41531ae8e2f752d8af6cf056d4fbdb89995e27804976e74bb4468",
+        "keyHash": "0x08103c1cbb738a837b4e785ea379b9eaccb8f03dbf318ebe171694022af69ddc"
+      },
+      "leaf-u": {
+        "bytecode": "6a7b8d6fe23a3e7dbf0b9b63ab21c87ef007bde9e652ad964789aae427263823",
+        "vk": "219a3639bf3f8ff8ee49183496e56204a13ddc0e2bcdb6831a2c639fc14a2391",
+        "keyHash": "0x0881a4e495405f03c9252c4ed9a06f273f41cac96fb95bb6697446ecc1adb703"
+      },
+      "node": {
+        "bytecode": "1df15219c293298eea602ed29021859a3d13625112f27effe8312f6144ab01e8",
+        "vk": "2ff0d792d5f34e9b9291b2b9f48378b0923eb030337a2c6ad4adce1f5f7bd445",
+        "keyHash": "0x1dc2959b6e05b085ee869d71cd8fcf903e044a2f19dbb6a2d0da47a5be203081"
+      },
+      "fold-first": {
+        "bytecode": "539398acab4641d1ee228a3f5d8f8e62b01e98a49d89974b6bbed64cdb178ebf",
+        "vk": "54ae6b9bd08d753ecde56e32e7aa3975015146db42efb019e8dcb7e1e1c02ce0",
+        "keyHash": "0x128d1e3e96a79c134962c30cc773acc34f1c6923608a5b42ec734a3b0f9f8d12"
+      },
+      "fold-next": {
+        "bytecode": "f054df2a0b832b27f42054464d179fc91e63ff8eeee11d9b69f2d08ceafb9367",
+        "vk": "268f7cd52a3b16938158bb42b5dcfbab3fd6f00637848e9d1835a475e43a9814",
+        "keyHash": "0x28042fd2c360b17a7254c3de948e5b45cd4d59c269a95c9500213750b598a7ee"
+      }
+    }
+  },
+  "periods": [
+    {
+      "blocks": 16,
+      "endHeight": 1894841,
+      "leaves": {
+        "t": 6,
+        "m": 2,
+        "u": 0
+      },
+      "nodes": 7,
+      "made": 0,
+      "kept": 16,
+      "seconds": 4.561
+    },
+    {
+      "blocks": 16,
+      "endHeight": 1894857,
+      "leaves": {
+        "t": 38,
+        "m": 2,
+        "u": 0
+      },
+      "nodes": 39,
+      "made": 0,
+      "kept": 80,
+      "seconds": 3.327
+    },
+    {
+      "blocks": 16,
+      "endHeight": 1894873,
+      "leaves": {
+        "t": 24,
+        "m": 2,
+        "u": 0
+      },
+      "nodes": 25,
+      "made": 0,
+      "kept": 52,
+      "seconds": 2.245
+    }
+  ],
+  "resume": {
+    "made": 0,
+    "kept": 148,
+    "seconds": 10
+  },
+  "checks": [
+    {
+      "name": "a pool over the kept proofs proves the same periods again without a proof",
+      "ok": true,
+      "detail": {
+        "made": 0,
+        "kept": 148,
+        "seconds": 10
+      }
+    },
+    {
+      "name": "its folds are the same bytes",
+      "ok": true
+    },
+    {
+      "name": "the reader takes period 0's first fold to 1894841 (225 ms)",
+      "ok": true
+    },
+    {
+      "name": "the reader takes period 1's next fold to 1894857 (34 ms)",
+      "ok": true
+    },
+    {
+      "name": "the reader takes period 2's next fold to 1894873 (31 ms)",
+      "ok": true
+    },
+    {
+      "name": "a subject's path at the last fold reproduces its map root with no entry",
+      "ok": true
+    },
+    {
+      "name": "the reader refuses a fold with another map root",
+      "ok": true,
+      "detail": "fold-proof"
+    },
+    {
+      "name": "the reader refuses a next fold's proof under the first fold's key",
+      "ok": true,
+      "detail": "fold-proof"
+    },
+    {
+      "name": "the reader refuses the first fold's proof for the last fold's inputs",
+      "ok": true,
+      "detail": "fold-proof"
+    },
+    {
+      "name": "the reader refuses a fold ending at another header",
+      "ok": true,
+      "detail": "fold-end"
+    },
+    {
+      "name": "the reader refuses a fold above the depth",
+      "ok": true,
+      "detail": "fold-depth"
+    },
+    {
+      "name": "the reader refuses a fold from another start",
+      "ok": true,
+      "detail": "fold-start"
+    },
+    {
+      "name": "the reader refuses a fold naming another fold key hash",
+      "ok": true,
+      "detail": "fold-key"
+    }
+  ],
+  "set": {
+    "identity": "64c1d86109a49026141a2ce0f2d76f8fdb9c2983064fb1234df0e70251b41701",
+    "test": true
+  },
+  "result": "pass",
+  "minutes": 0.4,
+  "proving": {
+    "note": "This run reused proofs made by the same command on the branch's earlier revision 0fa8127 (the pool before its read-back fixes: verification moved to verifying instances of its own, headers checked to chain, blocks read at the call; no proof's statement changed). That run resumed 29 proofs kept by two earlier runs (all of period 0, 13 of period 1) and made the other 119. Times are that run's; the least available memory free(1) showed during proving was 5.4 GiB.",
+    "leafProofWithNextWitness": {
+      "n": 51,
+      "mean": 77.7,
+      "min": 56.6,
+      "max": 92.9
+    },
+    "leafProofAlone": {
+      "n": 2,
+      "mean": 52.6,
+      "min": 52.5,
+      "max": 52.8
+    },
+    "witnessT": {
+      "n": 50,
+      "mean": 25.4,
+      "min": 24.1,
+      "max": 45
+    },
+    "witnessM": {
+      "n": 3,
+      "mean": 28,
+      "min": 19.3,
+      "max": 45
+    },
+    "node": {
+      "n": 64,
+      "mean": 19,
+      "min": 17.9,
+      "max": 20.1
+    },
+    "fold": {
+      "n": 2,
+      "mean": 19.9,
+      "min": 19.5,
+      "max": 20.2
+    },
+    "periods": [
+      {
+        "end": 1894841,
+        "leaves": 8,
+        "nodes": 7,
+        "made": 0,
+        "kept": 16,
+        "seconds": 4
+      },
+      {
+        "end": 1894857,
+        "leaves": 40,
+        "nodes": 39,
+        "made": 67,
+        "kept": 13,
+        "seconds": 2881
+      },
+      {
+        "end": 1894873,
+        "leaves": 26,
+        "nodes": 25,
+        "made": 52,
+        "kept": 0,
+        "seconds": 2523
+      }
+    ]
+  }
+}

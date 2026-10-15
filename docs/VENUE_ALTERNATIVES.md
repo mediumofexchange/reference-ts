@@ -277,7 +277,7 @@ Folds add one 1.5 M-gate proof a period. The two windows overlap by 126 blocks.
 
 Measured 2026-10-15 ([decision](../decisions/2026-10.md#2026-10-15--prove-the-exhaustions-six-circuits-in-production-form-end-to-end-and-keep-up-with-a-heavy-ergo-day-one-and-a-half-times-on-one-prover-slice-43-next-12); [proving report](ergo-exhaustion-prove-verification.json), [execution report](ergo-exhaustion-check-verification.json)). The six circuits of [succinct reading](https://github.com/mediumofexchange/money-from-first-principles/blob/282c925/succinct-read.md) §4.3 over pool-v2 §1's sponge and §2's tags (sources `scripts/venue/exhaustion-sources.mjs`, `exhaustion-circuits/`), proved on bb.js's bundled native `bb` on one 4-vCPU Xeon at 2.10 GHz (15 GB), against [slice 32's probe](#the-complete-exhaustion-leaf-slice-32) on the same CPU model.
 
-| Circuit | Slots | Gates (2^22 rows for leaves) | Proofs in the report's run | Witness (noir_js) |
+| Circuit | Slots | Gates (2^22 rows for leaves) | Proofs, first run | Witness (noir_js) |
 |---|---|---|---|---|
 | Transaction leaf | 167 (24,597 a slot, 30,209 fixed; probe 23,799 and 172) | 4,179,945 | 58.5–62.2 s | 22–29 s |
 | Tree-and-header leaf | 380 (10,880 a slot; probe 11,044 and 378) | 4,143,333 | 57.3–58.4 s | 16 s |
@@ -285,7 +285,7 @@ Measured 2026-10-15 ([decision](../decisions/2026-10.md#2026-10-15--prove-the-ex
 | Node | | 1,469,901 (2^21) | 18.1–18.4 s | |
 | First and next fold | | 708,272 and 1,474,513 | 9.2–9.4 s and 18.1–18.8 s | |
 
-Slot costs are fits over 2 and 6 slots; the full-size leaves land 0.0–1.0% above them. Every proof is 14,656 bytes.
+Slot costs are fits over 2 and 6 slots; the full-size leaves land 0.0–1.0% above them. Every proof is 14,656 bytes. The [report](ergo-exhaustion-prove-verification.json), re-recorded on 2026-10-15 after slice 43's pool changed its sources (not the circuits), ran leaves in 59.0–65.0 s and nodes in 20.0–21.4 s.
 
 **Slice 43's day keeps one prover busy about 16 hours.** That day (720 blocks to height 1,894,624: 107,371 transaction
 compressions, 25,069 tree or header ones, no entry) takes 643 transaction leaves and 66 tree-and-header leaves, 11.9
@@ -320,6 +320,29 @@ five hostile ones.
 output, so the map leaves run on synthetic entries. Proving reads 2^22 G1 points whose leading 2^21 match the check
 set's pinned hash; the rest are the CDN's, unpinned until an adoption names them. Full-size compilation exceeds
 noir_wasm's memory and uses nargo 1.0.0-beta.26, shown equal at small sizes only.
+
+### The prover pool over mainnet blocks (slice 43)
+
+Measured 2026-10-15 ([decision](../decisions/2026-10.md#2026-10-15--prove-a-replicas-exhaustion-periods-in-a-resumable-prover-pool-from-pinned-222-points-and-fold-real-ergo-mainnet-blocks-slice-43-next-12); [report](ergo-exhaustion-pool-verification.json)). `scripts/venue/exhaustion-pool.mjs` hands 48 consecutive mainnet blocks (heights 1,894,826–1,894,873; 425 transactions, 1.40 MB unsigned) to an `ExhaustionServer` in three periods of 16 blocks, and `ExhaustionPool` proves them with the [production circuits](#the-exhaustion-circuits-in-production-form-slice-43) on bb.js's native binary from the pinned 2^22 points, one 4-vCPU Xeon at 2.10 GHz (15 GB), the same CPU model as before.
+
+**Real blocks fold.** The periods take 8, 40 and 26 leaves (71 transaction, 3 tree-and-header, no map-update: these blocks hold no output with §6's shape) and 7, 39 and 25 nodes; the first fold and two next folds verify, and the reader's `checkFold` takes each under a test set of the built circuits on the pinned WebAssembly verifier (0.2 s for the first, 0.03 s after). It refuses seven hostile folds by rule: another map root, the next fold's proof under the first fold's key, the first fold's proof for the last fold's inputs, another end header, an end above the depth, another start and another fold key hash. A subject's path at the last fold reproduces its root with no entry. A second pool over the kept proofs proves the three periods again in 10 seconds without a proof (each kept proof verified again), with the same fold bytes.
+
+**Times.**
+
+| Proof | Mean (range) | Count |
+|---|---|---|
+| Transaction or tree leaf, alone | 52.6 s (52.5–52.8) | 2 |
+| The same while the next leaf's witness runs | 77.7 s (56.6–92.9) | 51 |
+| Leaf witness, noir_js | 25.4 s (transaction), 19–45 s (tree) | 53 |
+| Node | 19.0 s (17.9–20.1) | 64 |
+| Next fold | 19.9 s | 2 |
+
+- *The built key cuts a leaf's proof:* bb.js's `generateProof` passes no key and derives it again each proof (about 100 s a leaf here); with the key, a leaf proves in 52.6 s, under the 58–62 s of `bb prove -k` before.
+- *Overlapping the witness buys nothing on four cores:* a leaf proved beside the next witness takes 77.7 s, as long as the witness and the proof one after the other (78.0 s). The overlap pays only where witnesses run on other cores or natively (`nargo execute`, 15.7 s).
+- *This window is heavier than slice 43's day:* 1.40 MB in 48 blocks is about 21 MB a day against that day's 13.3 MB; its last period (16 blocks, 32 minutes of chain) took 42 minutes, so one prover keeps up with it 0.76 times. At these means slice 43's day (709 leaves, 708 nodes) takes 19.1 hours, one prover keeping up 1.26 times (the estimate was 1.20).
+- *Memory:* proving left at least 5.4 GiB of the 15.7 available; one native instance at a time.
+
+**Limits.** A test set over circuits built here (no adoption); one run on one host; 48 blocks, not a day; no map-update leaf on real blocks; witnesses by noir_js; one prover.
 
 ### The venue recheck (slice 29)
 
