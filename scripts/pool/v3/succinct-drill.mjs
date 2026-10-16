@@ -7,7 +7,8 @@
 // nothing loads `@noir-lang`. The replica also proves the venue's exhaustion (`--prove-exhaustion`, succinct-read §4,
 // slice 43) under the circuit set the package ships (a test set), natively where bb.js bundles a native backend: each
 // succinct directory's view reads its backing's subjects below the replica's fold, no section there, and sections
-// natively above it; restarted without proving, the replica serves its kept fold again. Where the host has no native
+// natively above it; restarted without proving, the replica serves its kept fold again. A second replica that proves
+// nothing, keeping the first, takes its fold and serves it; the succinct reader reads only through it. Where the host has no native
 // backend (Windows), `--prove-exhaustion` is refused (PROVER) and the views read every section. The commands run from
 // the build (`dist/cli/moe.js`); the release's own install drill is command-drill.mjs.
 //
@@ -276,23 +277,37 @@ try {
     assert.equal(Number(after.read.venue.succinctIndices) >= 1, native, JSON.stringify(after.read.venue));
   });
 
-  await check("a succinct reader's supply equals a complete reader's", async () => {
-    for (const directory of [RS]) {
-      await ok(["reader", "terms", "add", "--dir", directory, backing, "--terms", terms, "--signature", signature, ...SYN]);
-      await ok(["reader", "service", "add", "--dir", directory, backing, join(OP, "service.json")]);
-      await ok(["reader", "replica", "add", "--dir", directory, backing, replicaUrl]);
-    }
-    const complete = await ok(["reader", "supply", "--dir", RC, backing]), read = await moe(["reader", "supply", "--dir", RS, backing]);
-    assert.equal(read.status, 0, read.stderr);
-    const same = value => ({ issued: value.issued, burned: value.burned, supply: value.supply, checkpoint: value.checkpoint, judgingIndex: value.judgingIndex });
-    assert.deepEqual(same(read.json), same(complete));
-    assert.equal(read.json.read.judgment, "succinct");
-    assert.equal(Number(read.json.read.venue.succinctIndices) >= 1, native, JSON.stringify(read.json.read.venue));
-    assert.equal(read.noir, false);
+  let taken = [];
+  await check("a second replica that proves nothing takes the first's fold; a succinct reader of it alone reads the supply a complete reader does", async () => {
+    const complete = await ok(["reader", "supply", "--dir", RC, backing]);
+    // The complete reader becomes a replica keeping the first one: it takes the fold the first proved, checked against
+    // its own view's map, and serves it.
+    await ok(["reader", "replica", "add", "--dir", RC, backing, replicaUrl]);
+    const second = background(["reader", "serve", "--dir", RC, "--poll-ms", "500"]);
+    try {
+      assert.equal((await second.line(line => line.status === "serving", 300_000)).exhaustion.proving, false);
+      if (native) {
+        const fold = await second.line(line => line.status === "exhaustion" && line.how === "taken", 300_000);
+        assert.equal(fold.from, new URL(replicaUrl).href);
+        assert(Number(fold.foldIndex) >= 0, JSON.stringify(fold));
+      }
+      taken = second.lines.filter(line => line.status === "exhaustion");
+      const secondUrl = JSON.parse(readFileSync(join(RC, "replica.json"), "utf8")).url;
+      await ok(["reader", "terms", "add", "--dir", RS, backing, "--terms", terms, "--signature", signature, ...SYN]);
+      await ok(["reader", "service", "add", "--dir", RS, backing, join(OP, "service.json")]);
+      await ok(["reader", "replica", "add", "--dir", RS, backing, secondUrl]);
+      const read = await moe(["reader", "supply", "--dir", RS, backing]);
+      assert.equal(read.status, 0, read.stderr);
+      const same = value => ({ issued: value.issued, burned: value.burned, supply: value.supply, checkpoint: value.checkpoint, judgingIndex: value.judgingIndex });
+      assert.deepEqual(same(read.json), same(complete));
+      assert.equal(read.json.read.judgment, "succinct");
+      assert.equal(Number(read.json.read.venue.succinctIndices) >= 1, native, JSON.stringify(read.json.read.venue));
+      assert.equal(read.noir, false);
+    } finally { await second.stop(); }
   });
 
   await replica.stop(); await serving.stop();
-  const report = { status: "passed", checks, processes, proved: provedLines, exhaustion: { native, folds, periods },
+  const report = { status: "passed", checks, processes, proved: provedLines, exhaustion: { native, folds, periods, taken },
     elapsedMs: Math.round(performance.now() - started) };
   process.stdout.write(`${JSON.stringify(report, null, 2)}\n`);
   completed = true;
