@@ -36,6 +36,7 @@ as current instructions.
 
 ## Index
 
+- `2026-10-16` [Make the phone holder a release gate with budgets declared before any phone run, and hold (cd) as a gate item (direction)](decisions/2026-10.md#2026-10-16--make-the-phone-holder-a-release-gate-with-budgets-declared-before-any-phone-run-and-hold-cd-as-a-gate-item-direction)
 - `2026-10-16` [Compute the exhaustion's witnesses with the pinned compiler, in a process of their own (slice 43, Next 12)](decisions/2026-10.md#2026-10-16--compute-the-exhaustions-witnesses-with-the-pinned-compiler-in-a-process-of-their-own-slice-43-next-12)
 - `2026-10-16` [Take folds another replica proved, keep and serve them, and prove on from them (slice 43, Next 12)](decisions/2026-10.md#2026-10-16--take-folds-another-replica-proved-keep-and-serve-them-and-prove-on-from-them-slice-43-next-12)
 - `2026-10-16` [Prove the venue's exhaustion in a replica under the circuit set the package ships, keep its fold across restarts, and read succinct directories under it (slice 43, Next 12)](decisions/2026-10.md#2026-10-16--prove-the-venues-exhaustion-in-a-replica-under-the-circuit-set-the-package-ships-keep-its-fold-across-restarts-and-read-succinct-directories-under-it-slice-43-next-12)
