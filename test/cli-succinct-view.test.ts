@@ -188,8 +188,8 @@ describe("a succinct directory's view", () => {
       return peer;
     };
     try {
-      // A replica that proves nothing takes the highest fold offered within its view; peers that do not answer are asked
-      // again, one whose bytes are no fold is passed over, and a fold past its view waits.
+      // A replica that proves nothing takes the highest fold offered within its view; a peer that does not answer and one
+      // whose bytes are no fold are passed over, and a fold past its view waits.
       const { dir, view } = await synced();
       const short = await peerOver("short", blocks.slice(0, 5)), long = await peerOver("long", blocks.slice(0, 8)), far = await peerOver("far", blocks.slice(0, 11));
       const down = { name: "down", fold: async () => { throw new Error("connection refused"); }, key: async () => undefined, transaction: async () => undefined };
@@ -200,10 +200,11 @@ describe("a succinct directory's view", () => {
       expect(heard).toEqual([[long.fold, "taken", "long"]]);
       expect(await replica.source.supplier.fold(1n << 40n)).toEqual(long.fold);
       expect(decodeFold(readFileSync(dir.file("exhaustion-fold.bin")))).toEqual(long.fold);
-      expect(events).toEqual([expect.objectContaining({ code: "PEER", peer: "malformed" })]);
-      // Nothing higher within the view: nothing more is taken, and the malformed peer is not asked meanwhile.
+      expect(events).toEqual([{ event: "exhaustion", code: "PEER", peer: "down", message: expect.stringContaining("did not answer") },
+        { event: "exhaustion", code: "PEER", peer: "malformed", message: expect.stringContaining("its fold is malformed") }]);
+      // Nothing higher within the view: nothing more is taken, and neither is asked meanwhile.
       await replica.advance((...args) => heard.push(args));
-      expect([heard.length, events.length]).toEqual([1, 1]);
+      expect([heard.length, events.length]).toEqual([1, 2]);
       // The key answers and transactions are its own map's at the taken fold.
       expect(await replica.source.supplier.key(long.fold.inputs.endHeight, 0n, 0n)).toBeDefined();
       // Restarted with no peer, it serves the fold it took, kept.
@@ -263,6 +264,41 @@ describe("a succinct directory's view", () => {
       const [next, how] = folds[1] as [Fold, string];
       expect([how, next.first, next.inputs.endHeight]).toEqual(["proved", false, A + 9n]);
       expect(set.verifyFold(false, foldPublicInputs(next.inputs)!, next.proof)).toBe(true);
+
+      // A fold whose verification cannot run (a verifier that throws) leaves the next offer to be taken, and its peer is
+      // passed over once it recurs KEPT_TRIES times.
+      const throwing = await peerOver("throwing", blocks.slice(0, 8), { alter: f => ({ ...f, proof: f.proof.map(b => b ^ 2) }) });
+      const hostile = bytesToHex(throwing.fold.proof), throwingSet = { ...set, verifyFold: (first: boolean, inputs: readonly bigint[], proof: Uint8Array) => {
+        if (bytesToHex(proof) === hostile) throw new Error("unreachable");
+        return set.verifyFold(first, inputs, proof);
+      } };
+      const fallback = await synced(), taking: unknown[][] = [];
+      events.length = 0;
+      const falling = exhaustionOver(fallback.dir, fallback.view, undefined, { exhaustion: throwingSet, peers: () => [throwing.supplier, short.supplier] });
+      await falling.advance((...args) => taking.push(args));
+      expect(taking).toEqual([[short.fold, "taken", "short"]]);
+      for (let turn = 1; turn < 6; turn++) await falling.advance((...args) => taking.push(args));
+      expect([throwing.asked, taking.length]).toEqual([5, 1]);
+      expect(events.at(-1)).toMatchObject({ code: "PEER", peer: "throwing", message: expect.stringContaining("could not be verified in 5 turns") });
+
+      // A proving replica whose period's proof failed takes a peer's fold that reaches the pending period's end, on a
+      // fresh map in its place, and none below it.
+      const failing = await synced(), full = await peerOver("full", blocks.slice(0, 9)), takenOver: unknown[][] = [];
+      let offers: ExhaustionSupplier[] = [];
+      const broken: ExhaustionProver = { fold: async () => { throw new Error("out of memory"); }, folded: () => {}, close: async () => {} };
+      events.length = 0;
+      const stuck = exhaustionOver(failing.dir, failing.view, broken, { exhaustion: set, peers: () => offers });
+      await stuck.advance(() => { throw new Error("proved"); });
+      await expect.poll(() => events.some(e => e.code === "PROVER")).toBe(true);
+      await expect.poll(() => stuck.busy).toBe(false);
+      offers = [long.supplier];
+      await stuck.advance((...args) => takenOver.push(args));
+      expect([takenOver, await stuck.source.supplier.fold(1n << 40n)]).toEqual([[], undefined]);
+      offers = [full.supplier];
+      await stuck.advance((...args) => takenOver.push(args));
+      expect(takenOver).toEqual([[full.fold, "taken", "full"]]);
+      expect(await stuck.source.supplier.fold(1n << 40n)).toEqual(full.fold);
+      expect(await stuck.source.supplier.key(full.fold.inputs.endHeight, 0n, 0n)).toBeDefined();
     } finally {
       process.stderr.write = write;
       for (const view of opened) view.close();

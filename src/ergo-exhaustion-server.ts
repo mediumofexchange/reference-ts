@@ -174,12 +174,16 @@ export class ExhaustionServer implements ExhaustionSupplier {
       throw new ExhaustionServerError("FOLD", "the fold is of another start or key hash");
     }
     if (end < from) throw new ExhaustionServerError("FOLD", `the fold ends at ${end}, not above the map's end ${from - 1n}`);
-    for (let height = from; height <= end; height++) {
-      if (source(height) === undefined) throw new ExhaustionServerError("FOLD", `the fold's block at ${height} is not at hand`);
-    }
-    if (compareBytes(source(end)!.id, inputs.endId) !== 0) throw new ExhaustionServerError("FOLD", "the fold ends at another header than its blocks");
+    // Cheapest first: its end header, then its proof, and only then the span (a fold offered by a stranger costs no
+    // read of the span unless it verifies).
+    const last = source(end);
+    if (last === undefined) throw new ExhaustionServerError("FOLD", `the fold's block at ${end} is not at hand`);
+    if (compareBytes(last.id, inputs.endId) !== 0) throw new ExhaustionServerError("FOLD", "the fold ends at another header than its blocks");
     if (await verify(fold) !== true) throw new ExhaustionServerError("FOLD", "the fold does not verify");
     this.#usable();
+    for (let height = from; height < end; height++) {
+      if (source(height) === undefined) throw new ExhaustionServerError("FOLD", `the fold's block at ${height} is not at hand`);
+    }
     // From here no await: the blocks read are the ones just found at hand. A block that is not, or a read that throws,
     // leaves the map part-appended: the server is broken (BLOCKS), an availability fault and not the set's.
     const each = (append: (block: ServedBlock) => void): void => {

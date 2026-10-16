@@ -37,6 +37,7 @@ import type { RecordKind } from "../record-range.js";
 import type { VenueReference } from "../pool/v3/guard.js";
 import { VenueError } from "../venue-error.js";
 import { directoryBackend, type ExhaustionProver } from "./backend.js";
+import { isListenerUrl } from "./serve.js";
 import { keptTerms } from "./terms.js";
 import { CommandError, event, fresh, openDirectory, parseArguments, print, readJson, readOptional, readSecret, required, UsageError, writeExclusive,
   writeReplace, type Directory } from "./common.js";
@@ -203,7 +204,8 @@ export function exhaustionSet(directory: Pick<Directory, "path">, file: VenueFil
 /** The file a directory keeps its view in: a succinct directory's (`--read succinct`) is a succinct view of its own
  * (succinct-read §4), never the complete `venue.db`, which neither form's view opens as the other. */
 export const viewFile = (directory: Pick<Directory, "succinct">): string => directory.succinct ? "succinct-venue.db" : "venue.db";
-/** Every replica URL the directory keeps, for any operator, each once. */
+/** Every replica URL the directory keeps, for any operator, each once; a string that is none is passed over (the
+ * command reading its file refuses it). */
 export function keptReplicaUrls(directory: Pick<Directory, "file">): string[] {
   let names: string[];
   try { names = readdirSync(directory.file("replicas")); } catch { return []; }
@@ -211,7 +213,7 @@ export function keptReplicaUrls(directory: Pick<Directory, "file">): string[] {
   for (const name of names.filter(n => /^[0-9a-f]{64}\.json$/.test(n)).sort()) {
     try {
       const value = JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(readOptional(directory.file(`replicas/${name}`)) ?? new Uint8Array())) as { urls?: unknown };
-      for (const url of Array.isArray(value.urls) ? value.urls : []) if (typeof url === "string") urls.add(url);
+      for (const url of Array.isArray(value.urls) ? value.urls : []) if (typeof url === "string" && isListenerUrl(url)) urls.add(url);
     } catch { /* a replicas file that does not parse is refused by the command that reads it */ }
   }
   return [...urls];
@@ -442,12 +444,13 @@ export function exhaustionOver(directory: Pick<Directory, "path" | "file">, view
     }
     return blocks;
   };
-  /** Adopt `fold` over the view's rows, its blocks read one at a time (a fold far from the start holds no span in
-   * memory): undefined where it was taken, else why not. A fold that verified while the map over the view's own blocks
-   * has another root shows the set or this map unsound: the fold is kept aside as the evidence (the kept file moved
-   * there, a peer's written), and the replica serves and proves this set no more, also after a restart. */
-  const adopt = async (fold: Fold, from: "kept" | "peer"): Promise<unknown> => {
-    try { await server.adopt(fold, block, verify); return undefined; } catch (error) {
+  /** Adopt `fold` on `target` (the replica's server, or a fresh one in its place) over the view's rows, its blocks read
+   * one at a time (a fold far from the start holds no span in memory): undefined where it was taken, else why not. A
+   * fold that verified while the map over the view's own blocks has another root shows the set or this map unsound: the
+   * fold is kept aside as the evidence (the kept file moved there, a peer's written), and the replica serves and proves
+   * this set no more, also after a restart. */
+  const adopt = async (target: ExhaustionServer, fold: Fold, from: "kept" | "peer"): Promise<unknown> => {
+    try { await target.adopt(fold, block, verify); return undefined; } catch (error) {
       if (error instanceof ExhaustionServerError && error.code === "DISAGREEMENT") {
         stopped = error.message;
         const evidence = `${evidencePrefix}${fold.inputs.endHeight}-${randomUUID()}.bin`;
@@ -456,9 +459,6 @@ export function exhaustionOver(directory: Pick<Directory, "path" | "file">, view
           else writeExclusive(directory.file(evidence), encodeFold(fold));
         } catch { /* the kept file left in place; a peer's fold asked again */ }
         event({ event: "exhaustion", code: "DISAGREEMENT", message: `${error.message}; the fold is kept in ${evidence} and this set is served no more` });
-      } else if (error instanceof ExhaustionServerError && error.code === "BLOCKS") {
-        // The map is part-appended: a fresh one takes the kept fold again from the start at the next turn.
-        server = make(); kept = null; unverified = 0;
       }
       return error;
     }
@@ -478,43 +478,51 @@ export function exhaustionOver(directory: Pick<Directory, "path" | "file">, view
       return false;
     }
     kept = undefined;
-    const refused = await adopt(fold, "kept");
+    const refused = await adopt(server, fold, "kept");
     if (refused === undefined) { folded(fold, "kept"); return true; }
     if (stopped !== undefined) return false;
-    server = make(); kept = undefined;
+    // The kept fold is passed over (a map part-appended is replaced): the replica proves or takes from the start.
+    server = make();
     passOver((refused as Error).message);
     return true;
   };
-  /** Peers passed over after a refused fold, by URL: until when, and the wait that set it. */
-  const silent = new Map<string, { readonly until: number; readonly wait: number }>();
+  /** Peers passed over, by URL: until when, the wait that set it, and how often their fold's verification could not run. */
+  const silent = new Map<string, { readonly until: number; readonly wait: number }>(), unverifiable = new Map<string, number>();
   const silence = (name: string, why: string): void => {
     const wait = Math.min((silent.get(name)?.wait ?? PEER_WAIT_MS / 2) * 2, PEER_WAIT_MAX_MS);
     silent.set(name, { until: Date.now() + wait, wait });
     event({ event: "exhaustion", code: "PEER", peer: name, message: `${why}; not asked again for ${wait} ms` });
   };
-  /** Take the highest fold a peer offers above the map and within the view: whether one was taken. Between periods only
-   * (a pending period must be proved first: its leaves are the next fold's). */
+  /** Take the highest fold a peer offers above the map and within the view: whether one was taken. Peers are asked at
+   * once, so one that does not answer costs a turn its timeout at most, and is then passed over like one whose fold is
+   * refused. Where a period is pending (its proof failed), only a fold reaching its end is taken, on a fresh map in
+   * place of the pending one. */
   const takeFromPeers = async (folded: (fold: Fold, how: "taken", from: string) => void): Promise<boolean> => {
-    const top = anchorHeight + 1n + view.venue.witnessedIndex();
-    if (options.peers === undefined || server.pending !== undefined || top <= server.height) return false;
+    // Above the map, or reaching a pending period's end.
+    const top = anchorHeight + 1n + view.venue.witnessedIndex(), pending = server.pending, floor = pending === undefined ? server.height : server.height - 1n;
+    if (options.peers === undefined || top <= floor) return false;
+    const now = Date.now();
+    const asked = options.peers().map(peer => ({ name: peer.name ?? "peer", peer })).filter(({ name }) => (silent.get(name)?.until ?? 0) <= now);
+    const answers = await Promise.allSettled(asked.map(({ peer }) => peer.fold(top)));
     const offered: { readonly name: string; readonly fold: Fold }[] = [];
-    for (const peer of options.peers()) {
-      const name = peer.name ?? "peer", held = silent.get(name);
-      if (held !== undefined && Date.now() < held.until) continue;
-      let fold: Fold | undefined;
-      try { fold = await peer.fold(top); } catch (error) {
-        // Bytes that are no fold are the peer's failure (§2 rule 5); one that does not answer is asked next turn.
-        if (error instanceof EncodingError) silence(name, `its fold is malformed: ${error.message}`);
-        continue;
+    answers.forEach((answer, i) => {
+      const { name } = asked[i]!;
+      if (answer.status === "rejected") {
+        // Bytes that are no fold are the peer's failure (§2 rule 5); one that does not answer is passed over too.
+        const error = answer.reason as Error;
+        silence(name, error instanceof EncodingError ? `its fold is malformed: ${error.message}` : `it did not answer: ${error?.message}`);
+        return;
       }
-      if (fold !== undefined && fold.inputs.endHeight > server.height && fold.inputs.endHeight <= top) offered.push({ name, fold });
-    }
+      const fold = answer.value;
+      if (fold !== undefined && fold.inputs.endHeight > floor && fold.inputs.endHeight <= top) offered.push({ name, fold });
+    });
     offered.sort((a, b) => a.fold.inputs.endHeight > b.fold.inputs.endHeight ? -1 : a.fold.inputs.endHeight < b.fold.inputs.endHeight ? 1 : 0);
     for (const { name, fold } of offered) {
-      if (fold.inputs.endHeight <= server.height) continue;
-      const refused = await adopt(fold, "peer");
+      // Over a pending period, a fresh map from the start: the pending one stays where the fold is not taken.
+      const target = pending === undefined ? server : make(), refused = await adopt(target, fold, "peer");
       if (refused === undefined) {
-        silent.delete(name);
+        silent.delete(name); unverifiable.delete(name);
+        server = target;
         // Kept, so a restart takes it again; a prover's kept leaves are of periods it no longer proves.
         try { writeReplace(keptFile, encodeFold(fold)); prover?.folded(); } catch (error) {
           event({ event: "exhaustion", code: "KEPT", message: `the fold to ${fold.inputs.endHeight} could not be kept: ${(error as Error).message}` });
@@ -524,13 +532,19 @@ export function exhaustionOver(directory: Pick<Directory, "path" | "file">, view
       }
       if (stopped !== undefined) return false;
       if (refused instanceof ExhaustionServerError && refused.code === "BLOCKS") {
+        // The view's rows could not be read again: an availability fault, not the peer's. A part-appended map is
+        // replaced by a fresh one, which takes the kept fold again from the start at the next turn.
         event({ event: "exhaustion", code: "BLOCKS", peer: name, message: refused.message });
+        if (target === server) { server = make(); kept = null; unverified = 0; }
         return false;
       }
-      // A refusal before anything was appended: the fold is the peer's failure. A verifier that could not run is this
-      // replica's, and the fold is asked again at the next turn.
-      if (refused instanceof ExhaustionServerError || refused instanceof EncodingError) silence(name, (refused as Error).message);
-      else { event({ event: "exhaustion", code: "PEER", peer: name, message: `its fold could not be verified yet: ${(refused as Error).message}` }); return false; }
+      if (refused instanceof ExhaustionServerError || refused instanceof EncodingError) { silence(name, (refused as Error).message); continue; }
+      // A verification that could not run is this replica's until it recurs: the next offer is tried, and a peer whose
+      // fold fails to verify so KEPT_TRIES times is passed over.
+      const tries = (unverifiable.get(name) ?? 0) + 1;
+      unverifiable.set(name, tries);
+      if (tries >= KEPT_TRIES) { unverifiable.delete(name); silence(name, `its fold could not be verified in ${tries} turns: ${(refused as Error).message}`); }
+      else event({ event: "exhaustion", code: "PEER", peer: name, message: `its fold could not be verified yet: ${(refused as Error).message}` });
     }
     return false;
   };

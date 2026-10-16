@@ -735,11 +735,12 @@ Every replica also keeps the venue's subject map over its own view, from the ven
 directories' views (`GET /exhaustion`, slice 43) under the circuit set the package ships, a test set (succinct-read §6):
 its folds, paths and entries, and transactions with inclusion paths. It serves a fold only once one is proved, by it or
 by another: each round no period is proving, it asks the other replicas its directory keeps (`replica add`, any
-backing's) for their latest fold within its view, and takes the one ending highest above its own map where it verifies
-and its own view's map reproduces it, so one prover serves every replica that keeps it, and a proving replica proves its
-next period from a taken fold. A replica whose fold is refused (it does not verify, is of another set, or ends at
-another chain's header) is an `exhaustion` event `PEER` and is not asked again for a wait doubling from a minute to a
-day; a fold that verifies while the map disagrees is kept as evidence (`exhaustion-disagreement-…`) and the replica
+backing's) at once for their latest fold within its view, and takes the one ending highest above its own map where it
+verifies and its own view's map reproduces it, so one prover serves every replica that keeps it, and a proving replica
+proves its next period from a taken fold (where its own period's proof failed, a fold reaching that period's end
+replaces it). A replica that does not answer, or whose fold is refused (it does not verify, is of another set, or ends
+at another chain's header), is an `exhaustion` event `PEER` and is not asked again for a wait doubling from a minute
+to a day; a fold that verifies while the map disagrees is kept as evidence (`exhaustion-disagreement-…`) and the replica
 serves the set no more while it is kept. With
 `--prove-exhaustion [--nargo <path>] [--parameters <dir>]` it proves one after a round whose sync read new indices,
 over all of them as one period, in the background while rounds go on (covers wait meanwhile: one proof at a time). A
