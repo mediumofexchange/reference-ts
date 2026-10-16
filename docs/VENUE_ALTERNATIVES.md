@@ -362,6 +362,24 @@ Measured 2026-10-16 ([decision](../decisions/2026-10.md#2026-10-16--compute-the-
 
 **Limits.** One leaf kind, one host, two or three rounds a way. The two slow runs came after noir_js' WebAssembly memory had grown (3.3 and 2.8 GiB free), and their cause is not isolated. Node and fold witnesses are timed only in the succinct drill's log.
 
+### The agreement corpus (slice 43)
+
+Measured 2026-10-16 ([decision](../decisions/2026-10.md#2026-10-16--execute-the-shipped-exhaustion-circuits-over-named-mainnet-days-hold-their-scan-to-the-framer-and-scan-every-version-4-block-for-cd-slice-43-next-12); [report](ergo-exhaustion-corpus-verification.json)). `scripts/venue/exhaustion-corpus.mjs` records three named mainnet days from a public node (every header parsed in canonical form with its work, ids, parents, heights and section roots recomputed), holds each transaction's scan to the framer, and executes every leaf, node and fold of the replica's 64-block periods with the pinned nargo over the shipped full-size circuits (placeholder proofs: all but the recursive verifications), on one 4-vCPU Xeon at 2.10 GHz with four executions at once.
+
+| Day (720 blocks) | Header versions | Unsigned bytes, transactions (inside the grammar) | Entries | Leaves (T, M), nodes, folds | Execution |
+|---|---|---|---|---|---|
+| 889,496–890,215 | 2 (360), 3 (360) | 7.23 MB, 4,147 (1,276) | 0 | 359, 53; 400; 12 | 32.6 min |
+| 1,627,800–1,628,519 | 3 (360), 4 (360) | 4.36 MB, 5,235 (646) | 0 | 230, 63; 281; 12 | 21.8 min |
+| 1,893,905–1,894,624 (slice 43's) | 4 (720) | 13.85 MB, 6,125 (640) | 0 | 673, 75; 736; 12 | 55.0 min |
+
+- *Every execution passes,* with the programs still the manifest's afterwards, and each day's control (its first leaf under a wrong end state) is refused by the circuit's `end state` check.
+- *No output with the shape on mainnet:* neither the scan nor the framer reads one on any of the three days, so the map stays empty and the agreement on real days is that neither reading finds a false entry. The synthetic period (9 blocks, both root rules, 21 entries, one in an ungrammatical transaction) runs the map-update leaf and the independent map root at full size, and the 65 crafted transactions (43 inside the grammar, 260 entries) each execute as a full-size transaction leaf with the scan equal to the prover's list and, inside the grammar, to the framer.
+- *Periods cost leaves:* cut into 64-block periods, slice 43's day takes 748 leaves against the 709 of one cut, since each period ends its last partly filled leaves (Next 4 (cg)).
+
+**The version-4 scan (Next 4 (cd)).** `exhaustion-corpus.mjs scan` (at 7fd0872) read every block from 1,628,160, the first of version 4, to 1,895,679 from node.ergo.watch (node 5.0.21), three requests at a time over about three hours: 267,520 blocks, all of version 4, and 1,885,832 transactions. Each transaction's stated bytes hash to its id, every section reproduces its header's root, and the blocks link by parent (digest of the scanned lines `8406afb1…`). No mined block carries a transaction that node's JSON misstates, so (cd) has no instance on that node's copy. The pinned 6.0.6 node, whose JSON (cd) was reproduced against, was not scanned (no public 6.0.6 node is known here; the local mainnet node is one), and a transaction written to trip (cd) costs one fee at any time.
+
+**Limits.** Execution checks no recursive verification (the [proving check](#the-exhaustion-circuits-in-production-form-slice-43) and the [pool](#the-prover-pool-over-mainnet-blocks-slice-43) do). No mainnet entry, so real publications reach the circuits only on the testnet, whose days need the local archive node. Hostile witnesses run on the same sources at small sizes (`check:exhaustion`); at full size only the control and the crafted set do. One public node's copy, one host.
+
 ### The venue recheck (slice 29)
 
 Measured 2026-10-13, read-only ([tooling and result](https://github.com/mediumofexchange/reference-ts/tree/bcd39d2/scripts/venue/recheck-probe); [decision](../decisions/2026-10.md#2026-10-13--keep-ergo-for-the-release-a-phone-reaches-bitcoin-only-through-about-ten-provers-dogecoin-is-the-next-venue-probe-and-a-venue-move-is-a-planned-move-for-pool-v4-slice-29-next-12)). Three questions, scoped 2026-10-12: does a chain not yet weighed beat Ergo for the release, or Bitcoin as the second venue, by §2 and by what a phone pays ([slice 20](#absence-for-one-subject-slice-20)); what does a phone pay to reach Bitcoin through [slice 21](#the-succinct-proof-of-exhaustions-prover-cost-slice-21)'s succinct route; and can Ergo alone carry the release, with which hedges?
