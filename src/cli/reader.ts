@@ -17,7 +17,8 @@ import { V3Replica } from "../pool/v3/replica.js";
 import { V3ServiceClientError } from "../pool/v3/service-client.js";
 import { createV3EvidenceService } from "../pool/v3/service-http.js";
 import { CommandError, event, flag, has, hex, openDirectory, parseArguments, print, required, UsageError, writeReplace } from "./common.js";
-import { directoryVerifier, openCoverProver, openExhaustionProver, proverBackend, type ExhaustionProver } from "./backend.js";
+import { directoryVerifier, openCoverProver, proverBackend, type ExhaustionProver } from "./backend.js";
+import { openExhaustionProver } from "./exhaustion-prover.js";
 import { nameOf } from "./construction.js";
 import { initRole, keptBackings, keptReplay, openEvidence, originOf, passedOver, presentationCommand, readAt, replicaCommand, replicaUrls, served,
   serviceCommand, supplyCommand, supplyOf, termsCommand } from "./read.js";

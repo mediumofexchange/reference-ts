@@ -173,7 +173,7 @@ try {
     assert.deepEqual(holdings(await ok(wallet("sync", HD, backing))), [["10", "available", 0], ["4", "available", 0]]);
   });
 
-  let replica, provedLines = [];
+  let replica, provedLines = [], folds = [], periods = [];
   await check("a replica proves covers over its kept trail (reader serve --prove); a succinct directory serves none", async () => {
     // The check set's parameters, the leading 2^21 points, in the checks' shared parameter directory.
     await prepareCheckSetParameters(PARAMETER_DIRECTORY, { log: line => process.stderr.write(`${line}\n`) });
@@ -243,6 +243,9 @@ try {
   await check("the succinct holder pays a succinct shop, which fulfills over the tail's fetched proof", async () => {
     // The replica serves on without proving, so the payment is the tail no cover reaches: its proof is fetched.
     provedLines = replica.lines.filter(line => line.status === "proved");
+    // The folds it proved, and each period's proving as the pool logged it (leaves, nodes, seconds).
+    folds = replica.lines.filter(line => line.status === "exhaustion");
+    periods = replica.log().split("\n").filter(line => /^period to \d+: \d+ leaves/.test(line));
     await replica.stop();
     const lastFold = replica.lines.filter(line => line.status === "exhaustion").at(-1);
     replica = background(["reader", "serve", "--dir", RP, "--poll-ms", "500", "--port", new URL(replicaUrl).port]);
@@ -289,7 +292,7 @@ try {
   });
 
   await replica.stop(); await serving.stop();
-  const report = { status: "passed", checks, processes, proved: provedLines,
+  const report = { status: "passed", checks, processes, proved: provedLines, exhaustion: { native, folds, periods },
     elapsedMs: Math.round(performance.now() - started) };
   process.stdout.write(`${JSON.stringify(report, null, 2)}\n`);
   completed = true;

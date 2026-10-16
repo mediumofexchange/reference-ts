@@ -38,10 +38,11 @@ export interface ExhaustionServerOptions {
   block?(height: bigint): ServedBlock | undefined;
 }
 
-/** A fold the server will not adopt (`FOLD`), one offered while a period is pending (`PENDING`), or a map that disagreed
- * with a fold that verified (`DISAGREEMENT`), after which the server refuses every call. */
+/** A fold the server will not adopt (`FOLD`), one offered while a period is pending (`PENDING`), a fold's blocks that
+ * could not be read again while it was adopted (`BLOCKS`), or a map that disagreed with a fold that verified
+ * (`DISAGREEMENT`); after either of the last two the server refuses every call. */
 export class ExhaustionServerError extends Error {
-  constructor(readonly code: "FOLD" | "PENDING" | "DISAGREEMENT", message: string) { super(message); this.name = "ExhaustionServerError"; }
+  constructor(readonly code: "FOLD" | "PENDING" | "BLOCKS" | "DISAGREEMENT", message: string) { super(message); this.name = "ExhaustionServerError"; }
 }
 
 /** A block read once into owned bytes, or a refusal before anything is appended: a 32-byte id and root, a section of
@@ -74,8 +75,10 @@ export class ExhaustionServer implements ExhaustionSupplier {
   /** Each block above the start, by height: its root and section, for transactions with their inclusion paths. */
   readonly #blocks = new Map<bigint, ServedBlock>();
   #fold: Fold | undefined;
-  /** Why the server refuses every call: its map disagreed with a fold that verified. */
+  /** Why the server refuses every call: its map disagreed with a fold that verified (`#disagreed`), or an adoption
+   * could not read its blocks again and left the map part-appended. */
   #broken: string | undefined;
+  #disagreed = false;
   /** A period appended to the map whose proof has not been made yet. */
   #pending: { readonly inputs: FoldInputs; readonly period: ServerPeriod } | undefined;
   #queue: Promise<unknown> = Promise.resolve();
@@ -129,16 +132,17 @@ export class ExhaustionServer implements ExhaustionSupplier {
     return this.#seal();
   }
 
-  /** Take `fold`, proved elsewhere or kept from before a restart, as the latest fold: `blocks` are the next after the
-   * map's end through the fold's end, in order. The fold must be of this server's start and key hash, end above the
-   * map's end, and verify under `verify` (the set's §4.3 rule 1) before any block is appended; the map over `blocks`
-   * must then end at the fold's end header with its root. A pending period refuses it. A map that ends elsewhere after a
-   * fold that verified is a disagreement (the set or this map is unsound): the server refuses every later call. */
-  adopt(fold: Fold, blocks: readonly ServedBlock[], verify: (fold: Fold) => Promise<boolean> | boolean): Promise<Fold> {
-    let owned: readonly ServedBlock[], own: Fold;
+  /** Take `fold`, proved elsewhere or kept from before a restart, as the latest fold: `blocks` gives the blocks after
+   * the map's end through the fold's end, by height (or as a list from the next). The fold must be of this server's
+   * start and key hash, end above the map's end at its blocks' last header, and verify under `verify` (the set's §4.3
+   * rule 1), and every block must be at hand, before any is appended; the map over them must then have the fold's root.
+   * Blocks are read one at a time, so a long span is never held at once. A pending period refuses it. A map with another
+   * root after a fold that verified is a disagreement (the set or this map is unsound): the server refuses every later
+   * call. */
+  adopt(fold: Fold, blocks: readonly ServedBlock[] | ((height: bigint) => ServedBlock | undefined),
+      verify: (fold: Fold) => Promise<boolean> | boolean): Promise<Fold> {
+    let own: Fold, source: readonly ServedBlock[] | ((height: bigint) => ServedBlock | undefined);
     try {
-      if (!Array.isArray(blocks)) throw new EncodingError("invalid exhaustion period");
-      owned = blocks.map(ownBlock);
       if (fold === null || typeof fold !== "object") throw new EncodingError("invalid exhaustion fold");
       // Each value read once: what is checked is what is kept.
       const { first, proof, inputs } = fold;
@@ -148,41 +152,68 @@ export class ExhaustionServer implements ExhaustionSupplier {
         throw new EncodingError("invalid exhaustion fold");
       }
       own = Object.freeze({ first, proof: copyBytes(proof), inputs: Object.freeze({ ...read, startId: copyBytes(read.startId), endId: copyBytes(read.endId) }) });
+      if (Array.isArray(blocks)) source = blocks.map(ownBlock);
+      else if (typeof blocks === "function") source = height => { const block = blocks(height); return block === undefined ? undefined : ownBlock(block); };
+      else throw new EncodingError("invalid exhaustion period");
     } catch (error) { return Promise.reject(error); }
-    const run = this.#queue.then(() => this.#adopt(own, owned, verify));
+    const run = this.#queue.then(() => this.#adopt(own, source, verify));
     this.#queue = run.catch(() => {});
     return run;
   }
 
-  async #adopt(fold: Fold, owned: readonly ServedBlock[], verify: (fold: Fold) => Promise<boolean> | boolean): Promise<Fold> {
+  async #adopt(fold: Fold, blocks: readonly ServedBlock[] | ((height: bigint) => ServedBlock | undefined),
+      verify: (fold: Fold) => Promise<boolean> | boolean): Promise<Fold> {
     this.#usable();
     if (this.#pending !== undefined) throw new ExhaustionServerError("PENDING", "a period is pending: a fold is adopted only between periods");
-    const { inputs } = fold, start = this.#options.start;
+    const { inputs } = fold, start = this.#options.start, from = this.#ahead.end.height + 1n, end = inputs.endHeight;
+    const source = typeof blocks === "function" ? blocks : (height: bigint) => height - from < BigInt(blocks.length) ? blocks[Number(height - from)] : undefined;
+    if (Array.isArray(blocks) && from + BigInt(blocks.length) - 1n !== end) {
+      throw new ExhaustionServerError("FOLD", `the fold ends at ${end}, not ${blocks.length} blocks above the map's end ${from - 1n}`);
+    }
     if (compareBytes(inputs.startId, start.id) !== 0 || inputs.startHeight !== start.height || inputs.foldKeyHash !== this.#options.foldKeyHash) {
       throw new ExhaustionServerError("FOLD", "the fold is of another start or key hash");
     }
-    if (inputs.endHeight !== this.#ahead.end.height + BigInt(owned.length) || owned.length === 0) {
-      throw new ExhaustionServerError("FOLD", `the fold ends at ${inputs.endHeight}, not ${owned.length} blocks above the map's end ${this.#ahead.end.height}`);
+    if (end < from) throw new ExhaustionServerError("FOLD", `the fold ends at ${end}, not above the map's end ${from - 1n}`);
+    for (let height = from; height <= end; height++) {
+      if (source(height) === undefined) throw new ExhaustionServerError("FOLD", `the fold's block at ${height} is not at hand`);
     }
-    if (compareBytes(owned.at(-1)!.id, inputs.endId) !== 0) throw new ExhaustionServerError("FOLD", "the fold ends at another header than its blocks");
+    if (compareBytes(source(end)!.id, inputs.endId) !== 0) throw new ExhaustionServerError("FOLD", "the fold ends at another header than its blocks");
     if (await verify(fold) !== true) throw new ExhaustionServerError("FOLD", "the fold does not verify");
     this.#usable();
-    for (const own of owned) {
+    // From here no await: the blocks read are the ones just found at hand. A block that is not, or a read that throws,
+    // leaves the map part-appended: the server is broken (BLOCKS), an availability fault and not the set's.
+    const each = (append: (block: ServedBlock) => void): void => {
+      for (let height = from; height <= end; height++) {
+        let block: ServedBlock | undefined;
+        try { block = source(height); } catch { block = undefined; }
+        if (block === undefined) {
+          this.#broken = `the fold's block at ${height} could not be read again while it was adopted`;
+          throw new ExhaustionServerError("BLOCKS", this.#broken);
+        }
+        append(block);
+      }
+    };
+    each(own => {
       this.#ahead.appendBlock(own.id, own.section.map(t => t.unsigned));
       if (this.#options.block === undefined) this.#blocks.set(this.#ahead.end.height, own);
-    }
-    if (this.#ahead.root !== inputs.mapRoot) {
-      this.#broken = `a fold to ${inputs.endHeight} verified, but the map over its blocks has another root`;
+    });
+    if (compareBytes(this.#ahead.end.id, inputs.endId) !== 0 || this.#ahead.root !== inputs.mapRoot) {
+      this.#broken = `a fold to ${end} verified, but the map over its blocks has another root`;
+      this.#disagreed = true;
       throw new ExhaustionServerError("DISAGREEMENT", this.#broken);
     }
-    for (const own of owned) this.#served.appendBlock(own.id, own.section.map(t => t.unsigned));
+    each(own => { this.#served.appendBlock(own.id, own.section.map(t => t.unsigned)); });
+    if (compareBytes(this.#served.end.id, inputs.endId) !== 0 || this.#served.root !== inputs.mapRoot) {
+      this.#broken = `the served map over the fold to ${end} has another root than the map just built`;
+      throw new ExhaustionServerError("BLOCKS", this.#broken);
+    }
     this.#fold = fold;
     return fold;
   }
 
   /** A server whose map disagreed with a verified fold serves and extends nothing more. */
   #usable(): void {
-    if (this.#broken !== undefined) throw new ExhaustionServerError("DISAGREEMENT", this.#broken);
+    if (this.#broken !== undefined) throw new ExhaustionServerError(this.#disagreed ? "DISAGREEMENT" : "BLOCKS", this.#broken);
   }
 
   /** Prove the pending period's fold, then bring the served map to its end; on failure it stays pending. */

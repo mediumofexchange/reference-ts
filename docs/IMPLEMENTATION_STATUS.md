@@ -153,7 +153,8 @@ The commands read and serve under the circuit set the package ships (`src/ergo-e
 `src/exhaustion-circuits/` and pinned identities, checked by `scripts/venue/exhaustion-set.mjs`); `reader serve
 --prove-exhaustion` compiles the sources with the pinned nargo (`src/ergo-exhaustion-programs.ts`) and proves periods
 with the pool in the background, keeping its latest fold, which a restarted replica adopts again
-(`ExhaustionServer.adopt`); CI's `succinct` group drives it through the commands on Linux (slice 43, decision of 2026-10-16).
+(`ExhaustionServer.adopt`); CI's `succinct` group drives it through the commands on Linux
+([slice 43](../decisions/2026-10.md#2026-10-16--prove-the-venues-exhaustion-in-a-replica-under-the-circuit-set-the-package-ships-keep-its-fold-across-restarts-and-read-succinct-directories-under-it-slice-43-next-12)).
 
 The holder's read path also runs in a browser engine (slice 39, [probes](POOL_DEPLOYMENT_PROBES.md#the-holders-read-path-in-a-browser-engine-slice-39)):
 `scripts/browser/build.mjs` bundles the library with `src/browser/`'s substitutes for node:sqlite (SQLite's

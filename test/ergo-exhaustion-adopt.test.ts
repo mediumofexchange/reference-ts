@@ -72,6 +72,26 @@ describe("a server adopting a fold (slice 43)", () => {
     await expect(taker.adopt({ ...fold, proof: "x" } as never, blocks.slice(0, 4), verify)).rejects.toBeInstanceOf(EncodingError);
   });
 
+  it("reads a fold's blocks by height one at a time, and refuses one whose block is not at hand before appending", async () => {
+    const fold = await server().extend(blocks.slice(0, 6)), at = (h: bigint) => blocks[Number(h - start.height - 1n)];
+    const gap = server();
+    await expect(gap.adopt(fold, h => h === start.height + 3n ? undefined : at(h), verify)).rejects.toMatchObject({ code: "FOLD",
+      message: expect.stringContaining("is not at hand") });
+    expect(gap.height).toBe(start.height);
+    const reads: bigint[] = [], taker = server();
+    expect(await taker.adopt(fold, h => { reads.push(h); return at(h); }, verify)).toEqual(fold);
+    // Checked at hand, then appended to the map, then to the served map: three reads a height, the end once more.
+    expect(reads.length).toBe(6 * 3 + 1);
+    expect(await taker.key(fold.inputs.endHeight, subjectKey(s), 0n)).toBeDefined();
+    // A block that cannot be read again after verification breaks the server as an availability fault, not a disagreement.
+    let seen = 0;
+    const flaky = server();
+    await expect(flaky.adopt(fold, h => { if (h === start.height + 3n && ++seen > 1) throw new Error("storage"); return at(h); }, verify))
+      .rejects.toMatchObject({ code: "BLOCKS" });
+    expect(await flaky.fold(1n << 40n)).toBeUndefined();
+    await expect(flaky.extend(blocks.slice(6))).rejects.toMatchObject({ code: "BLOCKS" });
+  });
+
   it("refuses a fold while a period is pending", async () => {
     let fail = true;
     const pending = new ExhaustionServer({ start, foldKeyHash: set.foldKeyHash, prove: (first, inputs) => {

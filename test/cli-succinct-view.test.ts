@@ -1,4 +1,4 @@
-import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join, resolve, sep } from "node:path";
 import { blake2b } from "@noble/hashes/blake2b.js";
 import { bytesToHex } from "@noble/hashes/utils.js";
@@ -152,11 +152,16 @@ describe("a succinct directory's view", () => {
       const unsound = exhaustionOver(dir, view, prover, { exhaustion: set });
       await unsound.advance(() => { throw new Error("served"); });
       await unsound.advance(() => { throw new Error("served"); });
-      expect([proved, unsound.busy, existsSync(dir.file("exhaustion-fold.bin")), existsSync(dir.file("exhaustion-fold.disagreement.bin"))])
-        .toEqual([1, false, false, true]);
+      const evidence = () => readdirSync(dir.path).filter(name => name.startsWith(`exhaustion-disagreement-${bytesToHex(set.identity)}-`));
+      expect([proved, unsound.busy, existsSync(dir.file("exhaustion-fold.bin")), evidence().length]).toEqual([1, false, false, 1]);
       expect(events.at(-1)).toMatchObject({ code: "DISAGREEMENT" });
       expect(await unsound.source.supplier.fold(1n << 40n)).toBeUndefined();
       expect(await unsound.source.supplier.transaction(A + 1n, 0n)).toBeUndefined();
+      // Started again, it still serves and proves the set no more while the evidence is kept.
+      const restarted = exhaustionOver(dir, view, prover, { exhaustion: set });
+      expect(events.at(-1)).toMatchObject({ code: "DISAGREEMENT", message: expect.stringContaining(evidence()[0]!) });
+      await restarted.advance(() => { throw new Error("served"); });
+      expect([proved, restarted.busy, await restarted.source.supplier.transaction(A + 1n, 0n)]).toEqual([1, false, undefined]);
       view.close();
     } finally { process.stderr.write = write; }
   });
