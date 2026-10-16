@@ -172,16 +172,18 @@ async function sequences(): Promise<Sequence[]> {
     await s.refuse("an issue of a backing outside the scope", other, "BACKING",
       "lit-v1 §7 Common: every backing named or derived is in the segment's scope");
     await s.refuse("a spend of a note never created", spend([{ ...a.note, rho: b(77) }], [to(10n, BOB)], [ALICE]), "INPUT",
-      "lit-v1 §7 Common: an input's cm is in the output set");
+      "lit-v1 §7 Spend: every input is live (Common: its cm is in the output set)");
     await s.refuse("a demand on a note never created", demand([{ ...a.note, rho: b(77) }], [ALICE]), "INPUT",
-      "lit-v1 §7 Common: an input's cm is in the output set");
+      "lit-v1 §7 Demand: every input is live (Common: its cm is in the output set)");
     await s.refuse("a spend of one note twice in one statement", spend([a.note, a.note], [to(20n, BOB)], [ALICE, ALICE]), "ARITHMETIC",
       "lit-v1 §7 Common: the inputs' nullifiers are distinct", true);
     await s.refuse("a spend whose outputs sum below its inputs", spend([a.note], [to(9n, BOB)], [ALICE]), "ARITHMETIC",
       "lit-v1 §7 Spend: per input backing, the inputs' widened sum equals the outputs'", true);
-    await s.refuse("a spend to a backing no input names, signed by another key", spend([a.note], [to(10n, BOB, OTHER)], [MALLORY]), "ARITHMETIC",
-      "lit-v1 §7 Spend: every output's backing is an input's", true);
-    await s.refuse("a burn of more than its inputs", burn(11n, [a.note], [], [ALICE]), "ARITHMETIC",
+    await s.refuse("a spend whose outputs sum above its inputs", spend([a.note], [to(11n, BOB)], [ALICE]), "ARITHMETIC",
+      "lit-v1 §7 Spend: per input backing, the inputs' widened sum equals the outputs'", true);
+    await s.refuse("a burn destroying more than the quantity it reports", burn(3n, [a.note], [], [ALICE]), "ARITHMETIC",
+      "lit-v1 §7 Burn: the inputs' sum equals quantity plus the output's value", true);
+    await s.refuse("a burn of 4 from 10 with 7 change", burn(4n, [a.note], [to(7n, ALICE)], [ALICE]), "ARITHMETIC",
       "lit-v1 §7 Burn: the inputs' sum equals quantity plus the output's value", true);
     await s.refuse("a spend Mallory signs for Alice's note", spend([a.note], [to(10n, BOB)], [MALLORY]), "SIGNATURE",
       "lit-v1 §7 Spend: owner signatures verify", true);
@@ -190,10 +192,10 @@ async function sequences(): Promise<Sequence[]> {
     await s.refuse("an issue taking the backing's issued total to 2^64", issue((1n << 64n) - 10n, ALICE), "SUPPLY",
       "lit-v1 §7 Issue: issued(backing) + quantity < 2^64");
     await s.refuse("the first issue again, byte for byte", a, "REPEATED_STATEMENT",
-      "lit-v1 §7 Common: an exact resubmission returns the original receipt and is no second event");
+      "lit-v1 §7 Common: each derived output's cm is absent from the output set (at admission, an exact resubmission returns the original receipt instead)");
     await s.admit("Alice pays Bob 10", spend([a.note], [to(10n, BOB)], [ALICE]));
     await s.refuse("Alice's spent note paid again, to Carol", spend([a.note], [to(10n, CAROL)], [ALICE]), "SPENT",
-      "lit-v1 §7 Common: an input's nf is not in the spent set");
+      "lit-v1 §7 Spend: every input is live (Common: its nf is not in the spent set)");
   }
 
   // C3.7's lock, release and settlement as lit-v1 §7 reads them.
@@ -224,12 +226,12 @@ async function sequences(): Promise<Sequence[]> {
     await s.refuse("a settlement whose release Mallory signs", settle(d, CAROL, { releaser: MALLORY }), "SIGNATURE",
       "lit-v1 §7 Settle: the release verifies under the presenter key");
     await s.refuse("a settlement whose acceptance deadline passes the demand's", settle(d, CAROL, { deadline: 21n }), "DEADLINE",
-      "lit-v1 §7 Settle: C3.7, the acceptance deadline within the demand's");
+      "pool-recovery C3.4, read by lit-v1 §7 Settle: an acceptance's deadline is at or before the demand's");
     await s.admit("the presenter withdraws the demand", withdraw(d.id));
     const paid = spend([a.note], [to(10n, BOB)], [ALICE]);
     await s.admit("Alice, released, pays Bob 10", paid);
     await s.refuse("a demand on the spent note", demand([a.note], [ALICE], { deadline: 22n }), "LOCKED",
-      "lit-v1 §7 Demand: every input's tag is neither locked nor spent");
+      "lit-v1 §7 Demand: every input is live, its tag neither locked nor spent");
   }
 
   // A demand ends once; signatures bind each input's own owner.
@@ -243,7 +245,8 @@ async function sequences(): Promise<Sequence[]> {
     const d = demand([a.note], [ALICE]), first = settle(d, CAROL);
     await s.admit("the presenter demands Alice's 10", d);
     await s.admit("K settles the demand to Carol", first);
-    await s.refuse("the same settlement again", first, "DEMAND", "lit-v1 §7 Settle: the demand stands");
+    await s.refuse("the same settlement again", first, "DEMAND",
+      "lit-v1 §7 Settle: the demand stands (at admission, an exact resubmission returns the original receipt instead)");
     await s.refuse("a settlement of the settled demand to Bob", settle(d, BOB), "DEMAND", "lit-v1 §7 Settle: the demand stands");
   }
 
@@ -258,8 +261,12 @@ async function sequences(): Promise<Sequence[]> {
     await s.refuse("a demand over both backings", demand([a.note, c.note], [ALICE, ALICE]), "ARITHMETIC",
       "lit-v1 §7 Demand: the inputs share one backing", true);
     const big = { ...a.note, value: (1n << 63n) + 1n };
-    await s.refuse("a demand whose inputs sum past a u64", demand([big, { ...big, rho: b(9) }], [ALICE, ALICE]), "ARITHMETIC",
+    // No two live notes of one backing can sum past a u64 (issued < 2^64), so these inputs are not live either: the case
+    // fixes the failure's intrinsic class (lit-v1 §6), which compact exclusion reads without state.
+    await s.refuse("a demand whose inputs sum past a u64 (inputs not live either; this fixes the intrinsic class)", demand([big, { ...big, rho: b(9) }], [ALICE, ALICE]), "ARITHMETIC",
       "lit-v1 §7 Demand: the inputs' summed value is a u64", true);
+    await s.refuse("a spend adding an output of a backing no input names", spend([a.note], [to(10n, BOB), to(5n, BOB, OTHER)], [ALICE]), "ARITHMETIC",
+      "lit-v1 §7 Spend: every output's backing is an input's", true);
     await s.admit("Alice pays Bob both, balanced per backing", spend([a.note, c.note], [to(10n, BOB), to(10n, BOB, OTHER)], [ALICE, ALICE]));
   }
 
