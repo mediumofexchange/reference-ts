@@ -76,6 +76,23 @@ jobs:
         with:
           path: scratch/private-payment-crs
           key: proving-parameters-${{ runner.os }}-${{ hashFiles('src/pool/parameters.ts', 'src/pool/parameter-files.ts') }}
+      # The succinct drill's replica proves the venue's exhaustion (slice 43): it compiles the shipped circuits once with
+      # the pinned native compiler (the hash pins the release asset), and their programs are cached under the sources
+      # and the manifest that pins them. Windows has no native backend and proves none.
+      - name: Pinned nargo for the exhaustion circuits
+        if: matrix.group == 'succinct' && runner.os == 'Linux'
+        shell: bash
+        run: |
+          curl -fsSL -o "$RUNNER_TEMP/nargo.tar.gz" https://github.com/noir-lang/noir/releases/download/v1.0.0-beta.26/nargo-x86_64-unknown-linux-gnu.tar.gz
+          echo "64048040befd55a987158b11137d8f38f9688f696db4d84910dd1bcf0442fb80  $RUNNER_TEMP/nargo.tar.gz" | sha256sum -c -
+          mkdir -p "$RUNNER_TEMP/nargo" && tar -xzf "$RUNNER_TEMP/nargo.tar.gz" -C "$RUNNER_TEMP/nargo"
+          echo "NARGO=$RUNNER_TEMP/nargo/nargo" >> "$GITHUB_ENV"
+      - name: Exhaustion programs cache
+        if: matrix.group == 'succinct' && runner.os == 'Linux'
+        uses: actions/cache@v4
+        with:
+          path: scratch/exhaustion-programs
+          key: exhaustion-programs-${{ hashFiles('src/exhaustion-circuits/**', 'src/ergo-exhaustion-set.ts', 'src/pool/circuits/vendor/poseidon2.nr') }}
       - name: Pool-v3 real-proof group ${{ matrix.group }}, with the Ergo adapter
         run: npm run check:pool:v3 -- --group ${{ matrix.group }} --ergo --collect scratch/ci-reports
       - name: Retain this group's source-bound v3 acceptance reports

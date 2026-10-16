@@ -9,6 +9,8 @@ import { availableParallelism } from "node:os";
 import { nativeRefusal, ParameterError, startBackend, type ProofVerifier } from "../pool/proof-verifier.js";
 import { CHECK_SET_FILES, copyParameters, prepareCheckSetParameters, readCheckSetParameters, readParameters } from "../pool/parameter-files.js";
 import type { TrailProver } from "../pool/v3/aggregator.js";
+import type { FoldInputs } from "../ergo-exhaustion.js";
+import type { ServerPeriod } from "../ergo-exhaustion-server.js";
 import { CommandError, flag, integer, UsageError, type Arguments, type Directory } from "./common.js";
 
 /** `--verifiers n`: the verifier's instance count, default 2, at most 6 (about 85 MB each). */
@@ -85,4 +87,12 @@ export async function openCoverProver(directory: Pick<Directory, "path">, statem
     }
     throw error;
   }
+}
+
+/** What proves a replica's periods (`openExhaustionProver`). */
+export interface ExhaustionProver {
+  fold(first: boolean, inputs: FoldInputs, period: ServerPeriod): Promise<Uint8Array>;
+  /** Forget the proofs kept for periods already folded. */
+  folded(): void;
+  close(): Promise<void>;
 }

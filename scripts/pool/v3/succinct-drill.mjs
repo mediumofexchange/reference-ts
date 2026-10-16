@@ -4,17 +4,21 @@
 // test set), natively where bb.js bundles a native backend and on WebAssembly elsewhere (slice 42); a holder restored from the same seed with `--read succinct` syncs and reads the same holdings from the
 // covers, fetching no proof; it pays a succinct shop, which fulfills, reading the tail natively; a succinct reader's
 // supply equals a complete reader's. A succinct directory serves no replica (SUCCINCT), and no process that proves
-// nothing loads `@noir-lang`. The replica also serves the venue's exhaustion (succinct-read §4, slice 43, a test set):
-// each succinct directory's view reads its backing's subjects below the replica's fold, no section there, and sections
-// natively above it. The commands run from the build (`dist/cli/moe.js`); the release's own install drill is
-// command-drill.mjs.
+// nothing loads `@noir-lang`. The replica also proves the venue's exhaustion (`--prove-exhaustion`, succinct-read §4,
+// slice 43) under the circuit set the package ships (a test set), natively where bb.js bundles a native backend: each
+// succinct directory's view reads its backing's subjects below the replica's fold, no section there, and sections
+// natively above it; restarted without proving, the replica serves its kept fold again. Where the host has no native
+// backend (Windows), `--prove-exhaustion` is refused (PROVER) and the views read every section. The commands run from
+// the build (`dist/cli/moe.js`); the release's own install drill is command-drill.mjs.
 //
-// Usage: node scripts/pool/v3/succinct-drill.mjs   (after npm run build and scripts/pool/prepare-crs.mjs)
+// Usage: [NARGO=<nargo 1.0.0-beta.26>] node scripts/pool/v3/succinct-drill.mjs   (after npm run build and
+// scripts/pool/prepare-crs.mjs). The replica compiles the exhaustion circuits once with NARGO (about ten minutes),
+// unless scratch/exhaustion-programs holds them from an earlier run, where the drill keeps them after.
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
-import { mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { join, resolve, sep } from "node:path";
-import { prepareCheckSetParameters } from "../../../dist/pool/parameter-files.js";
+import { prepareCheckSetParameters, prepareExhaustionParameters } from "../../../dist/pool/parameter-files.js";
 import { nativeRefusal } from "../../../dist/pool/proof-verifier.js";
 import { PARAMETER_DIRECTORY } from "../prepare-crs.mjs";
 import { serveSyntheticNode } from "./synthetic-node.mjs";
@@ -22,6 +26,13 @@ import { serveSyntheticNode } from "./synthetic-node.mjs";
 const root = resolve(import.meta.dirname, "../../.."), MOE = join(root, "dist", "cli", "moe.js");
 const RSS_HOOK = new URL("./rss-hook.mjs", import.meta.url).href, DEPTH = "2", SILENCE = "40", BUDGET = "50000000", FUND = 1_000_000_000n;
 const started = performance.now(), checks = [], processes = [], children = [];
+/** Where the replica's compiled exhaustion programs are kept between runs (CI caches it). */
+const PROGRAMS = join(root, "scratch", "exhaustion-programs"), native = nativeRefusal() === undefined;
+const copyPrograms = (from, to) => {
+  if (!existsSync(from)) return;
+  mkdirSync(to, { recursive: true });
+  for (const name of readdirSync(from).filter(n => /^[a-z-]+\.json$/.test(n))) copyFileSync(join(from, name), join(to, name));
+};
 mkdirSync(join(root, "scratch"), { recursive: true });
 const scratch = realpathSync(mkdtempSync(join(realpathSync(join(root, "scratch")), "succinct-drill-")));
 const pause = ms => new Promise(done => setTimeout(done, ms));
@@ -162,7 +173,7 @@ try {
     assert.deepEqual(holdings(await ok(wallet("sync", HD, backing))), [["10", "available", 0], ["4", "available", 0]]);
   });
 
-  let replica, provedLines = [];
+  let replica, provedLines = [], folds = [], periods = [];
   await check("a replica proves covers over its kept trail (reader serve --prove); a succinct directory serves none", async () => {
     // The check set's parameters, the leading 2^21 points, in the checks' shared parameter directory.
     await prepareCheckSetParameters(PARAMETER_DIRECTORY, { log: line => process.stderr.write(`${line}\n`) });
@@ -175,12 +186,26 @@ try {
     if (refusal !== undefined) await refused(["reader", "serve", "--dir", RP, "--prove", "--prover", "native"], "PROVER");
     // Anywhere, natively on a binary other than the package's.
     await refused(["reader", "serve", "--dir", RP, "--prove", "--prover", "native"], "PROVER", { env: { BB_BINARY_PATH: process.execPath } });
-    replica = background(["reader", "serve", "--dir", RP, "--poll-ms", "500", "--prove", "--parameters", PARAMETER_DIRECTORY]);
-    await replica.line(line => line.status === "serving", 300_000);
+    // --nargo goes with --prove-exhaustion only; the exhaustion is proved natively only.
+    assert.equal((await moe(["reader", "serve", "--dir", RP, "--nargo", "nargo"])).status, 2);
+    if (!native) await refused(["reader", "serve", "--dir", RP, "--prove-exhaustion"], "PROVER");
+    // The exhaustion's parameters, the leading 2^22 points, in the same directory (one copy serves both sets).
+    if (native) await prepareExhaustionParameters(PARAMETER_DIRECTORY, { log: line => process.stderr.write(`${line}\n`) });
+    copyPrograms(PROGRAMS, join(RP, "exhaustion-circuits"));
+    replica = background(["reader", "serve", "--dir", RP, "--poll-ms", "500", "--prove", "--parameters", PARAMETER_DIRECTORY,
+      ...(native ? ["--prove-exhaustion", ...(process.env.NARGO ? ["--nargo", process.env.NARGO] : [])] : [])]);
+    const serving = await replica.line(line => line.status === "serving", 1_800_000);
+    assert.equal(serving.exhaustion.proving, native);
+    copyPrograms(join(RP, "exhaustion-circuits"), PROGRAMS);
     // Two issues: two leaves and their node, proved once the replica's read serves the selection holding them (`proved`
     // counts the proved records its walk has read, `made` the covers it made). Within the CI job's 30 minutes.
     const proved = await replica.line(line => line.status === "proved" && Number(line.proved) >= 2, 1_200_000);
     assert.equal(Number(proved.made), 3);
+    // A fold of the venue through the issues' indices, proved while the covers waited (one proof at a time).
+    if (native) {
+      const fold = await replica.line(line => line.status === "exhaustion" && line.how === "proved", 1_200_000);
+      assert.equal(fold.set, serving.exhaustion.set);
+    }
     assert.equal(proved.testSet, true);
     assert.equal(proved.backend, refusal === undefined ? "native" : "wasm");
     await ok(["reader", "init", "--dir", RS, "--read", "succinct", "--venue", join(OP, "venue.json"), ...common]);
@@ -207,19 +232,26 @@ try {
     assert.equal(view.noir, false, "a succinct read loads no prover");
     // The venue below the replica's fold was read succinctly under the set the replica serves: the backing, its
     // operator and its obligor followed.
-    const folded = replica.lines.filter(line => line.status === "exhaustion");
-    assert(folded.length >= 1, "the replica serves the exhaustion");
-    assert.equal(view.json.read.venue.exhaustionSet, folded.at(-1).set);
+    const set = replica.lines.find(line => line.status === "serving").exhaustion.set;
+    assert.equal(view.json.read.venue.exhaustionSet, set);
     assert.equal(view.json.read.venue.followed, 3);
-    assert(Number(view.json.read.venue.succinctIndices) >= 1, JSON.stringify(view.json.read.venue));
+    // Below a proved fold where the host proves one; every section natively where it cannot.
+    if (native) assert(Number(view.json.read.venue.succinctIndices) >= 1, JSON.stringify(view.json.read.venue));
+    else assert.equal(Number(view.json.read.venue.succinctIndices), 0, JSON.stringify(view.json.read.venue));
   });
 
   await check("the succinct holder pays a succinct shop, which fulfills over the tail's fetched proof", async () => {
     // The replica serves on without proving, so the payment is the tail no cover reaches: its proof is fetched.
     provedLines = replica.lines.filter(line => line.status === "proved");
+    // The folds it proved, and each period's proving as the pool logged it (leaves, nodes, seconds).
+    folds = replica.lines.filter(line => line.status === "exhaustion");
+    periods = replica.log().split("\n").filter(line => /^period to \d+: \d+ leaves/.test(line));
     await replica.stop();
+    const lastFold = replica.lines.filter(line => line.status === "exhaustion").at(-1);
     replica = background(["reader", "serve", "--dir", RP, "--poll-ms", "500", "--port", new URL(replicaUrl).port]);
-    await replica.line(line => line.status === "serving", 300_000);
+    assert.equal((await replica.line(line => line.status === "serving", 300_000)).exhaustion.proving, false);
+    // Without proving, the replica serves the fold it kept, verified and checked against its map again.
+    if (native) assert.equal((await replica.line(line => line.status === "exhaustion", 300_000)).foldIndex, lastFold.foldIndex);
     await ok(wallet("init", SS, "--read", "succinct", "--venue", join(OP, "venue.json"), ...common));
     await ok(wallet("terms add", SS, backing, "--terms", terms, "--signature", signature, ...SYN));
     await ok(wallet("service add", SS, backing, join(OP, "service.json")));
@@ -241,7 +273,7 @@ try {
     const after = await ok(wallet("sync", HS, backing));
     assert.equal(after.available, "11");
     assert.equal(after.read.judgment, "succinct");
-    assert(Number(after.read.venue.succinctIndices) >= 1, JSON.stringify(after.read.venue));
+    assert.equal(Number(after.read.venue.succinctIndices) >= 1, native, JSON.stringify(after.read.venue));
   });
 
   await check("a succinct reader's supply equals a complete reader's", async () => {
@@ -255,12 +287,12 @@ try {
     const same = value => ({ issued: value.issued, burned: value.burned, supply: value.supply, checkpoint: value.checkpoint, judgingIndex: value.judgingIndex });
     assert.deepEqual(same(read.json), same(complete));
     assert.equal(read.json.read.judgment, "succinct");
-    assert(Number(read.json.read.venue.succinctIndices) >= 1, JSON.stringify(read.json.read.venue));
+    assert.equal(Number(read.json.read.venue.succinctIndices) >= 1, native, JSON.stringify(read.json.read.venue));
     assert.equal(read.noir, false);
   });
 
   await replica.stop(); await serving.stop();
-  const report = { status: "passed", checks, processes, proved: provedLines,
+  const report = { status: "passed", checks, processes, proved: provedLines, exhaustion: { native, folds, periods },
     elapsedMs: Math.round(performance.now() - started) };
   process.stdout.write(`${JSON.stringify(report, null, 2)}\n`);
   completed = true;

@@ -30,12 +30,13 @@ export const SUBSTITUTES = Object.freeze({
   "node:module": own("src/browser/node-module.ts"),
 });
 
-/** The package's own files a bundle reads beside itself (programs.ts, check-set.ts), SQLite's binary and the witness
+/** The package's own files a bundle reads beside itself (programs.ts, check-set.ts, ergo-exhaustion-set.ts), SQLite's binary and the witness
  * generator's two (noir_js's browser build loads them beside the module that asks). */
 export const ASSETS = Object.freeze([
   own("src/pool/v3/programs.json"),
   own("src/pool/v3/check-set.json"),
   own("src/pool/v3/check-set-programs.json"),
+  own("src/exhaustion-set.json"),
   join(dirname(require.resolve("@sqlite.org/sqlite-wasm/package.json")), "dist/sqlite3.wasm"),
   join(dirname(require.resolve("@noir-lang/acvm_js/package.json")), "web/acvm_js_bg.wasm"),
   join(dirname(require.resolve("@noir-lang/noirc_abi/package.json")), "web/noirc_abi_wasm_bg.wasm"),
