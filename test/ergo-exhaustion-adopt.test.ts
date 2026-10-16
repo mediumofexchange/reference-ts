@@ -78,10 +78,12 @@ describe("a server adopting a fold (slice 43)", () => {
     await expect(gap.adopt(fold, h => h === start.height + 3n ? undefined : at(h), verify)).rejects.toMatchObject({ code: "FOLD",
       message: expect.stringContaining("is not at hand") });
     expect(gap.height).toBe(start.height);
-    const reads: bigint[] = [], taker = server();
-    expect(await taker.adopt(fold, h => { reads.push(h); return at(h); }, verify)).toEqual(fold);
-    // Checked at hand, then appended to the map, then to the served map: three reads a height, the end once more.
-    expect(reads.length).toBe(6 * 3 + 1);
+    const reads: bigint[] = [], taker = server(), readAtVerify: bigint[][] = [];
+    expect(await taker.adopt(fold, h => { reads.push(h); return at(h); }, f => { readAtVerify.push([...reads]); return verify(f); })).toEqual(fold);
+    // Its end header checked before the proof, and the span only after the proof verified: a stranger's fold costs no
+    // read of the span. Then at hand, appended to the map and to the served map: three reads a height.
+    expect(readAtVerify).toEqual([[fold.inputs.endHeight]]);
+    expect(reads.length).toBe(6 * 3);
     expect(await taker.key(fold.inputs.endHeight, subjectKey(s), 0n)).toBeDefined();
     // A block that cannot be read again after verification breaks the server as an availability fault, not a disagreement.
     let seen = 0;

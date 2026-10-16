@@ -733,7 +733,15 @@ operator answers again or the holder lists another (Limits in the decision).
 
 Every replica also keeps the venue's subject map over its own view, from the venue's anchor, and serves it to succinct
 directories' views (`GET /exhaustion`, slice 43) under the circuit set the package ships, a test set (succinct-read §6):
-its folds, paths and entries, and transactions with inclusion paths. It serves a fold only once one is proved: with
+its folds, paths and entries, and transactions with inclusion paths. It serves a fold only once one is proved, by it or
+by another: each round no period is proving, it asks the other replicas its directory keeps (`replica add`, any
+backing's) at once for their latest fold within its view, and takes the one ending highest above its own map where it
+verifies and its own view's map reproduces it, so one prover serves every replica that keeps it, and a proving replica
+proves its next period from a taken fold (where its own period's proof failed, a fold above the one it serves
+replaces that period). A replica whose fold is refused (it does not verify, is of another set, or ends at another
+chain's header) is an `exhaustion` event `PEER` and is not asked again for a wait doubling from a minute to a day,
+reset by any answer that decodes; one that does not answer is passed over for a minute; a fold that verifies while the map disagrees is kept as evidence (`exhaustion-disagreement-…`) and the replica
+serves the set no more while it is kept. With
 `--prove-exhaustion [--nargo <path>] [--parameters <dir>]` it proves one after a round whose sync read new indices,
 over all of them as one period, in the background while rounds go on (covers wait meanwhile: one proof at a time). A
 period takes minutes at least: on four cores each of its leaves about a minute and at most about 10 GiB, at least one
@@ -744,7 +752,7 @@ bb.js bundles only (WebAssembly's memory holds no leaf; elsewhere `PROVER`), fro
 not their programs (tens of megabytes a leaf): the first start compiles them with the pinned native compiler (`--nargo`,
 default `nargo` on the path; about ten minutes and 4 GiB) into `exhaustion-circuits/`, and runs a program only where
 its bytecode is the one the package pins (otherwise `PROVER`). A line `exhaustion` names each fold served (`how`:
-`proved`, or `kept`); a failed period is an `exhaustion` event on stderr and is proved again first after a wait. The
+`proved`, `kept`, or `taken` with the replica it came `from`); a failed period is an `exhaustion` event on stderr and is proved again first after a wait. The
 latest fold is kept in `exhaustion-fold.bin`: a replica started again, proving or not, rebuilds the map from its rows,
 checks the kept fold verifies and that the map ends at its end with its root, and serves it again. A period's proofs
 are kept in `exhaustion-proofs/` until it is folded, so a stopped replica resumes the period where it stood.

@@ -24,7 +24,7 @@ import { initRole, keptBackings, keptReplay, openEvidence, originOf, passedOver,
   serviceCommand, supplyCommand, supplyOf, termsCommand } from "./read.js";
 import { closeListener, listenLoopback, SERVE_FLAGS, serveFlags, untilStopped } from "./serve.js";
 import { keptTerms } from "./terms.js";
-import { exhaustionOver, openView, requireVenue } from "./venue.js";
+import { exhaustionOver, exhaustionSuppliers, keptReplicaUrls, openView, requireVenue } from "./venue.js";
 
 /** How long a replica proves new covers after each round (`serve --prove`) before it syncs again: about ten leaves on
  * four cores with the WebAssembly backend (slice 36), twenty natively (slice 42). */
@@ -60,7 +60,12 @@ const roundRefusal = (error: unknown): string | undefined =>
  * With `--prove [--parameters <dir>] [--prover native|wasm]` (slices 38, 42) it also proves check proofs over its kept
  * pool-v3 trails after each round (`V3Replica.prove`), for at most PROVE_ROUND_MS of new covers, and serves them by set
  * and digest (`GET /covers`): any party may prove (succinct-read §2 rule 6), and the replica checks each statement proof
- * first. A line says what a round proved and on which backend. A succinct directory serves no replica (`SUCCINCT`):
+ * first. A line says what a round proved and on which backend.
+ *
+ * It serves the venue's exhaustion (succinct-read §4.7, slice 43): the fold it kept, folds it proves with
+ * `--prove-exhaustion`, and folds another proved, taken from the other replicas the directory keeps (`replica add`) where
+ * they verify and its own view's map reproduces them; a line names each fold served, how (`kept`, `proved`, `taken`)
+ * and, for a taken one, `from`. A succinct directory serves no replica (`SUCCINCT`):
  * a replica's evidence is judged by every reader that takes it, so it reads completely (succinct-read §1).
  */
 async function serve(argv: readonly string[]): Promise<void> {
@@ -90,8 +95,11 @@ async function serve(argv: readonly string[]): Promise<void> {
   } catch (error) { await periods?.close(); await covers?.close(); await verifier?.close(); evidence?.close(); view.close(); throw error; }
   const replica = new V3Replica(directory.file("evidence.db"), evidence, view.venue.id);
   // The venue's exhaustion under the directory's set, kept over the view's own rows (succinct-read §4.7, slice 43).
-  let exhaustion: ReturnType<typeof exhaustionOver>;
-  try { exhaustion = exhaustionOver(directory, view, periods); } catch (error) {
+  // It takes folds another replica proved: every replica the directory keeps, except itself (known once it listens).
+  let own: string[] | undefined, exhaustion: ReturnType<typeof exhaustionOver>;
+  try {
+    exhaustion = exhaustionOver(directory, view, periods, { peers: () => own === undefined ? [] : exhaustionSuppliers(directory, exhaustion.source.set, own) });
+  } catch (error) {
     await periods?.close(); await covers?.close(); await verifier?.close(); evidence.close(); view.close(); throw error;
   }
   const server = createV3EvidenceService(replica, exhaustion.source);
@@ -102,6 +110,7 @@ async function serve(argv: readonly string[]): Promise<void> {
     await exhaustion.close(); await covers?.close(); await verifier?.close(); evidence.close(); view.close(); throw error;
   }
   const local = `http://127.0.0.1:${listened}/`, url = onion === undefined ? local : `http://${onion}/`;
+  own = ownSources(local, onion, keptReplicaUrls(directory));
   writeReplace(directory.file("replica.json"), `${JSON.stringify({ url }, null, 2)}\n`);
   const { stopping, pause: rest } = untilStopped();
   print({ status: "serving", url, port: listened, prover: covers?.prover.backend ?? null, exhaustion: { set: hex(exhaustion.source.set), proving: exhausting }, backings: keptBackings(directory).map(hex),
@@ -156,8 +165,8 @@ async function serve(argv: readonly string[]): Promise<void> {
   /** The exhaustion's turn, after the covers' (so a period ending during a rest never keeps them waiting): its kept
    * fold taken, or a period started over the indices the view newly read, proving in the background while rounds go
    * on. A line names each fold served. */
-  const exhaust = () => exhaustion.advance((fold, how) => print({ status: "exhaustion", set: hex(exhaustion.source.set),
-    foldIndex: fold.inputs.endHeight - venue.anchorHeight - 1n, how }));
+  const exhaust = () => exhaustion.advance((fold, how, from) => print({ status: "exhaustion", set: hex(exhaustion.source.set),
+    foldIndex: fold.inputs.endHeight - venue.anchorHeight - 1n, how, ...(from === undefined ? {} : { from }) }));
   try {
     while (!stopping()) {
       await round();

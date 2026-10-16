@@ -36,6 +36,7 @@ as current instructions.
 
 ## Index
 
+- `2026-10-16` [Take folds another replica proved, keep and serve them, and prove on from them (slice 43, Next 12)](decisions/2026-10.md#2026-10-16--take-folds-another-replica-proved-keep-and-serve-them-and-prove-on-from-them-slice-43-next-12)
 - `2026-10-16` [Prove the venue's exhaustion in a replica under the circuit set the package ships, keep its fold across restarts, and read succinct directories under it (slice 43, Next 12)](decisions/2026-10.md#2026-10-16--prove-the-venues-exhaustion-in-a-replica-under-the-circuit-set-the-package-ships-keep-its-fold-across-restarts-and-read-succinct-directories-under-it-slice-43-next-12)
 - `2026-10-15` [Copy a header's signed version byte from the node's JSON, judge section widths on owned copies, and hold the node's misstated transaction JSON as a venue blocker (audit 12)](decisions/2026-10.md#2026-10-15--copy-a-headers-signed-version-byte-from-the-nodes-json-judge-section-widths-on-owned-copies-and-hold-the-nodes-misstated-transaction-json-as-a-venue-blocker-audit-12)
 - `2026-10-15` [Prove a replica's exhaustion periods in a resumable prover pool from pinned 2^22 points, and fold real Ergo mainnet blocks (slice 43, Next 12)](decisions/2026-10.md#2026-10-15--prove-a-replicas-exhaustion-periods-in-a-resumable-prover-pool-from-pinned-222-points-and-fold-real-ergo-mainnet-blocks-slice-43-next-12)
