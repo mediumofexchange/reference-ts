@@ -2,11 +2,10 @@
   "specification": "succinct-read 282c925",
   "small": {
     "sources": {
-      "scripts/venue/exhaustion-build.mjs": "5f55bf01887cf0d083685f93669b44e311ea26e1b9420de9cf391351e013953d",
+      "scripts/venue/exhaustion-build.mjs": "d5f0db4801d3f9606d438dc9b18006b7d9f2855a659304a1a4032f701b557c77",
       "scripts/venue/exhaustion-sources.mjs": "83f704dd827ef3117358c9668d8f4f3cc5dff68e3999227a086a74ab7610d1fe",
       "scripts/venue/exhaustion-periods.mjs": "87cafae65f94d8bb2aa9df3887dd2074cfa325a0a22b4fd90ed51a5dee7b227b",
-      "scripts/venue/exhaustion-check.mjs": "8d08b45ab4e6d2410f7e8280f72f051c7ee7ce43e9444fc6f62efe69f322cd66",
-      "scripts/venue/exhaustion-prove.mjs": "f7c0263b971e5da6a97bebefa1eed17f41062aff9c06c4476e4d018164d171e8",
+      "scripts/venue/exhaustion-check.mjs": "121f1be29010a856d6784da026718cf5e68f6bd77cbf5f0a91bd46aeac05620a",
       "src/exhaustion-circuits/exhaustion.nr": "d245fd0162c9a998ece823a40e94973a01dd0a75684b9e9ddd5aeef99efc81d3",
       "src/exhaustion-circuits/blake2b.nr": "2c021e29c19bd09b735354d8ac80effb8772f014c0d6e2c4a60472929d7c5100",
       "src/pool/circuits/vendor/poseidon2.nr": "44f3a3d1abe7d5fa2da5c0339e52018195d55f295c320e530d355f9cc62159d8",
@@ -17,7 +16,7 @@
       "src/ergo-profile.ts": "3ba1e1306fb4328d5394466630900d9a33b776ee8fae2df63446d57297b3a022",
       "src/pool/poseidon2.ts": "c33b48e98263bdf99efc9650b81f57d90136017be2c843963ef38043bb09f308",
       "src/pool/proof-verifier.ts": "50690c04097a1c873666b28423582a51e4775908e55e2dca6e52d036c74f1339",
-      "src/ergo-exhaustion-set.ts": "fe71fc3d6d790b45842ad3a353e864b79fd8a020a17e37e126913fde8457e895",
+      "src/ergo-exhaustion-set.ts": "43134669b814340f031cb421c09540e43ca635e727d3fdb5aecf2fa3e9af26f0",
       "src/ergo-exhaustion-programs.ts": "19441518fe53b6e4ad89a28448b614953e21d569102b480416aece1bc5f005af",
       "src/exhaustion-circuits/leaf-t.nr": "080ffd2a7f66f17e891eb29fd4b585e5fd1443882bd34036ec0b96a019068838",
       "src/exhaustion-circuits/leaf-m.nr": "5ce613a765de530bec1e6608d34a9d98c03dbfa2d3a0d9cb46b31139c763b601",
@@ -508,6 +507,7 @@
         "expected": "child key"
       }
     ],
+    "nargoEqualsWasm": true,
     "sizes": {
       "t": 6,
       "m": 12,
@@ -518,15 +518,14 @@
       "entries": 260
     },
     "result": "pass",
-    "revision": "985f21fa95a09d49a5a0e67e94d8b80e5abc959f"
+    "revision": "8bf9c457e355f7a15183e0de83e3311f73a04333"
   },
   "shipped": {
     "sources": {
-      "scripts/venue/exhaustion-build.mjs": "5f55bf01887cf0d083685f93669b44e311ea26e1b9420de9cf391351e013953d",
+      "scripts/venue/exhaustion-build.mjs": "d5f0db4801d3f9606d438dc9b18006b7d9f2855a659304a1a4032f701b557c77",
       "scripts/venue/exhaustion-sources.mjs": "83f704dd827ef3117358c9668d8f4f3cc5dff68e3999227a086a74ab7610d1fe",
       "scripts/venue/exhaustion-periods.mjs": "87cafae65f94d8bb2aa9df3887dd2074cfa325a0a22b4fd90ed51a5dee7b227b",
-      "scripts/venue/exhaustion-check.mjs": "8d08b45ab4e6d2410f7e8280f72f051c7ee7ce43e9444fc6f62efe69f322cd66",
-      "scripts/venue/exhaustion-prove.mjs": "f7c0263b971e5da6a97bebefa1eed17f41062aff9c06c4476e4d018164d171e8",
+      "scripts/venue/exhaustion-check.mjs": "121f1be29010a856d6784da026718cf5e68f6bd77cbf5f0a91bd46aeac05620a",
       "src/exhaustion-circuits/exhaustion.nr": "d245fd0162c9a998ece823a40e94973a01dd0a75684b9e9ddd5aeef99efc81d3",
       "src/exhaustion-circuits/blake2b.nr": "2c021e29c19bd09b735354d8ac80effb8772f014c0d6e2c4a60472929d7c5100",
       "src/pool/circuits/vendor/poseidon2.nr": "44f3a3d1abe7d5fa2da5c0339e52018195d55f295c320e530d355f9cc62159d8",
@@ -537,7 +536,7 @@
       "src/ergo-profile.ts": "3ba1e1306fb4328d5394466630900d9a33b776ee8fae2df63446d57297b3a022",
       "src/pool/poseidon2.ts": "c33b48e98263bdf99efc9650b81f57d90136017be2c843963ef38043bb09f308",
       "src/pool/proof-verifier.ts": "50690c04097a1c873666b28423582a51e4775908e55e2dca6e52d036c74f1339",
-      "src/ergo-exhaustion-set.ts": "fe71fc3d6d790b45842ad3a353e864b79fd8a020a17e37e126913fde8457e895",
+      "src/ergo-exhaustion-set.ts": "43134669b814340f031cb421c09540e43ca635e727d3fdb5aecf2fa3e9af26f0",
       "src/ergo-exhaustion-programs.ts": "19441518fe53b6e4ad89a28448b614953e21d569102b480416aece1bc5f005af",
       "src/exhaustion-circuits/leaf-t.nr": "080ffd2a7f66f17e891eb29fd4b585e5fd1443882bd34036ec0b96a019068838",
       "src/exhaustion-circuits/leaf-m.nr": "5ce613a765de530bec1e6608d34a9d98c03dbfa2d3a0d9cb46b31139c763b601",
@@ -545,7 +544,10 @@
       "src/exhaustion-circuits/node.nr": "3c77eb2066ebcf45d7d50352bfb3612dcf977af837c17e5292303f5a9a6eceb4",
       "src/exhaustion-circuits/fold-first.nr": "8aa15e90053fdc073a848d383123e697f867beb28b90829839411df325680dca",
       "src/exhaustion-circuits/fold-next.nr": "b3d6b16a1044d3ff161c269b71fc3ab0ad28148452d507eb1cc634f13624b043",
-      "test/fixtures/ergo-mainnet-version-blocks.json": "930a70e53a806e5ecf1fb1a5e4d69f8a44430811beaaf8b3a2d06363cea3939b"
+      "test/fixtures/ergo-mainnet-version-blocks.json": "930a70e53a806e5ecf1fb1a5e4d69f8a44430811beaaf8b3a2d06363cea3939b",
+      "src/ergo-exhaustion-pool.ts": "ec129fddc72bd512cc26b8748f29c3c6884e2fb6e9ef613c7f7d90331a244db1",
+      "src/pool/parameter-files.ts": "bc5f843d1c773f2de31974b0c5007279426fbbf570d80c0568ec37141399fdd4",
+      "src/pool/parameters.ts": "2824970cab95bab2aabd0e5994ef1523dcbbf305bf2c5f190ef52d8d715736ee"
     },
     "periods": [
       {
@@ -1033,6 +1035,190 @@
       "m": 380,
       "u": 746
     },
+    "recursion": {
+      "cpu": "Intel(R) Xeon(R) Processor @ 2.10GHz",
+      "cores": 4,
+      "proofs": [
+        {
+          "circuit": "leaf-t",
+          "label": "period 0 leaf-t",
+          "seconds": 76.6
+        },
+        {
+          "circuit": "leaf-u",
+          "label": "period 0 leaf-u",
+          "seconds": 49.9
+        },
+        {
+          "circuit": "leaf-m",
+          "label": "period 0 leaf-m",
+          "seconds": 60.9
+        },
+        {
+          "circuit": "node",
+          "label": "period 0 node",
+          "seconds": 16
+        },
+        {
+          "circuit": "node",
+          "label": "period 0 node",
+          "seconds": 15.5
+        },
+        {
+          "circuit": "fold-first",
+          "label": "period 0 fold-first",
+          "seconds": 7.9
+        },
+        {
+          "circuit": "leaf-t",
+          "label": "period 1 leaf-t",
+          "seconds": 68.6
+        },
+        {
+          "circuit": "leaf-u",
+          "label": "period 1 leaf-u",
+          "seconds": 48
+        },
+        {
+          "circuit": "leaf-m",
+          "label": "period 1 leaf-m",
+          "seconds": 56.4
+        },
+        {
+          "circuit": "node",
+          "label": "period 1 node",
+          "seconds": 15.5
+        },
+        {
+          "circuit": "node",
+          "label": "period 1 node",
+          "seconds": 15.5
+        },
+        {
+          "circuit": "fold-next",
+          "label": "period 1 fold-next",
+          "seconds": 16.8
+        },
+        {
+          "circuit": "node",
+          "label": "hostile node",
+          "seconds": 15.7
+        },
+        {
+          "circuit": "leaf-t",
+          "label": "another node key leaf-t",
+          "seconds": 66.5
+        },
+        {
+          "circuit": "leaf-m",
+          "label": "another node key leaf-m",
+          "seconds": 58.1
+        },
+        {
+          "circuit": "node",
+          "label": "another node key node",
+          "seconds": 16.1
+        },
+        {
+          "circuit": "fold-first",
+          "label": "hostile fold-first",
+          "seconds": 8.3
+        },
+        {
+          "circuit": "fold-next",
+          "label": "hostile fold-next",
+          "seconds": 16.4
+        },
+        {
+          "circuit": "fold-next",
+          "label": "hostile fold-next",
+          "seconds": 15.6
+        },
+        {
+          "circuit": "fold-next",
+          "label": "hostile fold-next",
+          "seconds": 16.2
+        }
+      ],
+      "checks": [
+        {
+          "name": "period 0: its first fold verifies with §4.3's public inputs, ending at the block with the map's root",
+          "ok": true
+        },
+        {
+          "name": "period 1: its next fold verifies with §4.3's public inputs, ending at the block with the map's root",
+          "ok": true
+        },
+        {
+          "name": "hostile: a node over children that do not join",
+          "ok": true,
+          "detail": "does not verify"
+        },
+        {
+          "name": "hostile: a first fold over a node carrying another node key hash",
+          "ok": true,
+          "detail": "does not verify"
+        },
+        {
+          "name": "hostile: a next fold naming another foldKeyHash than its previous fold's",
+          "ok": true,
+          "detail": "does not verify"
+        },
+        {
+          "name": "hostile: a next fold naming another start than its previous fold's",
+          "ok": true,
+          "detail": "does not verify"
+        },
+        {
+          "name": "hostile: a next fold whose previous fold is its own period's",
+          "ok": true,
+          "detail": "does not verify"
+        },
+        {
+          "name": "the reader takes period 0's fold (checkFold)",
+          "ok": true
+        },
+        {
+          "name": "the reader takes period 1's fold (checkFold)",
+          "ok": true
+        },
+        {
+          "name": "the reader refuses a fold with another map root",
+          "ok": true,
+          "detail": "fold-proof"
+        },
+        {
+          "name": "the reader refuses a next fold's proof under the first fold's key",
+          "ok": true,
+          "detail": "fold-proof"
+        },
+        {
+          "name": "the reader refuses the first fold's proof for the next fold's inputs",
+          "ok": true,
+          "detail": "fold-proof"
+        },
+        {
+          "name": "the reader refuses a fold ending at another header",
+          "ok": true,
+          "detail": "fold-end"
+        },
+        {
+          "name": "the reader refuses a fold above the depth",
+          "ok": true,
+          "detail": "fold-depth"
+        },
+        {
+          "name": "the reader refuses a fold from another start",
+          "ok": true,
+          "detail": "fold-start"
+        },
+        {
+          "name": "the reader refuses a fold naming another fold key hash",
+          "ok": true,
+          "detail": "fold-key"
+        }
+      ]
+    },
     "programs": {
       "leaf-t": "82cd725db1094c67497372691c666dd08e5f007b2783343b9a2417c58e64e42c",
       "leaf-m": "9fae587c658321b9d420e27a619781681f42ebb6bc5f84fb30effe9ea6ca81c7",
@@ -1043,6 +1229,6 @@
     },
     "programsUnchanged": true,
     "result": "pass",
-    "revision": "985f21fa95a09d49a5a0e67e94d8b80e5abc959f"
+    "revision": "8bf9c457e355f7a15183e0de83e3311f73a04333"
   }
 }
