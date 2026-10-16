@@ -750,8 +750,9 @@ leaf of each of the three kinds, then a node over each two proofs and the fold
 bb.js bundles only (WebAssembly's memory holds no leaf; elsewhere `PROVER`), from the leading 2^22 Ignition points
 (256 MiB) copied from `--parameters` or fetched into the directory. The package ships the circuits' keys and sources,
 not their programs (tens of megabytes a leaf): the first start compiles them with the pinned native compiler (`--nargo`,
-default `nargo` on the path; about ten minutes and 4 GiB) into `exhaustion-circuits/`, and runs a program only where
-its bytecode is the one the package pins (otherwise `PROVER`). A line `exhaustion` names each fold served (`how`:
+default `nargo` on the path; about ten minutes and 4 GiB) into a crate per circuit in `exhaustion-circuits/`, and runs a
+program only where its bytecode is the one the package pins (otherwise `PROVER`). The same compiler computes each
+witness in a process of its own, so the replica keeps answering while a period proves. A line `exhaustion` names each fold served (`how`:
 `proved`, `kept`, or `taken` with the replica it came `from`); a failed period is an `exhaustion` event on stderr and is proved again first after a wait. The
 latest fold is kept in `exhaustion-fold.bin`: a replica started again, proving or not, rebuilds the map from its rows,
 checks the kept fold verifies and that the map ends at its end with its root, and serves it again. A period's proofs
