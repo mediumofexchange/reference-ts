@@ -36,6 +36,7 @@ as current instructions.
 
 ## Index
 
+- `2026-10-16` [Refuse a proof publishing exactly one pairing point at infinity, and hold bb's in-circuit limb, curve and key-hash constraints against a malicious prover (slice 43, succinct-read §§2, 6)](decisions/2026-10.md#2026-10-16--refuse-a-proof-publishing-exactly-one-pairing-point-at-infinity-and-hold-bbs-in-circuit-limb-curve-and-key-hash-constraints-against-a-malicious-prover-slice-43-succinct-read-2-6)
 - `2026-10-16` [Execute the shipped exhaustion circuits over named mainnet days, hold their scan to the framer, and scan every version-4 block for (cd) (slice 43, Next 12)](decisions/2026-10.md#2026-10-16--execute-the-shipped-exhaustion-circuits-over-named-mainnet-days-hold-their-scan-to-the-framer-and-scan-every-version-4-block-for-cd-slice-43-next-12)
 - `2026-10-16` [Want a second reader written from the specification, and accept it by shared conformance vectors (direction)](decisions/2026-10.md#2026-10-16--want-a-second-reader-written-from-the-specification-and-accept-it-by-shared-conformance-vectors-direction)
 - `2026-10-16` [Make the phone holder a release gate with budgets declared before any phone run, and hold (cd) as a gate item (direction)](decisions/2026-10.md#2026-10-16--make-the-phone-holder-a-release-gate-with-budgets-declared-before-any-phone-run-and-hold-cd-as-a-gate-item-direction)

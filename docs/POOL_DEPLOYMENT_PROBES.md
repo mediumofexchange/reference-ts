@@ -1137,9 +1137,9 @@ proof, then verification of the leaf's proof):
 - *Refused before a leaf proof exists:* a scalar word plus p (`noir_js` refuses a value past the modulus; the host:
   "Non-canonical proof element"); a commitment's limb split non-canonically for the same point, a commitment off the
   curve and a commitment at infinity (bb's prover stops on its own native assertion; the host refuses each by its
-  named malformed-proof message). An honest prover's assertion is not a constraint: whether the in-circuit verifier's
-  limb-range and on-curve constraints refuse a proof built over such encodings with a consistent transcript is an
-  evidence gap, for step 4's adversarial review against the pinned bb source.
+  named malformed-proof message). An honest prover's assertion is not a constraint; against a malicious prover the in-circuit
+  verifier's limb-range, alias, on-curve and key-hash constraints refuse each (source reading; probe supports), and a pairing-point object with one
+  point at infinity is refused by the reader ([slice 43's recursion probe](../decisions/2026-10.md#2026-10-16--refuse-a-proof-publishing-exactly-one-pairing-point-at-infinity-and-hold-bbs-in-circuit-limb-curve-and-key-hash-constraints-against-a-malicious-prover-slice-43-succinct-read-2-6)).
 - *Key cases:* a leaf taking its key as a witness, as slice 27's measured recursion did, accepts a burn proof as a
   spend; the host refuses it. Keys are therefore constants of each leaf. bb's recursion binds a key hash to its key:
   a pinned key with another kind's hash, and a key with another key's hash in either direction, give leaf proofs
