@@ -13,9 +13,9 @@ import { CommandError, type Directory } from "./common.js";
 /** The prover a replica proves the venue's exhaustion with (succinct-read §4.3, slice 43; `--prove-exhaustion`): an
  * `ExhaustionPool` over the shipped circuits, their programs compiled once from the package's sources with `nargo` (the
  * pinned compiler: `--nargo`, default on the path) into `exhaustion-circuits/` and run only where they are the manifest's,
- * proving on the native backend (WebAssembly's memory holds no leaf) from the leading 2^22 points (256 MiB), copied
- * from `from` or fetched into the directory where missing. Its proofs are kept in `exhaustion-proofs/` until their
- * period is folded, so a restart resumes a period. Loaded by dynamic import: only a proving process loads `@noir-lang`. */
+ * with witnesses by the same compiler in processes of their own, proving on the native backend (WebAssembly's memory
+ * holds no leaf) from the leading 2^22 points (256 MiB), copied from `from` or fetched into the directory where missing. Its proofs are kept in `exhaustion-proofs/` until their
+ * period is folded, so a restart resumes a period. Loaded by dynamic import: only a proving process loads the prover. */
 export async function openExhaustionProver(directory: Pick<Directory, "path" | "file">, from: string | undefined, nargo: string,
   log: (line: string) => void): Promise<ExhaustionProver> {
   const refusal = nativeRefusal();
@@ -36,7 +36,7 @@ export async function openExhaustionProver(directory: Pick<Directory, "path" | "
     throw error;
   }
   const { ExhaustionPool, nativeExhaustionBackend, proofDirectory } = await import("../ergo-exhaustion-pool.js");
-  const backend = nativeExhaustionBackend(circuits, () => readExhaustionParameters(directory.path), { threads: availableParallelism() });
+  const backend = nativeExhaustionBackend(circuits, circuits.witness, () => readExhaustionParameters(directory.path), { threads: availableParallelism() });
   const proofs = directory.file("exhaustion-proofs");
   const pool = new ExhaustionPool({ circuits, backend, proofs: proofDirectory(proofs), log });
   return {

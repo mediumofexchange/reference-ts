@@ -17,7 +17,7 @@
 // unless scratch/exhaustion-programs holds them from an earlier run, where the drill keeps them after.
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
-import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import { cpSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { join, resolve, sep } from "node:path";
 import { prepareCheckSetParameters, prepareExhaustionParameters } from "../../../dist/pool/parameter-files.js";
 import { nativeRefusal } from "../../../dist/pool/proof-verifier.js";
@@ -32,7 +32,8 @@ const PROGRAMS = join(root, "scratch", "exhaustion-programs"), native = nativeRe
 const copyPrograms = (from, to) => {
   if (!existsSync(from)) return;
   mkdirSync(to, { recursive: true });
-  for (const name of readdirSync(from).filter(n => /^[a-z-]+\.json$/.test(n))) copyFileSync(join(from, name), join(to, name));
+  // Each circuit's kept crate (its sources and nargo's compiled program, which its witnesses reuse).
+  for (const name of readdirSync(from).filter(n => /^[a-z-]+$/.test(n))) cpSync(join(from, name), join(to, name), { recursive: true });
 };
 mkdirSync(join(root, "scratch"), { recursive: true });
 const scratch = realpathSync(mkdtempSync(join(realpathSync(join(root, "scratch")), "succinct-drill-")));
