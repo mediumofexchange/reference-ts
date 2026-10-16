@@ -655,7 +655,7 @@ try {
     }
     // succinct-read §2 rule 2: a recursive Ultra-ZK proof over an inner proof whose opening the backend refuses, its
     // inner opening's P0 put at infinity by the inner proof's last commitment (test/fixtures/succinct-mixed-pairing-forgery.json,
-    // from scripts/pool/recursion-probe at its last revision). It publishes exactly one pairing point at infinity, so the
+    // from scripts/pool/recursion-probe at 8bf7383). It publishes exactly one pairing point at infinity, so the
     // backend's own verification adopts the proof's opening and accepts it; the shared verification refuses it first.
     {
       const forged = json(join(root, 'test/fixtures/succinct-mixed-pairing-forgery.json'));
