@@ -67,13 +67,15 @@ compression a slot, over at most 128 bytes, zero past its length (`byte past a s
 - **Tree preimages are distinct by construction.** An id is pushed as `0x00 || id` (33 bytes, `id length`, `leaf
   prefix`), a witness id as `0x00 ||` 31 bytes (32 bytes, `witness id length`), a merge hashes `0x01 || below || top`
   (65 bytes, `merge length`, `node prefix`, `merged entries`), a lift `0x01 || top` (33 bytes, `lift length`,
-  `lifted entry`). These are venue-ergo §4's leaves, nodes and lone children, and no preimage of one kind is one of
+  `lifted entry`). The last two are load-bearing: without them a merge over the real root's preimage reaches the
+  header's root from made-up ids. These are venue-ergo §4's leaves, nodes and lone children, and no preimage of one kind is one of
   another: prefixes differ between leaves and nodes, lengths between the two leaves and the two nodes.
 - **The stack holds this block's subtrees.** Positions 0 and 1 are sentinels: a push writes at `sp + 2`, a merge at
-  `sp` and needs `sp ≥ 2` (`merge into a sentinel`; `sp = 0` fails the index), a lift at `sp + 1` and needs `sp ≥ 1`
-  (`lift over an empty stack`), so a sentinel is never read or written. A header's end resets `sp` to zero, so every
-  live entry was written by this block's operations and is the root of a subtree of this block's pushes, in push
-  order.
+  `sp` and needs `sp ≥ 2` (`merge into a sentinel`; at `sp = 0` the update of `sp` fails its index), a lift at
+  `sp + 1` and needs `sp ≥ 1` (`lift over an empty stack`), so a sentinel is never read or written. A period starts
+  with the stack empty (`period start: stack`) and a header's end resets `sp` to zero, so every live entry was
+  written by this block's operations and is the root of a subtree of this block's pushes, in push order. The start
+  condition is load-bearing: a stale entry there would stand in for a block's first id.
 - **The root is the header's.** A header's first chunk requires exactly one live entry (`one root`) equal to bytes
   65–97 (`transactions root`) and bytes 1–33 equal to the last header's id (`parent id`); no tree step runs inside a
   header (`tree inside a header`). Every version lays these bytes out alike (venue-ergo §3: version, parent id,
@@ -88,7 +90,8 @@ compression a slot, over at most 128 bytes, zero past its length (`byte past a s
 - **Each id joins the id chain** with its labels: the height of the block whose header follows and its position, which
   counts ids (not witness ids) from zero and resets at each header.
 
-The empty section has no root this machine reaches; an Ergo block always carries its emission transaction.
+An empty section has no root this machine reaches, so a block with one cannot be proved; a complete reader takes only
+a nonempty section too (venue-ergo §4), so both read paths stall alike there.
 
 ### The transaction stream (`leaf-t`)
 
@@ -113,7 +116,10 @@ The empty section has no root this machine reaches; an Ergo block always carries
   limbs, its height, position and output index.
 - **The list is the emitted sequence.** Each listed entry has limbs below `2^128`, labels typed u32, and listed
   entries form a prefix (`list prefix`) in strictly increasing `(height, position, output)` (the range check on the
-  difference, below `2^96`). The emitted and listed entries, each encoded `hi + δ(lo + δ·place)`, are compared as
+  difference, below `2^96`). Positions count a block's transactions and output indices a transaction's outputs,
+  both below the block's byte size and so below `2^32`, as heights are (venue-ergo §3): each entry's `place` is then
+  injective and byte order is `(height, position, output)` order, a premise of soundness here, not only of
+  completeness. The emitted and listed entries, each encoded `hi + δ(lo + δ·place)`, are compared as
   products of `γ − x` (`list`), with `γ` and `δ` hashed from the leaf's two state hashes, which bind every byte it
   hashed (through the ids and the open chaining value) and the list (through its chain). A prover fixes both before
   learning the challenges; distinct multisets pass with probability below `(EL + 4·EL²)/p < 2^-232` an attempt
@@ -150,8 +156,9 @@ and 65 crafted transactions.
 ### The map stream (`leaf-u`)
 
 Each used slot (`update prefix`) takes the next entry, appends it to the entry stream, and replaces its key's leaf:
-the key is the subject's low limb modulo `2^32` (`key`: `lo = q·2^32 + key` with `q` below `2^96`, unique because the
-transaction leaves range-check `lo` below `2^128` and the stream equals their list), the old leaf is zero for a
+the key is the subject's low limb modulo `2^32` (`key`: `lo = q·2^32 + key` with `q` below `2^96` and `key` below
+`2^32`, a decomposition unique in the leaf itself; the transaction leaves range-check `lo` below `2^128`, so it is the
+subject's last four bytes), the old leaf is zero for a
 count of zero with a zero chain (`empty leaf`) or `H(T_MAP_LEAF, c, chain)`, and the 32 siblings must take it to the
 current root (`map path`), bit `l` of the key placing it as the right child at level `l` (§4.2). The new leaf is
 `H(T_MAP_LEAF, c + 1, H(T_ENTRY, chain, entry))`. By collision resistance the old leaf is the key's true leaf, so
@@ -161,23 +168,32 @@ its end header from the root at its start: the adopted start's empty map, or the
 
 ### What an honest prover can always prove
 
-Soundness needs nothing below; a bound that failed would stop provers, not mislead readers.
+A bound below that failed would stop provers, not mislead readers.
 
 - **A leaf's list holds every emission.** An emission needs, after its output's `REGCNT` byte, an `R4` type and
-  length byte, 32 subject bytes and an `R5` type and length: at least 37 bytes between two emissions, so at most four
-  end in a 128-byte slot, the list's `LIST_PER_SLOT`.
+  length byte, 32 subject bytes and an `R5` type and length, and before that byte its output's value, tree (at least
+  two bytes), creation height and token count: two emissions lie at least 42 bytes apart whatever the bytes, so at
+  most four end in a 128-byte slot, the list's `LIST_PER_SLOT`.
 - **The stack holds every section.** 18 live entries take a tree of up to 2^17 leaves. Ergo's voted block cost
   (8,001,091 at height 1,895,424, against 2,407 an input, and every transaction spends one) admits about
-  3,300 transactions a block, 6,600 leaves.
-- **Labels fit 32 bits.** Heights are below 2^31 (venue-ergo §3); positions and output indices are below the block's
-  byte size.
+  3,300 transactions a block, 6,600 leaves; miners' votes can raise it, about twentyfold before the bound binds.
 
 ### Evidence and limits
 
-`check:exhaustion` executes every named check above against a hostile witness otherwise consistent with the state
-hashes, at small sizes from the same sources, and `--shipped` runs the same set over the shipped full-size programs
-with the pinned nargo, with real headers of versions 1 to 4 (`test/fixtures/ergo-mainnet-version-blocks.json`)
-honest and with their parent or root altered ([report](ergo-exhaustion-check-verification.json)). The recursive
+`check:exhaustion` executes a hostile witness otherwise consistent with the state hashes against each check a
+witness can reach in execution and that guards a claim above: the list, its order, prefix and labels' type; slots,
+starts, ends and bytes past a transaction; pushed ids, merged and lifted entries, prefixes and lengths, the sentinel
+and empty-stack guards, one root, the parent and the transactions root (on real headers of versions 1 to 4,
+`test/fixtures/ergo-mainnet-version-blocks.json`), a tree step in a header; map paths and the empty leaf; every
+period-start condition, the period-end ones for open transactions and headers, a live stack and each pair of chains;
+the folds' start, end, root and key checks and the node's admission. It does so at small sizes from the same sources,
+and `--shipped` runs the same set over the shipped full-size programs with the pinned nargo
+([report](ergo-exhaustion-check-verification.json)). Without a case: checks that only a Blake2b collision would reach
+or that another check already implies (`one operation`, `id length`, `merge length`, `node prefix`, the header chunks'
+lengths and end, `leaf-m`'s `unused slot` and `byte past a slot`, `leaf-t`'s `start on an unused slot` and `end on an
+unused slot`, `update prefix`, `period end: heights`); and every check on an unconstrained hint (`key`, `byte class`,
+`index`, `is_zero`, `mask`, Blake2b's carries and splits, `word`), which execution computes honestly, so only a
+witness run through the backend's circuit checker reaches it; the 2026-10-15 review read their compiled range checks. The recursive
 joins are proved in `exhaustion-prove.mjs` with five hostile recursions
 ([measurements](VENUE_ALTERNATIVES.md#the-exhaustion-circuits-in-production-form-slice-43)). Limits: execution
 checks no recursive verification; the order check is a range check without a message; mainnet holds no output with
