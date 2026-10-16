@@ -9,8 +9,8 @@
 // is kept under the hash of its circuit and inputs (`proofs`), so a prover that stops resumes where it stood and a
 // period proved again costs a verification of each kept proof, not the proofs.
 //
-// No set is adopted (§6): `circuitExhaustionSet` names a test set over built circuits, whose folds are real proofs a
-// reader verifies under the pinned fold keys, and which no reader may rely on until an adoption names its identities.
+// No set is adopted (§6): `shippedExhaustionSet` names a test set over the shipped circuits, whose folds are real proofs
+// a reader verifies under the pinned fold keys, and which no reader may rely on until an adoption names its identities.
 import { mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { randomUUID } from "node:crypto";
 import { join } from "node:path";
@@ -30,7 +30,7 @@ import { fieldToHex, limbsOf } from "./pool/field.js";
 import { keyedVerifier, startExhaustionBackend, type CompiledProgram, type KeyedVerifier, type ProvingParameters }
   from "./pool/proof-verifier.js";
 
-export { circuitExhaustionSet, circuitIdentities, EXHAUSTION_CIRCUITS, EXHAUSTION_PROOF_BYTES, type BuiltCircuit, type ExhaustionCircuit,
+export { circuitIdentities, EXHAUSTION_CIRCUITS, EXHAUSTION_PROOF_BYTES, type BuiltCircuit, type ExhaustionCircuit,
   type ExhaustionCircuits } from "./ergo-exhaustion-set.js";
 
 /** A parameter's array length in a program's ABI. */
@@ -79,13 +79,13 @@ export interface ExhaustionBackend {
 /** UltraHonk's settings under the recursive target (`PROOF_OPTIONS`), as bb.js 5.2.0 derives them. */
 const RECURSIVE_SETTINGS = Object.freeze({ ipaAccumulation: false, oracleHashType: "poseidon2", disableZk: false, optimizedSolidityVerifier: false });
 
-/** The pool's backend: witnesses by `witnesses` (`exhaustionPrograms`' native ones) and native proofs on an instance started from `parameters` at the first proof
+/** The pool's backend: witnesses by the circuits' own `witness` (`exhaustionPrograms`' native ones) and native proofs on an instance started from `parameters` at the first proof
  * and again after any failure, which retires the instance that failed (as the trail aggregator does). Each proof is
  * made with the circuit's built key (bb.js's `generateProof` passes none and derives it again at every proof, about
  * two fifths of a leaf's time). Proofs are verified apart from the prover, under the built keys on verifying instances
  * of their own (`keyedVerifier`, which reads the started instance's `[1]_1` and `[x]_2` once): bytes that are no proof
  * verify as false and retire only a verifying instance, never the one proving. */
-export function nativeExhaustionBackend(circuits: ExhaustionCircuits, witnesses: ExhaustionWitness, parameters: () => Promise<ProvingParameters>,
+export function nativeExhaustionBackend(circuits: ExhaustionCircuits & { readonly witness: ExhaustionWitness }, parameters: () => Promise<ProvingParameters>,
     options: { readonly threads?: number } = {}): ExhaustionBackend {
   const bytecode = new Map(EXHAUSTION_CIRCUITS.map(name =>
     [name, gunzipSync(Buffer.from(circuits.circuits[name].program.bytecode, "base64"))] as const));
@@ -113,7 +113,7 @@ export function nativeExhaustionBackend(circuits: ExhaustionCircuits, witnesses:
     try { return await task(await used); } catch (error) { await retire(used); throw error; }
   };
   return {
-    witness: (circuit, inputs) => witnesses(circuit, inputs),
+    witness: (circuit, inputs) => circuits.witness(circuit, inputs),
     prove: (circuit, witness) => guarded(async ({ api }) => {
       const made = await api.circuitProve({ witness: gunzipSync(witness),
         circuit: { name: circuit, bytecode: bytecode.get(circuit)!, verificationKey: circuits.circuits[circuit].vk }, settings: RECURSIVE_SETTINGS });

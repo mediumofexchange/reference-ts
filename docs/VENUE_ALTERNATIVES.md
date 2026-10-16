@@ -275,7 +275,7 @@ Folds add one 1.5 M-gate proof a period. The two windows overlap by 126 blocks.
 
 ### The exhaustion circuits in production form (slice 43)
 
-Measured 2026-10-15 ([decision](../decisions/2026-10.md#2026-10-15--prove-the-exhaustions-six-circuits-in-production-form-end-to-end-and-keep-up-with-a-heavy-ergo-day-one-and-a-half-times-on-one-prover-slice-43-next-12); [proving report](ergo-exhaustion-prove-verification.json), [execution report](ergo-exhaustion-check-verification.json)). The six circuits of [succinct reading](https://github.com/mediumofexchange/money-from-first-principles/blob/282c925/succinct-read.md) §4.3 over pool-v2 §1's sponge and §2's tags (sources `scripts/venue/exhaustion-sources.mjs`, `exhaustion-circuits/`, since moved to `src/exhaustion-circuits/`), proved on bb.js's bundled native `bb` on one 4-vCPU Xeon at 2.10 GHz (15 GB), against [slice 32's probe](#the-complete-exhaustion-leaf-slice-32) on the same CPU model.
+Measured 2026-10-15 ([decision](../decisions/2026-10.md#2026-10-15--prove-the-exhaustions-six-circuits-in-production-form-end-to-end-and-keep-up-with-a-heavy-ergo-day-one-and-a-half-times-on-one-prover-slice-43-next-12); [proving report](https://github.com/mediumofexchange/reference-ts/blob/c173707/docs/ergo-exhaustion-prove-verification.json), [execution report](ergo-exhaustion-check-verification.json)). The six circuits of [succinct reading](https://github.com/mediumofexchange/money-from-first-principles/blob/282c925/succinct-read.md) §4.3 over pool-v2 §1's sponge and §2's tags (sources `scripts/venue/exhaustion-sources.mjs`, `exhaustion-circuits/`, since moved to `src/exhaustion-circuits/`), proved on bb.js's bundled native `bb` on one 4-vCPU Xeon at 2.10 GHz (15 GB), against [slice 32's probe](#the-complete-exhaustion-leaf-slice-32) on the same CPU model.
 
 | Circuit | Slots | Gates (2^22 rows for leaves) | Proofs, first run | Witness (noir_js) |
 |---|---|---|---|---|
@@ -285,7 +285,7 @@ Measured 2026-10-15 ([decision](../decisions/2026-10.md#2026-10-15--prove-the-ex
 | Node | | 1,469,901 (2^21) | 18.1–18.4 s | |
 | First and next fold | | 708,272 and 1,474,513 | 9.2–9.4 s and 18.1–18.8 s | |
 
-Slot costs are fits over 2 and 6 slots; the full-size leaves land 0.0–1.0% above them. Every proof is 14,656 bytes. The [report](ergo-exhaustion-prove-verification.json), re-recorded on 2026-10-15 after slice 43's pool changed its sources (not the circuits), ran leaves in 59.0–65.0 s and nodes in 20.0–21.4 s.
+Slot costs are fits over 2 and 6 slots; the full-size leaves land 0.0–1.0% above them. Every proof is 14,656 bytes. The [report](https://github.com/mediumofexchange/reference-ts/blob/c173707/docs/ergo-exhaustion-prove-verification.json), re-recorded on 2026-10-15 after slice 43's pool changed its sources (not the circuits), ran leaves in 59.0–65.0 s and nodes in 20.0–21.4 s.
 
 **Slice 43's day keeps one prover busy about 16 hours.** That day (720 blocks to height 1,894,624: 107,371 transaction
 compressions, 25,069 tree or header ones, no entry) takes 643 transaction leaves and 66 tree-and-header leaves, 11.9
@@ -310,7 +310,7 @@ and mutated transactions (tokens, extensions, data inputs, fixed trees, 18 minim
 the grammar) give 260 entries, each leaf executing with `scanTransaction`'s outputs as its list. It refuses 28 hostile
 leaves and 23 hostile streams, folds and node admissions, each witness otherwise consistent with the state hashes, by
 the check each targets (by name; the list's order check is the leaf's one unnamed range check).
-`exhaustion-prove.mjs` proves two periods of three synthetic blocks end to end (leaves, nodes, first and next fold); five
+The proving probe (`exhaustion-prove.mjs`, retired 2026-10-16 into `exhaustion-check.mjs --shipped --prove`) proved two periods of three synthetic blocks end to end (leaves, nodes, first and next fold); five
 hostile recursions (a node over children that do not join, a fold over a node carrying another node key-hash input,
 next folds naming another `foldKeyHash` or start or continuing the wrong fold) prove but do not verify; and the
 reader's `checkFold` takes the last fold under the derived fold keys on the pinned WebAssembly verifier and refuses
@@ -323,7 +323,7 @@ noir_wasm's memory and uses nargo 1.0.0-beta.26, shown equal at small sizes only
 
 ### The prover pool over mainnet blocks (slice 43)
 
-Measured 2026-10-15 ([decision](../decisions/2026-10.md#2026-10-15--prove-a-replicas-exhaustion-periods-in-a-resumable-prover-pool-from-pinned-222-points-and-fold-real-ergo-mainnet-blocks-slice-43-next-12); [report](ergo-exhaustion-pool-verification.json)). `scripts/venue/exhaustion-pool.mjs` hands 48 consecutive mainnet blocks (heights 1,894,826–1,894,873; 425 transactions, 1.40 MB unsigned) to an `ExhaustionServer` in three periods of 16 blocks, and `ExhaustionPool` proves them with the [production circuits](#the-exhaustion-circuits-in-production-form-slice-43) on bb.js's native binary from the pinned 2^22 points, one 4-vCPU Xeon at 2.10 GHz (15 GB), the same CPU model as before.
+Measured 2026-10-15 ([decision](../decisions/2026-10.md#2026-10-15--prove-a-replicas-exhaustion-periods-in-a-resumable-prover-pool-from-pinned-222-points-and-fold-real-ergo-mainnet-blocks-slice-43-next-12); [report](https://github.com/mediumofexchange/reference-ts/blob/c173707/docs/ergo-exhaustion-pool-verification.json)). The pool probe (`scripts/venue/exhaustion-pool.mjs`, retired 2026-10-16: the succinct drill's replica proves through the same pool) hands 48 consecutive mainnet blocks (heights 1,894,826–1,894,873; 425 transactions, 1.40 MB unsigned) to an `ExhaustionServer` in three periods of 16 blocks, and `ExhaustionPool` proves them with the [production circuits](#the-exhaustion-circuits-in-production-form-slice-43) on bb.js's native binary from the pinned 2^22 points, one 4-vCPU Xeon at 2.10 GHz (15 GB), the same CPU model as before.
 
 **Real blocks fold.** The periods take 8, 40 and 26 leaves (71 transaction, 3 tree-and-header, no map-update: these blocks hold no output with §6's shape) and 7, 39 and 25 nodes; the first fold and two next folds verify, and the reader's `checkFold` takes each under a test set of the built circuits on the pinned WebAssembly verifier (0.2 s for the first, 0.03 s after). It refuses seven hostile folds by rule: another map root, the next fold's proof under the first fold's key, the first fold's proof for the last fold's inputs, another end header, an end above the depth, another start and another fold key hash. A subject's path at the last fold reproduces its root with no entry. A second pool over the kept proofs proves the three periods again in 10 seconds without a proof (each kept proof verified again), with the same fold bytes.
 

@@ -5,18 +5,22 @@
 // where a fold requires with the map's root equal to src/ergo-exhaustion.ts' SubjectMap; real blocks of every header
 // version (1 to 4) execute and each block's tree-and-header leaves are refused with its header's parent or transactions
 // root altered; and hostile witnesses, each otherwise consistent with the state hashes, are refused by the named check.
-// Folds are executed with placeholder proofs: execution checks every constraint but the recursive verifications, which
-// the proving check (exhaustion-prove.mjs) covers.
+// Folds are executed with placeholder proofs: execution checks every constraint but the recursive verifications. With
+// --prove (and --shipped) those are proved: two periods proved and folded as a replica proves them, hostile joins not
+// proved or not verifying, and the reader taking the folds under the shipped set and refusing hostile ones.
 //
 //   node scripts/venue/exhaustion-check.mjs [--mainnet <recorded blocks.json>] [--report <file>]
-//   node scripts/venue/exhaustion-check.mjs --shipped [--workers <n>] [--report <file>]
+//   node scripts/venue/exhaustion-check.mjs --shipped [--prove] [--workers <n>] [--report <file>]
 //
 // Run after `npm run build`. Without --shipped and with NARGO set it also compares nargo's bytecode with the pinned
 // noir_wasm's; --shipped needs NARGO (the pinned nargo) and keeps the compiled crates in scratch/exhaustion-programs
-// (about ten minutes the first time). The report holds one section per mode; writing one keeps the other.
+// (about ten minutes the first time); --prove proves on the native backend from the leading 2^22 points, kept in
+// scratch/exhaustion-crs (fetched where missing), in about a quarter of an hour. The report holds one section per mode;
+// writing one keeps the other.
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { cpSync, existsSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import { blake2b } from "@noble/hashes/blake2b.js";
 import { Noir } from "@noir-lang/noir_js";
@@ -24,20 +28,24 @@ import { build, compile, EXHAUSTION_SPECIFICATION, root, sourceHashes } from "./
 import { foldFirst, foldNext, node as nodeSource } from "./exhaustion-sources.mjs";
 import { craftedTransactions, recordedPeriod, recordedPeriodOf, syntheticPeriod } from "./exhaustion-periods.mjs";
 import { scanTransaction } from "../../dist/ergo-scan.js";
-import { EMPTY_SUBTREES, SubjectMap } from "../../dist/ergo-exhaustion.js";
+import { checkFold, EMPTY_SUBTREES, SubjectMap } from "../../dist/ergo-exhaustion.js";
+import { Chain, plainOutput, transaction } from "../../dist/ergo-synthetic.js";
 import { bytesOf, compress, foldStateInputs, isPeriodEnd, iv0, mapUpdateLeaf, periodLeaves, periodStreams, startState, stateEnd, stateHash,
   transactionLeaf, treeLeaf, wordsOf } from "../../dist/ergo-exhaustion-prover.js";
-import { EXHAUSTION_CIRCUITS, EXHAUSTION_SET_MANIFEST, exhaustionKeys } from "../../dist/ergo-exhaustion-set.js";
+import { EXHAUSTION_CIRCUITS, EXHAUSTION_SET_MANIFEST, exhaustionKeys, shippedExhaustionSet } from "../../dist/ergo-exhaustion-set.js";
 import { crateName, exhaustionPrograms, nargoWitness } from "../../dist/ergo-exhaustion-programs.js";
 import { fieldToHex, identifierOf, limbsOf } from "../../dist/pool/field.js";
+import { prepareExhaustionParameters, readExhaustionParameters } from "../../dist/pool/parameter-files.js";
+import { nativeRefusal, startExhaustionBackend } from "../../dist/pool/proof-verifier.js";
 
 const argv = process.argv.slice(2);
 const option = name => (argv.includes(name) ? argv[argv.indexOf(name) + 1] : undefined);
-const shipped = argv.includes("--shipped");
+const shipped = argv.includes("--shipped"), prove = argv.includes("--prove");
+if (prove && !shipped) throw new Error("--prove goes with --shipped");
 const VERSION_BLOCKS = "test/fixtures/ergo-mainnet-version-blocks.json";
 const section = {
   sources: sourceHashes(["src/ergo-exhaustion-set.ts", "src/ergo-exhaustion-programs.ts", ...EXHAUSTION_CIRCUITS.map(c => `src/exhaustion-circuits/${c}.nr`),
-    VERSION_BLOCKS]),
+    VERSION_BLOCKS, ...(prove ? ["src/ergo-exhaustion-pool.ts", "src/pool/parameter-files.ts", "src/pool/parameters.ts"] : [])]),
   periods: [], versions: [], hostile: [], folds: [],
 };
 let failed = 0;
@@ -45,7 +53,7 @@ const fail = message => { failed++; console.error(`FAIL ${message}`); };
 
 // The runner: `exec(circuit, inputs)` is the refusal's message, or undefined where the circuit executes. The keys are
 // the key hashes the node and folds hold as constants (the leaves' own where shipped, placeholders at small sizes).
-let SIZES, KEYS, FOLD_KEY, FIRST_KEY, exec, finish = () => {};
+let SIZES, KEYS, FOLD_KEY, FIRST_KEY, PROGRAMS, exec, finish = () => {};
 if (!shipped) {
   SIZES = { t: 6, m: 12, u: 6 };
   KEYS = { t: "0x01", m: "0x02", u: "0x03", n: "0x04" };
@@ -90,7 +98,7 @@ if (!shipped) {
   FOLD_KEY = hash("fold-next");
   FIRST_KEY = hash("fold-first");
   const directory = path.join(root, "scratch/exhaustion-programs");
-  exhaustionPrograms({ nargo, directory, log: console.log });
+  PROGRAMS = exhaustionPrograms({ nargo, directory, log: console.log });
   // nargo holds a lock on a crate's manifest while it executes, so each worker executes in a copy of its own.
   const workers = Number(option("--workers") ?? 4);
   if (!Number.isSafeInteger(workers) || workers < 1) throw new Error("--workers takes a positive integer");
@@ -384,7 +392,7 @@ await streamCase("a transaction left open after the last block", rerun([...tSlot
   for (const [name, circuit, change, expected] of cases) judge(section.folds, `fold ${name}`, await exec(circuit, { ...base, ...change }), expected);
 }
 
-// The node's admission, executed with placeholder proofs (its joins are recursive: exhaustion-prove.mjs).
+// The node's admission, executed with placeholder proofs (its joins are recursive: --prove).
 {
   const base = { sin: "1", sout: "2", node_key_hash: KEYS.n, keys: [placeholderKey(), placeholderKey()], proofs: [placeholderProof(), placeholderProof()],
     key_hashes: [KEYS.t, KEYS.n], middle: "3" };
@@ -416,8 +424,121 @@ if (!shipped) {
   console.log(`crafted: ${transactions} transactions, ${entries} entries, each leaf executed`);
 }
 
+// The recursion (--prove): what the placeholder proofs leave out, on real proofs of the shipped set made as a replica
+// makes them (`nativeExhaustionBackend` over nargo's witnesses). Two one-block periods of a synthetic chain, each of
+// three leaves, are proved, joined by nodes and folded, first then next; hostile joins are not proved or do not verify
+// natively; and the reader takes both folds under the shipped set (`checkFold`) and refuses hostile ones.
+if (prove) {
+  const refusal = nativeRefusal();
+  if (refusal !== undefined) throw new Error(`--prove: ${refusal}`);
+  const { nativeExhaustionBackend } = await import("../../dist/ergo-exhaustion-pool.js");
+  const crs = path.join(root, "scratch/exhaustion-crs");
+  await prepareExhaustionParameters(crs, { log: console.log });
+  const parameters = () => readExhaustionParameters(crs);
+  const backend = nativeExhaustionBackend(PROGRAMS, parameters, { threads: os.availableParallelism() });
+  const recursion = section.recursion = { cpu: os.cpus()[0]?.model ?? "unknown", cores: os.cpus().length, proofs: [], checks: [] };
+  const check = (name, ok, detail) => {
+    recursion.checks.push({ name, ok, ...(detail === undefined ? {} : { detail }) });
+    if (!ok) fail(name);
+    else console.log(`ok ${name}`);
+  };
+  const fields = bytes => Array.from({ length: bytes.length / 32 }, (_, i) => `0x${Buffer.from(bytes.subarray(32 * i, 32 * i + 32)).toString("hex")}`);
+  /** `circuit` proved over `inputs`: the proof, its public inputs, and the proof and key as a parent circuit takes them. */
+  async function proved(circuit, inputs, label) {
+    const t0 = Date.now();
+    const made = await backend.prove(circuit, await backend.witness(circuit, inputs));
+    const seconds = +((Date.now() - t0) / 1000).toFixed(1);
+    recursion.proofs.push({ circuit, label, seconds });
+    console.log(`${label}: proved in ${seconds} s`);
+    return { circuit, proof: made.proof, publicInputs: made.publicInputs, proofFields: fields(made.proof),
+      key: fields(PROGRAMS.circuits[circuit].vk), keyHash: fieldToHex(PROGRAMS.circuits[circuit].keyHash) };
+  }
+  const verifies = p => backend.verify(p.circuit, p.proof, p.publicInputs);
+  const nodeInputs = (a, b, key = node) => ({ sin: dec(a.publicInputs[0]), sout: dec(b.publicInputs[1]), node_key_hash: dec(key), keys: [a.key, b.key],
+    proofs: [a.proofFields, b.proofFields], key_hashes: [a.keyHash, b.keyHash], middle: dec(a.publicInputs[1]) });
+  /** A period's leaves proved and joined pairwise by nodes carrying `key` as their key-hash input: the leaves and the root. */
+  async function tree(leaves, key, label) {
+    let level = [];
+    for (const l of leaves) level.push(await proved(leafOf(l.kind), l.inputs, `${label} leaf-${l.kind}`));
+    const leafProofs = [...level];
+    while (level.length > 1) {
+      const up = [];
+      for (let i = 0; i + 1 < level.length; i += 2) up.push(await proved("node", nodeInputs(level[i], level[i + 1], key), `${label} node`));
+      if (level.length % 2) up.push(level.at(-1));
+      level = up;
+    }
+    return { leaves: leafProofs, root: level[0] };
+  }
+  const rootInputs = top => ({ key: top.key, proof: top.proofFields, key_hash: top.keyHash });
+  const previousInputs = fold => ({ previous_key: fold.key, previous_proof: fold.proofFields, previous_key_hash: fold.keyHash });
+  const refused = async (name, circuit, inputs) => {
+    let outcome;
+    try { outcome = (await verifies(await proved(circuit, inputs, `hostile ${circuit}`))) ? "verifies" : "does not verify"; }
+    catch (error) { outcome = `not proved (${String(error?.message ?? error).split("\n")[0].slice(0, 160)})`; }
+    check(`hostile: ${name}`, outcome !== "verifies", outcome);
+  };
+  try {
+    const chain = syntheticPeriod(2), map = new SubjectMap(chain.start.id, chain.start.height), done = [];
+    for (const [k, block] of chain.blocks.entries()) {
+      const run = periodLeaves(map, [block], SIZES, node);
+      if (run.leaves.length !== 3) throw new Error(`period ${k} is not three leaves`);
+      const { leaves, root: top } = await tree(run.leaves, node, `period ${k}`);
+      const inputs = foldInputs(run.start, run.end, chain.start, map, rootInputs(top));
+      const fold = k === 0 ? await proved("fold-first", inputs, "period 0 fold-first")
+        : await proved("fold-next", { ...inputs, ...previousInputs(done[0].fold) }, "period 1 fold-next");
+      const end = stateEnd(run.end), [sh, sl] = limbsOf(chain.start.id), [eh, el] = limbsOf(end.id);
+      const expected = [sh, sl, chain.start.height, eh, el, end.height, map.root, BigInt(FOLD_KEY)];
+      check(`period ${k}: its ${k === 0 ? "first" : "next"} fold verifies with §4.3's public inputs, ending at the block with the map's root`,
+        (await verifies(fold)) && fold.publicInputs.length === 8 && fold.publicInputs.every((x, i) => x === expected[i]));
+      done.push({ inputs, leaves, fold, end, mapRoot: map.root });
+    }
+    const [p0, p1] = done, next = { ...p1.inputs, ...previousInputs(p0.fold) };
+    await refused("a node over children that do not join", "node", nodeInputs(p1.leaves[0], p1.leaves[2]));
+    // §2 rule 1: a tree whose nodes carry another key-hash input than the node's own key's (here 7) is not the fold's.
+    {
+      const mini = new Chain(), block = mini.mine(mini.anchor, [transaction([plainOutput])]);
+      const m = new SubjectMap(mini.anchor.id, mini.anchor.height);
+      const run = periodLeaves(m, [{ header: block.bytes, transactions: block.section, id: block.id, height: block.height }], SIZES, 7n);
+      const { root: top } = await tree(run.leaves, 7n, "another node key");
+      await refused("a first fold over a node carrying another node key hash", "fold-first", foldInputs(run.start, run.end, mini.anchor, m, rootInputs(top)));
+    }
+    await refused("a next fold naming another foldKeyHash than its previous fold's", "fold-next", { ...next, fold_key_hash: "7" });
+    await refused("a next fold naming another start than its previous fold's", "fold-next", { ...next, start_height: dec(chain.start.height + 1n) });
+    await refused("a next fold whose previous fold is its own period's", "fold-next", { ...next, ...previousInputs(p1.fold) });
+
+    // The reader's §4.3 rules under the shipped set, its verifier instances holding the same points' `[1]_1` and `[x]_2`.
+    const set = shippedExhaustionSet(chain.start, async () => startExhaustionBackend(await parameters(), { threads: 1 }));
+    try {
+      const at = new Map(chain.blocks.map(b => [b.height, b]));
+      const readerChain = { at: h => { const b = at.get(h); return b && { id: b.id, transactionsRoot: b.header.subarray(65, 97) }; }, tipHeight: chain.blocks.at(-1).height };
+      const folds = done.map((d, k) => ({ first: k === 0, proof: d.fold.proof, inputs: { startId: chain.start.id, startHeight: chain.start.height,
+        endId: d.end.id, endHeight: d.end.height, mapRoot: d.mapRoot, foldKeyHash: set.foldKeyHash } }));
+      for (const [k, fold] of folds.entries()) {
+        const taken = await checkFold(set, fold, readerChain, 0n);
+        check(`the reader takes period ${k}'s fold (checkFold)`, "inputs" in taken && taken.inputs.mapRoot === fold.inputs.mapRoot, taken.refused);
+      }
+      const last = folds[1], with_ = change => ({ ...last, inputs: { ...last.inputs, ...change } });
+      const rejects = async (name, fold, expected, depth = 0n) => {
+        const r = await checkFold(set, fold, readerChain, depth);
+        check(`the reader refuses ${name}`, r.refused === expected, r.refused ?? "accepted");
+      };
+      await rejects("a fold with another map root", with_({ mapRoot: last.inputs.mapRoot + 1n }), "fold-proof");
+      await rejects("a next fold's proof under the first fold's key", { ...last, first: true }, "fold-proof");
+      await rejects("the first fold's proof for the next fold's inputs", { ...last, proof: folds[0].proof }, "fold-proof");
+      await rejects("a fold ending at another header", with_({ endId: chain.blocks[0].id }), "fold-end");
+      await rejects("a fold above the depth", last, "fold-depth", 1n);
+      await rejects("a fold from another start", with_({ startHeight: chain.start.height + 1n }), "fold-start");
+      await rejects("a fold naming another fold key hash", with_({ foldKeyHash: 7n }), "fold-key");
+    } finally {
+      await set.close();
+    }
+  } finally {
+    await backend.close();
+  }
+}
+
 finish();
-section.result = failed === 0 ? "pass" : `${failed} failures`;
+section.result =failed === 0 ? "pass" : `${failed} failures`;
 if (option("--report")) {
   const file = option("--report");
   const kept = existsSync(file) ? JSON.parse(readFileSync(file, "utf8")) : {};

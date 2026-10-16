@@ -118,7 +118,7 @@ export const EXHAUSTION_SPECIFICATION = "succinct-read 282c925";
  * readers' sources, and `extra` for a report that depends on more. */
 export function sourceHashes(extra = []) {
   const files = ["scripts/venue/exhaustion-build.mjs", "scripts/venue/exhaustion-sources.mjs", "scripts/venue/exhaustion-periods.mjs",
-    "scripts/venue/exhaustion-check.mjs", "scripts/venue/exhaustion-prove.mjs", "src/exhaustion-circuits/exhaustion.nr",
+    "scripts/venue/exhaustion-check.mjs", "src/exhaustion-circuits/exhaustion.nr",
     "src/exhaustion-circuits/blake2b.nr", "src/pool/circuits/vendor/poseidon2.nr", "src/ergo-exhaustion-prover.ts", "src/ergo-exhaustion.ts",
     "src/ergo-scan.ts", "src/ergo-synthetic.ts", "src/ergo-profile.ts", "src/pool/poseidon2.ts", "src/pool/proof-verifier.ts", ...extra];
   return Object.fromEntries(files.map(file => [file, sha(Buffer.from(readFileSync(path.join(root, file), "utf8").replace(/\r\n/g, "\n"), "utf8"))]));

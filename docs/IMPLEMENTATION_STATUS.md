@@ -139,13 +139,12 @@ The six exhaustion circuits (§4.3, [succinct-read 282c925](https://github.com/m
 `scripts/venue/exhaustion-sources.mjs` and their witnesses built by `src/ergo-exhaustion-prover.ts`; `check:exhaustion`
 executes them over synthetic and mainnet periods (every header version) with hostile witnesses, at small sizes and with
 `--shipped` on the shipped full-size programs ([report](ergo-exhaustion-check-verification.json); the argument that each
-computes its check and §6's other items: [adoption](SUCCINCT_ADOPTION.md)), and
-`exhaustion-prove.mjs` proves two periods end to end at full size, the reader taking the last fold
-([report](ergo-exhaustion-prove-verification.json); [slice 43](../decisions/2026-10.md#2026-10-15--prove-the-exhaustions-six-circuits-in-production-form-end-to-end-and-keep-up-with-a-heavy-ergo-day-one-and-a-half-times-on-one-prover-slice-43-next-12)).
+computes its check and §6's other items: [adoption](SUCCINCT_ADOPTION.md)); with `--shipped --prove` it proves two
+periods on the shipped set as a replica proves them, refuses five hostile recursive joins, and the reader takes both
+folds and refuses hostile ones (same report).
 Their keys are a test set's (none is adopted). A prover pool (`src/ergo-exhaustion-pool.ts`) proves the periods an
-`ExhaustionServer` hands it on the native backend from pinned 2^22 points, resuming from kept proofs; `exhaustion-pool.mjs`
-folds 48 mainnet blocks with it, the reader taking each fold ([report](ergo-exhaustion-pool-verification.json);
-[slice 43](../decisions/2026-10.md#2026-10-15--prove-a-replicas-exhaustion-periods-in-a-resumable-prover-pool-from-pinned-222-points-and-fold-real-ergo-mainnet-blocks-slice-43-next-12)).
+`ExhaustionServer` hands it on the native backend from pinned 2^22 points, resuming from kept proofs; the succinct drill's replica proves
+with it ([48 mainnet blocks](VENUE_ALTERNATIVES.md#the-prover-pool-over-mainnet-blocks-slice-43); [slice 43](../decisions/2026-10.md#2026-10-15--prove-a-replicas-exhaustion-periods-in-a-resumable-prover-pool-from-pinned-222-points-and-fold-real-ergo-mainnet-blocks-slice-43-next-12)).
 `exhaustion-corpus.mjs` executes every leaf, node and fold of three named mainnet days (header versions 2–4) through the
 shipped full-size programs, holding the scan to the framer, and scans every version-4 block for (cd)
 ([report](ergo-exhaustion-corpus-verification.json);

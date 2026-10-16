@@ -36,7 +36,7 @@ export async function openExhaustionProver(directory: Pick<Directory, "path" | "
     throw error;
   }
   const { ExhaustionPool, nativeExhaustionBackend, proofDirectory } = await import("../ergo-exhaustion-pool.js");
-  const backend = nativeExhaustionBackend(circuits, circuits.witness, () => readExhaustionParameters(directory.path), { threads: availableParallelism() });
+  const backend = nativeExhaustionBackend(circuits, () => readExhaustionParameters(directory.path), { threads: availableParallelism() });
   const proofs = directory.file("exhaustion-proofs");
   const pool = new ExhaustionPool({ circuits, backend, proofs: proofDirectory(proofs), log });
   return {

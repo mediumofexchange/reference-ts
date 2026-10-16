@@ -18,7 +18,7 @@ circuit computes the check it replaces. Measurements stay in their reports and p
 | The deferred pairing of every recursive circuit, with §2 rule 2's refusal | Done | the same decision |
 | The exhaustion's entries equal to venue-ergo §§5–6 over named mainnet days and a hostile set | Three days executed on the shipped programs; mainnet holds no output with the shape, so real entries wait for testnet days (local) | [corpus](VENUE_ALTERNATIVES.md#the-agreement-corpus-slice-43) |
 | The scan's reading of the grammar argued from its source | Below | [The scan](#the-scan-reads-the-grammar-as-the-framer-does) |
-| Tree, header (every version), map-update, multiset and join checks against hostile witnesses | At small sizes in `check:exhaustion`; on the shipped programs with `--shipped` | [report](ergo-exhaustion-check-verification.json) |
+| Tree, header (every version), map-update, multiset and join checks against hostile witnesses | At small sizes in `check:exhaustion`; on the shipped programs with `--shipped`, the recursive joins proved with `--prove` | [report](ergo-exhaustion-check-verification.json) |
 | Adversarial review of every circuit and the argument for each | Trail circuits: slice 36's review; exhaustion circuits: their 2026-10-15 review and this argument's | the decisions |
 
 ## The exhaustion circuits
@@ -194,7 +194,7 @@ lengths and end, `leaf-m`'s `unused slot` and `byte past a slot`, `leaf-t`'s `st
 unused slot`, `update prefix`, `period end: heights`); and every check on an unconstrained hint (`key`, `byte class`,
 `index`, `is_zero`, `mask`, Blake2b's carries and splits, `word`), which execution computes honestly, so only a
 witness run through the backend's circuit checker reaches it; the 2026-10-15 review read their compiled range checks. The recursive
-joins are proved in `exhaustion-prove.mjs` with five hostile recursions
-([measurements](VENUE_ALTERNATIVES.md#the-exhaustion-circuits-in-production-form-slice-43)). Limits: execution
-checks no recursive verification; the order check is a range check without a message; mainnet holds no output with
+joins are proved on the shipped set with `--shipped --prove`: two periods folded first then next, five hostile
+recursions not proved or not verifying, the reader taking both folds and refusing seven hostile ones (same report).
+Limits: execution checks no recursive verification, so a recursive join's hostile case needs `--prove`; the order check is a range check without a message; mainnet holds no output with
 the shape, so the map-update leaves run on synthetic entries until testnet days are recorded (local).
