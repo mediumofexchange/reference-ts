@@ -25,8 +25,8 @@ every finalized spend and effective recovery settlement. Tests must distinguish
 invalid evidence, unavailable evidence and pending receipt liability.
 
 The practical latency, memory and network budgets are declared in
-[target scale and budgets](PRODUCTION_REQUIREMENTS.md#target-scale-and-budgets); a phone wallet is
-outside the release target. [M13h](#the-operator-apart-and-the-wallet-at-depth-m13h) and
+[target scale and budgets](PRODUCTION_REQUIREMENTS.md#target-scale-and-budgets), the phone holder's
+(declared 2026-10-16) among them. [M13h](#the-operator-apart-and-the-wallet-at-depth-m13h) and
 [slice 15](#the-design-points-two-edges-slice-15) measure the runtime against them at 10⁵. A one-backer deployment does not remove general independent
 replacement rights from the protocol.
 
