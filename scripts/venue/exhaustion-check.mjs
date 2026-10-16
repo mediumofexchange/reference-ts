@@ -25,8 +25,8 @@ import { foldFirst, foldNext, node as nodeSource } from "./exhaustion-sources.mj
 import { craftedTransactions, recordedPeriod, recordedPeriodOf, syntheticPeriod } from "./exhaustion-periods.mjs";
 import { scanTransaction } from "../../dist/ergo-scan.js";
 import { EMPTY_SUBTREES, SubjectMap } from "../../dist/ergo-exhaustion.js";
-import { foldStateInputs, isPeriodEnd, mapUpdateLeaf, periodLeaves, periodStreams, startState, stateEnd, transactionLeaf, treeLeaf }
-  from "../../dist/ergo-exhaustion-prover.js";
+import { bytesOf, compress, foldStateInputs, isPeriodEnd, iv0, mapUpdateLeaf, periodLeaves, periodStreams, startState, stateEnd, stateHash,
+  transactionLeaf, treeLeaf, wordsOf } from "../../dist/ergo-exhaustion-prover.js";
 import { EXHAUSTION_CIRCUITS, EXHAUSTION_SET_MANIFEST, exhaustionKeys } from "../../dist/ergo-exhaustion-set.js";
 import { crateName, exhaustionPrograms, nargoWitness } from "../../dist/ergo-exhaustion-programs.js";
 import { fieldToHex, identifierOf, limbsOf } from "../../dist/pool/field.js";
@@ -273,6 +273,29 @@ await hostile("a lift carrying a right child", "m", treeLeaf(s0, [blockOps[0], {
 const extra = { op: "id", id: blake2b(Uint8Array.of(9), { dkLen: 32 }) };
 await hostile("a leaf below a block's tree", "m", treeLeaf(s0, [extra, ...blockOps], SIZES.m, node), "one root");
 await hostile("a tree step inside a header", "m", treeLeaf(s0, [...blockOps.slice(0, firstHeader + 1), extra, ...blockOps.slice(firstHeader + 1)], SIZES.m, node), "tree inside a header");
+// A merge or lift slot hashing other bytes than the stack's entries, its end state the prover's over those bytes. The
+// merge hashes the real root's preimage over two made-up ids, so the leaf reaches the header's root with an id chain
+// of made-up ids: with the check removed, a false absence and made-up transactions.
+{
+  const tree = blockOps.slice(0, firstHeader), headers = blockOps.slice(firstHeader);
+  if (tree.at(-1).op !== "mrg") throw new Error("the hostile block's tree does not end in a merge");
+  const below = treeLeaf(s0, tree.slice(0, -1), SIZES.m, node).after.m;
+  const made = [1, 2].map(k => ({ op: "id", id: blake2b(Uint8Array.of(k), { dkLen: 32 }) }));
+  /** The leaf over `ops` with slot `i` hashing `bytes` (its length kept) and writing `entry` at stack position 2. */
+  const patched = (ops, i, bytes, entry) => {
+    const r = treeLeaf(s0, ops, SIZES.m, node), slot = new Uint8Array(128);
+    slot.set(bytes);
+    r.leaf.inputs.mb[i] = [...slot].map(String);
+    r.after.m.stack[2] = entry;
+    r.leaf.inputs.sout = stateHash(r.after).toString();
+    return r;
+  };
+  const merge = Uint8Array.from([1, ...bytesOf(below.stack[below.sp]), ...bytesOf(below.stack[below.sp + 1])]);
+  await hostile("a merge hashing the real root's children over made-up ids", "m",
+    patched([...made, { op: "mrg" }, ...headers], 2, merge, wordsOf(headerOp.bytes.subarray(65, 97))), "merged entries");
+  const lift = Uint8Array.from([1, ...blake2b(Uint8Array.of(3), { dkLen: 32 })]);
+  await hostile("a lift hashing another entry", "m", patched([made[0], { op: "lift" }], 1, lift, compress(iv0(), Uint8Array.from({ length: 128 }, (_, i) => lift[i] ?? 0), 33n, true).slice(0, 4)), "lifted entry");
+}
 
 // The map-update leaf over the period's first updates.
 const mapU = new SubjectMap(p.start.id, p.start.height);
@@ -325,6 +348,8 @@ await streamCase("map entries reordered", rerun(tSlots, mOps, [updates[1], updat
 await streamCase("the last map entry left out", rerun(tSlots, mOps, updates.slice(0, -1)), "period end: entry chains");
 await streamCase("a map entry applied twice", rerun(tSlots, mOps, [updates[0], ...updates]), "map path");
 await streamCase("a header left out", rerun(tSlots, mOps.slice(0, mOps.length - 1), updates), "period end: header open");
+const lastTree = mOps.findLastIndex(o => o.op !== "hdr");
+await streamCase("the last block's tree and transactions without its header", rerun(tSlots, mOps.slice(0, lastTree + 1), updates), "period end: stack");
 const plain = txs.find(x => x.length > 1)[0];
 await streamCase("a transaction left open after the last block", rerun([...tSlots, { ...plain, newBlock: false, last: false }], mOps, updates), "period end: transaction open");
 
@@ -345,6 +370,14 @@ await streamCase("a transaction left open after the last block", rerun([...tSlot
     ["a start with an entry stream", "fold-first", foldStateInputs({ ...run.start, u: { ...run.start.u, chain: 7n } }, "0"), "period start: entry stream"],
     ["a start with an id chain", "fold-first", foldStateInputs({ ...run.start, m: { ...run.start.m, chain: 7n } }, "0"), "period start: tree id chain"],
     ["a start inside a transaction", "fold-first", foldStateInputs({ ...run.start, t: { ...run.start.t, inTx: true } }, "0"), "period start: transaction open"],
+    // A stale live entry at the start: with the check removed, a block's tree merges it in place of its first id,
+    // whose transaction then reads as absent.
+    ["a start with a live stack entry", "fold-first", foldStateInputs({ ...run.start, m: { ...run.start.m, sp: 1,
+      stack: run.start.m.stack.map((w, i) => (i === 2 ? wordsOf(blake2b(Uint8Array.of(0, ...p.blocks[0].id), { dkLen: 32 })) : w)) } }, "0"), "period start: stack"],
+    ["a start inside a header", "fold-first", foldStateInputs({ ...run.start, m: { ...run.start.m, inHeader: true } }, "0"), "period start: header open"],
+    ["a start at another position", "fold-first", foldStateInputs({ ...run.start, m: { ...run.start.m, j: 1n } }, "0"), "period start: position"],
+    ["a start with the streams at two heights", "fold-first", foldStateInputs({ ...run.start, t: { ...run.start.t, height: run.start.t.height + 1n } }, "0"), "period start: heights"],
+    ["a start with a transaction id chain", "fold-first", foldStateInputs({ ...run.start, t: { ...run.start.t, chain: 7n } }, "0"), "period start: id chain"],
     ["an end inside a header", "fold-first", foldStateInputs({ ...run.end, m: { ...run.end.m, inHeader: true } }, "1"), "period end: header open"],
     ["a previous fold under another key", "fold-next", { ...nextFoldExtra(), previous_key_hash: "0x09" }, "previous fold key"],
   ];
