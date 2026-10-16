@@ -31,7 +31,7 @@ export function syntheticPeriod(count = 9) {
   return { start: { id: chain.anchor.id, height: chain.anchor.height }, blocks: blocks.map(b => ({ header: b.bytes, transactions: b.section, id: b.id, height: b.height })) };
 }
 
-/** Recorded consecutive mainnet blocks (exhaustion-fetch.mjs): the parent of the first and each block. */
+/** Recorded consecutive mainnet blocks (exhaustion-corpus.mjs fetch): the parent of the first and each block. */
 export function recordedPeriod(file) {
   const data = JSON.parse(readFileSync(file, "utf8"));
   const hex = x => Uint8Array.from(Buffer.from(x, "hex"));
