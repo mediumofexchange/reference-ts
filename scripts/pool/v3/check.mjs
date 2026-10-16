@@ -12,7 +12,7 @@ import { Barretenberg, BackendType, UltraHonkBackend, UltraHonkVerifierBackend }
 import { fixtures, field, FIELD, U64_MAX } from '../fixtures.mjs';
 import { asFields, assertions, bypass, failedOpcode, FRAME, inputRanges, names, refusal, withoutRange } from '../constraints.mjs';
 import { EncodingError } from '../../../dist/bytes.js';
-import { proofVerifier, startBackend } from '../../../dist/pool/proof-verifier.js';
+import { keyedVerifier, mixedPairingObject, proofVerifier, startBackend } from '../../../dist/pool/proof-verifier.js';
 import { POOL_V3_CIRCUITS } from '../../../dist/pool/v3/programs.js';
 import { adoptedConfigurationBytes, adoptedDomain, configurationBytes, POOL_V3_MANIFEST, PROOF_BYTES, RELATIONS } from '../../../dist/pool/v3/configuration.js';
 import { deliveryHash } from '../../../dist/pool/v3/records.js';
@@ -652,6 +652,23 @@ try {
     for (const [label, bytes] of malformed) {
       assert.equal(await shared.verify(kindOf.issue, inputs, bytes), false, label);
       checks.push(`the shared verifier answers false for ${label}`);
+    }
+    // succinct-read §2 rule 2: a recursive Ultra-ZK proof over an inner proof whose opening the backend refuses, its
+    // inner opening's P0 put at infinity by the inner proof's last commitment (test/fixtures/succinct-mixed-pairing-forgery.json,
+    // from scripts/pool/recursion-probe at its last revision). It publishes exactly one pairing point at infinity, so the
+    // backend's own verification adopts the proof's opening and accepts it; the shared verification refuses it first.
+    {
+      const forged = json(join(root, 'test/fixtures/succinct-mixed-pairing-forgery.json'));
+      const forgedVk = new Uint8Array(Buffer.from(forged.vk, 'hex')), forgedProof = new Uint8Array(Buffer.from(forged.proof, 'hex'));
+      assert(mixedPairingObject(forgedProof));
+      const alone = await startBackend(parameterBytes);
+      try {
+        assert.equal(await new UltraHonkVerifierBackend(alone).verifyProof({ proof: forgedProof, publicInputs: [], verificationKey: forgedVk }, options), true,
+          'the pinned backend accepts the forged proof');
+      } finally { await alone.destroy(); }
+      const keyed = keyedVerifier(api, [{ kind: 0, vk: forgedVk, publicInputs: 0 }], forgedProof.length);
+      try { assert.equal(await keyed.verify(0, [], forgedProof), false); } finally { await keyed.close(); }
+      checks.push('a recursive proof publishing exactly one pairing point at infinity, over an inner proof whose opening fails, verifies under the pinned backend alone and as false under the shared verification');
     }
     // A proof and its inputs are read once, into copies, and the copies are judged.
     const understated = Object.defineProperty(new Uint8Array(POOL_V3_CIRCUITS.maxProofBytes + 32), 'length', { value: valid.proof.length });

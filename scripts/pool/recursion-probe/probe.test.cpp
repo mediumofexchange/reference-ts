@@ -15,6 +15,7 @@
 #include "barretenberg/ultra_honk/oink_verifier.hpp"
 #include "barretenberg/ultra_honk/ultra_prover.hpp"
 #include "barretenberg/ultra_honk/ultra_verifier.hpp"
+#include <fstream>
 
 namespace bb::stdlib::recursion::honk {
 
@@ -133,6 +134,8 @@ bool native_inner(const std::shared_ptr<InnerVK>& vk, const Proof& proof, std::s
 }
 
 struct OuterResult {
+    std::vector<uint8_t> vk;
+    std::vector<uint8_t> proof;
     bool satisfied;
     bool p0_infinity;
     bool p1_infinity;
@@ -162,6 +165,11 @@ OuterResult outer(const std::shared_ptr<InnerVK>& vk, const Proof& proof)
     auto outer_proof = prover.construct_proof();
     for (size_t i = 0; i < PAIRING_POINTS_SIZE; ++i) {
         result.pairing_public_inputs.push_back(outer_proof[i]);
+    }
+    result.vk = to_buffer(*outer_vk);
+    for (const auto& word : outer_proof) {
+        auto bytes = to_buffer(word);
+        result.proof.insert(result.proof.end(), bytes.begin(), bytes.end());
     }
     try {
         OuterVerifier native(std::make_shared<OuterFlavor::VKAndHash>(outer_vk));
@@ -258,11 +266,28 @@ TEST_F(MoeInfinityProbe, InnerPcsPointAtInfinity)
     EXPECT_TRUE(forged_result.p0_infinity);
     // The question the probe answers (recorded, not asserted): is forged_result.verified true?
     info("MOE-PROBE verdict: outer proof over the infinity-W inner proof verifies natively: ", forged_result.verified);
+    // The forged outer proof and its key in bb.js's bytes (no public input of its own; the proof's first eight
+    // words are its pairing-point object), for the reference's real-proof check.
+    if (const char* out = std::getenv("MOE_PROBE_FIXTURE"); out != nullptr) {
+        auto hex = [](const std::vector<uint8_t>& bytes) {
+            static const char* digits = "0123456789abcdef";
+            std::string text;
+            for (uint8_t b : bytes) {
+                text += digits[b >> 4];
+                text += digits[b & 15];
+            }
+            return text;
+        };
+        std::ofstream(out) << "{\"vk\":\"" << hex(forged_result.vk) << "\",\"proof\":\"" << hex(forged_result.proof)
+                           << "\"}\n";
+        info("MOE-PROBE fixture: vk ", forged_result.vk.size(), " bytes, proof ", forged_result.proof.size(), " bytes");
+    }
 }
 
-// A malicious prover: bb's native assertions only warn (BB_DISABLE_ASSERTS), so the recursive verifier circuit is
-// built over hostile witness values; the circuit checker and the builder's first recorded failure show which
-// in-circuit constraint refuses each.
+// Hostile inputs: bb's native assertions only warn (BB_DISABLE_ASSERTS), so bb's own witness generation builds the
+// recursive verifier circuit over them; the circuit checker and the builder's first recorded failure name the
+// in-circuit constraint each breaks. A malicious prover also picks the helper witnesses (quotients, borrows, hints)
+// bb generates here, so this supports, and the source reading of each constraint establishes, that none satisfies it.
 TEST_F(MoeInfinityProbe, MaliciousProverWitnesses)
 {
     auto builder = inner_circuit();
