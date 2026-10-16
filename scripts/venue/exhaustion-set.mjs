@@ -13,8 +13,21 @@ import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { build, root } from "./exhaustion-build.mjs";
 import { EMPTY_SUBTREES } from "../../dist/ergo-exhaustion.js";
-import { circuitIdentities, EXHAUSTION_CIRCUITS, EXHAUSTION_SET_MANIFEST } from "../../dist/ergo-exhaustion-set.js";
-import { readExhaustionCircuits } from "../../dist/ergo-exhaustion-pool.js";
+import { circuitIdentities, EXHAUSTION_CIRCUITS, EXHAUSTION_KEY_BYTES, EXHAUSTION_SET_MANIFEST } from "../../dist/ergo-exhaustion-set.js";
+
+/** The circuits as exhaustion-build.mjs writes them: `<name>/program.json`, `<name>/vk/vk` and `<name>/vk/vk_hash`
+ * under `directory`, with the leaves' slot counts read from their programs' parameters. */
+function readBuilt(directory) {
+  const circuits = Object.fromEntries(EXHAUSTION_CIRCUITS.map(name => {
+    const program = JSON.parse(readFileSync(path.join(directory, name, "program.json"), "utf8"));
+    const vk = new Uint8Array(readFileSync(path.join(directory, name, "vk", "vk")));
+    const hash = readFileSync(path.join(directory, name, "vk", "vk_hash"));
+    if (typeof program?.bytecode !== "string" || vk.length !== EXHAUSTION_KEY_BYTES || hash.length !== 32) throw new Error(`a malformed ${name} build`);
+    return [name, { program, vk, keyHash: BigInt(`0x${hash.toString("hex")}`) }];
+  }));
+  const length = (circuit, parameter) => circuits[circuit].program.abi?.parameters?.find(p => p.name === parameter)?.type.length;
+  return { sizes: { t: length("leaf-t", "tb"), m: length("leaf-m", "mb"), u: length("leaf-u", "uu") }, circuits };
+}
 
 const argv = process.argv.slice(2), write = argv.includes("--write");
 const { t, m, u } = EXHAUSTION_SET_MANIFEST.sizes;
@@ -22,7 +35,7 @@ const directory = path.resolve(argv.includes("--dir") ? argv[argv.indexOf("--dir
 if (!existsSync(path.join(directory, "fold-next", "vk", "vk_hash"))) {
   await build({ CT: t, CM: m, E: u }, { keys: true, directory, emptyRoot: "0x" + EMPTY_SUBTREES[32].toString(16).padStart(64, "0") });
 }
-const circuits = readExhaustionCircuits(directory);
+const circuits = readBuilt(directory);
 let failed = false;
 const compare = (file, expected) => {
   const at = path.join(root, file), held = existsSync(at) ? readFileSync(at, "utf8") : undefined;

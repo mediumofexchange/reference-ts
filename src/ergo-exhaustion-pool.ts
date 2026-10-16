@@ -19,42 +19,13 @@ import type { Barretenberg } from "@aztec/bb.js";
 import { blake2b } from "@noble/hashes/blake2b.js";
 import { sha256 } from "@noble/hashes/sha2.js";
 import { bytesToHex } from "@noble/hashes/utils.js";
-import { compareBytes, copyBytes, EncodingError } from "./bytes.js";
-import { EMPTY_SUBTREES, foldPublicInputs, MAP_DEPTH, type Fold, type FoldInputs, type MapUpdate } from "./ergo-exhaustion.js";
-import { EXHAUSTION_CIRCUITS, EXHAUSTION_KEY_BYTES, EXHAUSTION_PROOF_BYTES, type BuiltCircuit, type ExhaustionCircuit, type ExhaustionCircuits }
-  from "./ergo-exhaustion-set.js";
-import { foldStateInputs, isPeriodEnd, leavesOf, stateEnd, stateHash, type ExhaustionLeaf, type LeafSizes, type PeriodLeaves }
-  from "./ergo-exhaustion-prover.js";
-import type { ServedBlock } from "./ergo-exhaustion-server.js";
+import { compareBytes, copyBytes } from "./bytes.js";
+import { EMPTY_SUBTREES, foldPublicInputs, MAP_DEPTH, type FoldInputs } from "./ergo-exhaustion.js";
+import { EXHAUSTION_CIRCUITS, EXHAUSTION_PROOF_BYTES, type ExhaustionCircuit, type ExhaustionCircuits } from "./ergo-exhaustion-set.js";
+import { foldStateInputs, isPeriodEnd, leavesOf, stateEnd, stateHash, type LeafSizes, type PeriodLeaves } from "./ergo-exhaustion-prover.js";
+import type { ServerPeriod } from "./ergo-exhaustion-server.js";
 import { fieldToHex, limbsOf } from "./pool/field.js";
-import { keyedVerifier, startExhaustionBackend, type CompiledProgram, type KeyedVerifier, type ProvingParameters }
-  from "./pool/proof-verifier.js";
-
-export { circuitIdentities, EXHAUSTION_CIRCUITS, EXHAUSTION_PROOF_BYTES, type BuiltCircuit, type ExhaustionCircuit,
-  type ExhaustionCircuits } from "./ergo-exhaustion-set.js";
-
-/** A parameter's array length in a program's ABI. */
-function abiLength(program: CompiledProgram, name: string): number {
-  const abi = (program as unknown as { abi?: { parameters?: { name: string; type: { kind: string; length?: number } }[] } }).abi;
-  const length = abi?.parameters?.find(p => p.name === name)?.type.length;
-  if (!Number.isSafeInteger(length) || length! <= 0) throw new EncodingError(`a leaf program without its ${name} array`);
-  return length!;
-}
-
-/** The circuits as `scripts/venue/exhaustion-build.mjs` writes them: `<name>/program.json`, `<name>/vk/vk` and
- * `<name>/vk/vk_hash` under `directory`. Nothing here judges them: a set's identity names what was read. */
-export function readExhaustionCircuits(directory: string): ExhaustionCircuits {
-  const circuits = Object.fromEntries(EXHAUSTION_CIRCUITS.map(name => {
-    const program = JSON.parse(readFileSync(join(directory, name, "program.json"), "utf8")) as CompiledProgram;
-    const vk = new Uint8Array(readFileSync(join(directory, name, "vk", "vk")));
-    const hash = readFileSync(join(directory, name, "vk", "vk_hash"));
-    if (typeof program?.bytecode !== "string" || vk.length !== EXHAUSTION_KEY_BYTES || hash.length !== 32) throw new EncodingError(`a malformed ${name} build`);
-    return [name, Object.freeze({ program, vk, keyHash: BigInt(`0x${hash.toString("hex")}`) })];
-  })) as Record<ExhaustionCircuit, BuiltCircuit>;
-  const sizes = Object.freeze({ t: abiLength(circuits["leaf-t"].program, "tb"), m: abiLength(circuits["leaf-m"].program, "mb"),
-    u: abiLength(circuits["leaf-u"].program, "uu") });
-  return Object.freeze({ sizes, circuits: Object.freeze(circuits) });
-}
+import { keyedVerifier, startExhaustionBackend, type KeyedVerifier, type ProvingParameters } from "./pool/proof-verifier.js";
 
 /** A proof as the pool holds it: its bytes and the public inputs it carries. */
 export interface ExhaustionProof { readonly circuit: ExhaustionCircuit; readonly proof: Uint8Array; readonly publicInputs: readonly bigint[] }
@@ -163,15 +134,6 @@ export function proofDirectory(directory: string): ProofStore {
   };
 }
 
-/** A period as `ExhaustionServer` hands it to `prove`: where it begins, its blocks, the map's updates over them and the
- * fold it continues (none for a first fold). */
-export interface ServedPeriod {
-  readonly begin: { readonly id: Uint8Array; readonly height: bigint; readonly root: bigint };
-  readonly blocks: readonly ServedBlock[];
-  readonly updates: readonly MapUpdate[];
-  readonly previous: Fold | undefined;
-}
-
 /** What a period's proving did: its leaves by kind, its nodes, and how many proofs were made rather than kept. */
 export interface PeriodProved {
   readonly leaves: { readonly t: number; readonly m: number; readonly u: number };
@@ -227,7 +189,7 @@ export class ExhaustionPool {
   get last(): PeriodProved | undefined { return this.#last; }
 
   /** The period's leaves, checked to end where `inputs` say with the map's root: a disagreement refuses `PERIOD`. */
-  leaves(inputs: FoldInputs, period: ServedPeriod): PeriodLeaves {
+  leaves(inputs: FoldInputs, period: ServerPeriod): PeriodLeaves {
     // Each header must be its block's and name the one before as its parent: the circuits refuse a break at its leaf,
     // after the leaves before it are proved.
     let parent = period.begin.id;
@@ -253,7 +215,7 @@ export class ExhaustionPool {
   /** Whether the period continues what its fold continues: a first fold's from the start with the empty map, a next
    * fold's from its previous fold's end with that fold's root, under the same start and key hash, the previous fold's
    * proof verifying under its key. The circuits check the same, but only at the fold, after every leaf is proved. */
-  async #continues(first: boolean, inputs: FoldInputs, period: ServedPeriod): Promise<void> {
+  async #continues(first: boolean, inputs: FoldInputs, period: ServerPeriod): Promise<void> {
     const { begin, previous } = period;
     const refuse = (why: string): never => { throw new ExhaustionProverError("PERIOD", `the period ${why}`); };
     if (first) {
@@ -276,7 +238,7 @@ export class ExhaustionPool {
   }
 
   /** The fold proof for `inputs` over `period`. */
-  async fold(first: boolean, inputs: FoldInputs, period: ServedPeriod): Promise<Uint8Array> {
+  async fold(first: boolean, inputs: FoldInputs, period: ServerPeriod): Promise<Uint8Array> {
     const started = Date.now();
     const publicInputs = foldPublicInputs(inputs);
     if (publicInputs === undefined || inputs.foldKeyHash !== this.foldKeyHash) throw new ExhaustionProverError("PERIOD", "fold inputs this set does not prove");
@@ -368,6 +330,3 @@ export class ExhaustionPool {
     return proof;
   }
 }
-
-/** The leaves' kinds in order, for a log or a report. */
-export const leafKinds = (leaves: readonly ExhaustionLeaf[]): string => leaves.map(l => l.kind).join("");

@@ -4,10 +4,9 @@ import { join } from "node:path";
 import { sha256 } from "@noble/hashes/sha2.js";
 import { describe, expect, it } from "vitest";
 import { foldPublicInputs, type Fold, type FoldInputs } from "../src/ergo-exhaustion.js";
-import {
-  EXHAUSTION_CIRCUITS, EXHAUSTION_PROOF_BYTES, ExhaustionPool, ExhaustionProverError, type ExhaustionBackend, type ExhaustionCircuit,
-  proofDirectory, type ExhaustionCircuits, type ExhaustionProof, type ProofStore,
-} from "../src/ergo-exhaustion-pool.js";
+import { ExhaustionPool, ExhaustionProverError, proofDirectory, type ExhaustionBackend, type ExhaustionProof, type ProofStore }
+  from "../src/ergo-exhaustion-pool.js";
+import { EXHAUSTION_CIRCUITS, EXHAUSTION_PROOF_BYTES, type ExhaustionCircuit, type ExhaustionCircuits } from "../src/ergo-exhaustion-set.js";
 import { ExhaustionServer, type ServedBlock } from "../src/ergo-exhaustion-server.js";
 import { fieldToHex } from "../src/pool/field.js";
 import { Chain, plainOutput, recordOutput, transaction } from "../src/ergo-synthetic.js";
