@@ -16,21 +16,22 @@
 // Days are recorded in scratch/exhaustion-corpus/<day>.json (ERGO_NODE names the node; https://node.ergo.watch by
 // default); a stopped fetch resumes from the blocks it kept. Run after `npm run build`; `--execute` needs NARGO (the
 // pinned nargo) and compiles the shipped circuits once into scratch/exhaustion-programs (about nine minutes).
-import { execFile } from "node:child_process";
+import { execFile, execFileSync } from "node:child_process";
 import { createHash, randomUUID } from "node:crypto";
-import { appendFileSync, cpSync, existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
+import { appendFileSync, cpSync, existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { cpus } from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
 import { blake2b } from "@noble/hashes/blake2b.js";
 import { craftedTransactions, syntheticPeriod } from "./exhaustion-periods.mjs";
 import { parseNodeJson, supplyBlock, supplyHeader } from "../../dist/ergo-supplier.js";
+import { autolykosPowValid, parseErgoHeader } from "../../dist/ergo-headers.js";
 import { sectionMatchesRoot, shapedOutputs } from "../../dist/ergo-profile.js";
 import { scanTransaction } from "../../dist/ergo-scan.js";
 import { EMPTY_SUBTREES, entryChain, MAP_DEPTH, mapLeaf, mapNode, SubjectMap, subjectKey } from "../../dist/ergo-exhaustion.js";
-import { foldStateInputs, isPeriodEnd, periodLeaves, startState, stateEnd, transactionLeaf } from "../../dist/ergo-exhaustion-prover.js";
+import { foldStateInputs, isPeriodEnd, periodLeaves, startState, stateEnd, stateHash, transactionLeaf } from "../../dist/ergo-exhaustion-prover.js";
 import { EXHAUSTION_PROOF_BYTES, EXHAUSTION_SET_MANIFEST, exhaustionKeys } from "../../dist/ergo-exhaustion-set.js";
-import { exhaustionPrograms, proverToml } from "../../dist/ergo-exhaustion-programs.js";
+import { crateName, exhaustionPrograms, proverToml } from "../../dist/ergo-exhaustion-programs.js";
 import { fieldToHex, limbsOf } from "../../dist/pool/field.js";
 
 const root = path.resolve(import.meta.dirname, "../..");
@@ -48,7 +49,28 @@ const PERIOD = 64;
 
 const argv = process.argv.slice(2);
 const option = name => (argv.includes(name) ? argv[argv.indexOf(name) + 1] : undefined);
+/** A count option: absent, or a positive integer. */
+const count = name => {
+  const value = option(name);
+  if (value === undefined && !argv.includes(name)) return undefined;
+  if (!/^[1-9]\d*$/.test(value ?? "")) throw new Error(`${name} takes a positive integer`);
+  return Number(value);
+};
 const positional = argv.filter((a, i) => !a.startsWith("--") && !argv[i - 1]?.startsWith("--")).slice(1);
+/** The named days asked for (all where none is named); a name outside the corpus is refused. */
+const namedDays = () => {
+  for (const name of positional) if (!CORPUS.some(d => d.name === name)) throw new Error(`${name} is not a corpus day`);
+  return CORPUS.filter(d => positional.length === 0 || positional.includes(d.name));
+};
+/** A `.part` file's kept lines; a last line cut off mid-write is dropped (its block is fetched again). */
+const partLines = file => {
+  if (!existsSync(file)) return [];
+  const lines = readFileSync(file, "utf8").split("\n").filter(Boolean), out = [];
+  lines.forEach((line, i) => {
+    try { out.push(JSON.parse(line)); } catch (error) { if (i !== lines.length - 1) throw error; }
+  });
+  return out;
+};
 const hex = bytes => Buffer.from(bytes).toString("hex");
 const unhex = x => Uint8Array.from(Buffer.from(x, "hex"));
 const sha256 = bytes => createHash("sha256").update(bytes).digest("hex");
@@ -69,8 +91,7 @@ async function text(p) {
  * (unsigned bytes and witness ids). A transaction the node states with bytes that do not hash to its id (Next 4 (cd))
  * is recorded by id under `unsupplied`, and its block without a section. Kept blocks go to `file.part` as they come. */
 async function record(first, last, file) {
-  const part = `${file}.part`, kept = new Map();
-  if (existsSync(part)) for (const line of readFileSync(part, "utf8").split("\n")) if (line) { const b = JSON.parse(line); kept.set(b.height, b); }
+  const part = `${file}.part`, kept = new Map(partLines(part).map(b => [b.height, b]));
   const headers = new Map();
   for (let h = first - 1; h <= last; h += 100) {
     for (const s of parseNodeJson(await text(`/blocks/chainSlice?fromHeight=${h - 1}&toHeight=${Math.min(last, h + 99)}`))) {
@@ -117,8 +138,7 @@ async function record(first, last, file) {
  * and its root reproduced, keeping only counts and any transaction stated with bytes that do not hash to its id. Kept
  * lines (`file.part`) resume a stopped scan; the summary goes to `file`. */
 async function scan(first, last, file) {
-  const part = `${file}.part`, kept = new Map();
-  if (existsSync(part)) for (const line of readFileSync(part, "utf8").split("\n")) if (line) { const b = JSON.parse(line); kept.set(b.height, b); }
+  const part = `${file}.part`, kept = new Map(partLines(part).map(b => [b.height, b]));
   const todo = [];
   for (let h = first; h <= last; h++) if (!kept.has(h)) todo.push(h);
   const ids = new Map();
@@ -149,7 +169,8 @@ async function scan(first, last, file) {
       if (++done % 2000 === 0) console.log(`scan: ${kept.size} of ${last - first + 1} blocks, ${((Date.now() - started) / 60000).toFixed(0)} min`);
     }
   };
-  // Workers take heights in order and in chunks of the header batch, so each batch is read once.
+  // Workers take heights in order; at a batch's first heights two may read the same batch (a cost, not a gap: the parent
+  // links below are checked over every line).
   await Promise.all(Array.from({ length: 3 }, work));
   const lines = Array.from({ length: last - first + 1 }, (_, i) => kept.get(first + i));
   lines.forEach((l, i) => { if (i > 0 && l.parent !== lines[i - 1].id) throw new Error(`block ${l.height} does not follow the scanned ${l.height - 1}: scan again`); });
@@ -166,17 +187,26 @@ async function scan(first, last, file) {
 
 // ---- check -------------------------------------------------------------------------------------------------------
 
-/** A recorded day as the prover reads blocks, re-authenticated here: ids from the bytes, parents, heights, roots. */
+/** A recorded day as the prover reads blocks, re-authenticated here: each header parsed in the node's canonical form
+ * (venue-ergo §3) with its work, its id from the bytes, its parent and its height read from the bytes, each section's
+ * root; a block carries a section or the ids it could not be copied with, never neither. */
 function readDay(file) {
   const data = JSON.parse(readFileSync(file, "utf8"));
-  let parent = { id: unhex(data.parent.id), height: BigInt(data.parent.height) };
-  if (!same(blake2b(unhex(data.parent.bytes), { dkLen: 32 }), parent.id)) throw new Error("the parent's id is not its bytes'");
+  const parsed = bytes => {
+    const header = parseErgoHeader(bytes);
+    if (header === undefined || !autolykosPowValid(header)) throw new Error(`a header that is not canonical or lacks its work: ${hex(bytes).slice(0, 80)}`);
+    return header;
+  };
+  const top = parsed(unhex(data.parent.bytes));
+  let parent = { id: top.id, height: top.height };
+  if (!same(top.id, unhex(data.parent.id)) || top.height !== BigInt(data.parent.height)) throw new Error("the parent is not its bytes'");
   const start = parent, blocks = [];
   for (const b of data.blocks) {
-    const header = unhex(b.bytes), id = blake2b(header, { dkLen: 32 });
-    if (!same(id, unhex(b.id)) || !same(header.subarray(1, 33), parent.id) || BigInt(b.height) !== parent.height + 1n) {
+    const header = unhex(b.bytes), read = parsed(header), id = read.id;
+    if (!same(id, unhex(b.id)) || !same(read.parentId, parent.id) || read.height !== parent.height + 1n || BigInt(b.height) !== read.height) {
       throw new Error(`block ${b.height} does not follow its parent`);
     }
+    if ((b.txs === undefined) === (b.unsupplied === undefined)) throw new Error(`block ${b.height} has no section and names nothing unsupplied`);
     const transactions = b.txs?.map(x => ({ unsigned: unhex(x.u), witnessId: unhex(x.w) }));
     if (transactions && !sectionMatchesRoot(transactions.map(t => ({ id: blake2b(t.unsigned, { dkLen: 32 }), witnessId: t.witnessId })), header.subarray(65, 97))) {
       throw new Error(`block ${b.height}'s section does not reproduce its root`);
@@ -235,15 +265,17 @@ function agreement(day) {
 }
 
 /** Witnesses by `nargo execute` over copies of the kept crates, `workers` at a time; a refusal is the circuit's message.
- * nargo holds a lock on a crate's manifest while it executes, so each worker runs in a copy of its own. */
+ * nargo holds a lock on a crate's manifest while it executes, so each worker runs in a copy of its own (this process's).
+ * `programs()` reads every copy's compiled bytecode identity, which must still be the manifest's after the run (nargo
+ * compiles a copy again, unchecked, where it does not take the kept program as its own). */
 function executor(nargo, directory, workers) {
   const run = promisify(execFile), env = { ...process.env };
   delete env.NOIR_LOG;
-  const copies = path.join(store, "crates");
+  const copies = path.join(store, `crates-${process.pid}`);
   rmSync(copies, { recursive: true, force: true });
   for (let w = 0; w < workers; w++) cpSync(directory, path.join(copies, String(w)), { recursive: true });
   const free = Array.from({ length: workers }, (_, w) => w), waiting = [];
-  return async (circuit, inputs) => {
+  const execute = async (circuit, inputs) => {
     const toml = proverToml(inputs);
     // A finishing execution hands its copy to the next waiting one, so at most `workers` run.
     const worker = free.length ? free.pop() : await new Promise(resolve => waiting.push(resolve));
@@ -263,6 +295,12 @@ function executor(nargo, directory, workers) {
       else free.push(worker);
     }
   };
+  execute.programs = () => Array.from({ length: workers }, (_, w) => Object.keys(EXHAUSTION_SET_MANIFEST.circuits).every(circuit => {
+    const program = JSON.parse(readFileSync(path.join(copies, String(w), circuit, "target", `${crateName(circuit)}.json`), "utf8"));
+    return createHash("sha256").update(Buffer.from(program.bytecode, "base64")).digest("hex") === EXHAUSTION_SET_MANIFEST.circuits[circuit].bytecode;
+  })).every(Boolean);
+  execute.close = () => rmSync(copies, { recursive: true, force: true });
+  return execute;
 }
 
 const keys = exhaustionKeys();
@@ -278,21 +316,25 @@ async function execute(day, execute, log) {
   const sizes = EXHAUSTION_SET_MANIFEST.sizes, nodeKey = keyOf("node");
   const map = new SubjectMap(day.start.id, day.start.height);
   const result = { periods: 0, leaves: { t: 0, m: 0, u: 0 }, nodes: 0, folds: 0, refusals: [] };
-  const started = Date.now(), limit = Number(option("--limit") ?? day.blocks.length);
+  const started = Date.now(), limit = count("--limit") ?? day.blocks.length;
   const inFlight = new Set();
-  let previous;
+  let previous, previousEnd;
   for (let at = 0; at < Math.min(limit, day.blocks.length); at += PERIOD) {
     const blocks = day.blocks.slice(at, at + PERIOD);
     const run = periodLeaves(map, blocks, sizes, keys.node.keyHash);
     const label = `${blocks[0].height}–${blocks.at(-1).height}`;
     const refuse = (what, why) => { result.refusals.push({ period: label, what, why }); log(`REFUSED ${label} ${what}: ${why}`); };
     if (!isPeriodEnd(run.end) || run.end.u.root !== map.root || !same(stateEnd(run.end).id, blocks.at(-1).id)) refuse("period", "the leaves do not end at its last block with the map's root");
+    // Placeholder proofs check no fold's previous fold, so the join between folds is checked here: a period starts in
+    // the state its previous period ended in.
+    if (previousEnd !== undefined && stateHash(run.start) !== stateHash(previousEnd)) refuse("period", "does not start where the previous period ended");
+    previousEnd = run.end;
     // Leaves; each joins the next by its state hashes. A day's first leaf is also executed under an end state off by one,
-    // which must be refused: a control that the executions judge at all.
+    // which its circuit must refuse by name: a control that the executions judge at all.
     if (at === 0) {
       const [first] = run.leaves;
       result.control = { leaf: first.kind, refusal: (await execute(leafCircuit[first.kind], { ...first.inputs, sout: String(first.sout + 1n) })) ?? null };
-      if (result.control.refusal === null) refuse("control", "a leaf with another end state executes");
+      if (!/Assertion failed: .*end state/.test(result.control.refusal ?? "")) refuse("control", `a leaf with another end state: ${result.control.refusal ?? "executes"}`);
     }
     const work = run.leaves.map((l, i) => {
       result.leaves[l.kind]++;
@@ -344,23 +386,31 @@ const limbs = id => limbsOf(id).map(fieldToHex);
  * scanTransaction's and the leaf must execute. */
 async function crafted(execute) {
   const size = EXHAUSTION_SET_MANIFEST.sizes.t, s1 = startState(new Uint8Array(32).fill(1), 900000n, 0n);
-  const result = { transactions: 0, entries: 0, refusals: [] };
+  const result = { transactions: 0, grammatical: 0, entries: 0, refusals: [] };
   await Promise.all(craftedTransactions(size * 128).map(async (unsigned, index) => {
     const n = Math.max(1, Math.ceil(unsigned.length / 128));
     const slots = Array.from({ length: n }, (_, k) => ({ bytes: unsigned.subarray(k * 128, (k + 1) * 128), start: k === 0, newBlock: k === 0, last: k === n - 1 }));
-    const r = transactionLeaf(s1, slots, size, keys.node.keyHash), scanned = scanTransaction(unsigned);
+    const r = transactionLeaf(s1, slots, size, keys.node.keyHash), scanned = scanTransaction(unsigned), framed = shapedOutputs(unsigned);
     const equal = scanned.length === r.entries.length && scanned.every((x, i) => BigInt(x.output) === r.entries[i].output &&
-      fieldToHex(BigInt("0x" + hex(x.subject.subarray(0, 16)))) === fieldToHex(r.entries[i].hi) && fieldToHex(BigInt("0x" + hex(x.subject.subarray(16)))) === fieldToHex(r.entries[i].lo));
+      limbs(x.subject).join() === [r.entries[i].hi, r.entries[i].lo].map(fieldToHex).join());
+    const framerEqual = framed === undefined || (framed.length === scanned.length && framed.every((x, i) => x.output === scanned[i].output && same(x.subject, scanned[i].subject)));
     const why = await execute("leaf-t", r.leaf.inputs);
     result.transactions++; result.entries += r.entries.length;
+    if (framed !== undefined) result.grammatical++;
     if (!equal) result.refusals.push({ index, why: "the prover's entries are not scanTransaction's" });
+    if (!framerEqual) result.refusals.push({ index, why: "the scan's entries are not the framer's" });
     if (why !== undefined) result.refusals.push({ index, why });
   }));
   return result;
 }
 
+/** What a verdict here depends on: this tool and its periods, the modules it runs (their built copies in dist/ come from
+ * these), the shipped circuit sources and the vendored sponge they share. */
 const files = ["scripts/venue/exhaustion-corpus.mjs", "scripts/venue/exhaustion-periods.mjs", "src/ergo-scan.ts", "src/ergo-profile.ts",
-  "src/ergo-exhaustion.ts", "src/ergo-exhaustion-prover.ts", "src/ergo-exhaustion-set.ts", "src/ergo-exhaustion-programs.ts", "src/ergo-supplier.ts"];
+  "src/ergo-headers.ts", "src/ergo-exhaustion.ts", "src/ergo-exhaustion-prover.ts", "src/ergo-exhaustion-set.ts", "src/ergo-exhaustion-programs.ts",
+  "src/ergo-supplier.ts", "src/ergo-synthetic.ts", "src/pool/poseidon2.ts", "src/pool/field.ts", "src/bytes.ts", "src/record-range.ts",
+  "src/contexts.ts", "src/exhaustion-circuits/exhaustion.nr", "src/exhaustion-circuits/blake2b.nr",
+  ...["leaf-t", "leaf-m", "leaf-u", "node", "fold-first", "fold-next"].map(c => `src/exhaustion-circuits/${c}.nr`), "src/pool/circuits/vendor/poseidon2.nr"];
 
 const command = argv[0];
 if (command === "scan") {
@@ -371,16 +421,18 @@ if (command === "scan") {
 } else if (command === "fetch") {
   mkdirSync(store, { recursive: true });
   if (positional.length === 3 && /^\d+$/.test(positional[0])) await record(Number(positional[0]), Number(positional[1]), positional[2]);
-  else for (const day of CORPUS.filter(d => positional.length === 0 || positional.includes(d.name))) {
+  else for (const day of namedDays()) {
     const file = path.join(store, `${day.name}.json`);
     if (existsSync(file)) { console.log(`${day.name}: kept`); continue; }
     await record(day.first, day.last, file);
   }
 } else if (command === "check") {
-  const workers = option("--execute") === undefined ? 0 : Number(option("--execute"));
-  if (!Number.isSafeInteger(workers) || workers < 0) throw new Error("--execute takes a number of workers");
+  const workers = count("--execute") ?? 0, limit = count("--limit"), days = namedDays();
+  const whole = positional.length === 0 && limit === undefined;
   const report = {
     specification: "succinct-read §6 (agreement corpus); venue-ergo §§3–6", node, host: cpus()[0]?.model,
+    revision: execFileSync("git", ["-C", root, "rev-parse", "HEAD"], { encoding: "utf8" }).trim(),
+    run: { days: days.map(d => d.name), workers, limit: limit ?? null, whole },
     sources: Object.fromEntries(files.map(f => [f, sha256(readFileSync(path.join(root, f)))])),
     circuits: workers ? { compiler: EXHAUSTION_SET_MANIFEST.compiler, sizes: EXHAUSTION_SET_MANIFEST.sizes,
       bytecode: Object.fromEntries(Object.entries(EXHAUSTION_SET_MANIFEST.circuits).map(([k, v]) => [k, v.bytecode])) } : undefined,
@@ -388,6 +440,7 @@ if (command === "scan") {
   };
   let failed = 0;
   const log = line => console.log(line);
+  const fail = message => { failed++; console.error(`FAIL ${message}`); };
   let run;
   if (workers) {
     if (!process.env.NARGO) throw new Error("--execute needs NARGO, the pinned nargo");
@@ -395,7 +448,12 @@ if (command === "scan") {
     exhaustionPrograms({ nargo: process.env.NARGO, directory, log });
     run = executor(process.env.NARGO, directory, workers);
   }
-  for (const day of CORPUS.filter(d => positional.length === 0 || positional.includes(d.name))) {
+  /** An execution that judged nothing, or whose control was not refused by name, fails like a refusal. */
+  const judged = (label, execution) => {
+    if (execution.periods === 0 || execution.control === undefined) fail(`${label}: nothing executed`);
+    if (execution.refusals.length) fail(`${label}: ${execution.refusals.length} refusals`);
+  };
+  for (const day of days) {
     const file = path.join(store, `${day.name}.json`);
     if (!existsSync(file)) throw new Error(`${day.name} is not recorded: run fetch first`);
     const read = readDay(file);
@@ -404,17 +462,16 @@ if (command === "scan") {
       unsignedBytes: read.blocks.reduce((n, b) => n + (b.transactions ?? []).reduce((m, t) => m + t.unsigned.length, 0), 0),
       unsupplied: read.blocks.flatMap(b => (b.unsupplied ?? []).map(id => ({ height: Number(b.height), id }))) };
     if (read.blocks.length !== day.last - day.first + 1 || read.blocks[0].height !== BigInt(day.first)) throw new Error(`${day.name}: not the named heights`);
+    // A block whose section could not be copied (Next 4 (cd)) is a day not read: it fails whether or not it executes.
+    if (entry.unsupplied.length) fail(`${day.name}: ${entry.unsupplied.length} transactions without their bytes`);
     entry.agreement = agreement(read);
-    if (entry.agreement.disagreements.length || !entry.agreement.rootsEqual) { failed++; console.error(`FAIL ${day.name}: the scan and the framer disagree`); }
+    if (entry.agreement.disagreements.length || !entry.agreement.rootsEqual) fail(`${day.name}: the scan and the framer disagree`);
     console.log(`${day.name}: ${entry.blocks} blocks, ${entry.agreement.transactions} transactions (${entry.agreement.grammatical} grammatical, ` +
       `${entry.agreement.framerEntries} framer entries; ${entry.agreement.ungrammatical} outside, ${entry.agreement.scanEntriesOutside} scan entries), ` +
       `versions ${JSON.stringify(entry.agreement.versions)}, ${entry.unsupplied.length} unsupplied`);
-    if (workers) {
-      if (entry.unsupplied.length) { entry.execution = { skipped: "a block without a section (Next 4 (cd))" }; failed++; }
-      else {
-        entry.execution = await execute(read, run, line => log(`${day.name} ${line}`));
-        if (entry.execution.refusals.length) { failed++; console.error(`FAIL ${day.name}: ${entry.execution.refusals.length} refusals`); }
-      }
+    if (workers && !entry.unsupplied.length) {
+      entry.execution = await execute(read, run, line => log(`${day.name} ${line}`));
+      judged(day.name, entry.execution);
     }
     report.days.push(entry);
   }
@@ -424,17 +481,28 @@ if (command === "scan") {
     const synthetic = syntheticPeriod(9);
     report.synthetic = { agreement: agreement({ ...synthetic, blocks: synthetic.blocks.map(b => ({ ...b, version: b.header[0] })) }) };
     report.synthetic.execution = await execute(synthetic, run, line => log(`synthetic ${line}`));
-    if (report.synthetic.execution.refusals.length || !report.synthetic.agreement.rootsEqual || report.synthetic.agreement.disagreements.length) {
-      failed++; console.error("FAIL synthetic");
-    }
+    judged("synthetic", report.synthetic.execution);
+    if (!report.synthetic.agreement.rootsEqual || report.synthetic.agreement.disagreements.length) fail("synthetic: the scan and the framer disagree");
     report.crafted = await crafted(run);
-    if (report.crafted.refusals.length) { failed++; console.error(`FAIL crafted: ${JSON.stringify(report.crafted.refusals.slice(0, 5))}`); }
-    console.log(`crafted: ${report.crafted.transactions} transactions, ${report.crafted.entries} entries, each a full-size leaf executed`);
+    if (report.crafted.refusals.length) fail(`crafted: ${JSON.stringify(report.crafted.refusals.slice(0, 5))}`);
+    console.log(`crafted: ${report.crafted.transactions} transactions (${report.crafted.grammatical} grammatical), ${report.crafted.entries} entries, each a full-size leaf executed`);
   }
-  report.result = failed === 0 ? "pass" : `${failed} failures`;
+  if (run) {
+    report.programsUnchanged = run.programs();
+    if (!report.programsUnchanged) fail("a crate copy's program is no longer the manifest's");
+    run.close();
+  }
+  // The (cd) scan, where it has run to its end: kept beside the days, produced by this tool's `scan`.
+  for (const name of existsSync(store) ? readdirSync(store).filter(n => /^scan-\d+-\d+\.json$/.test(n)) : []) {
+    const summary = JSON.parse(readFileSync(path.join(store, name), "utf8"));
+    (report.scans ??= []).push(summary);
+    if (summary.unsupplied.length || summary.rootMismatches.length) console.log(`${name}: ${summary.unsupplied.length} unsupplied, ${summary.rootMismatches.length} root mismatches (Next 4 (cd))`);
+  }
+  report.result = failed !== 0 ? `${failed} failures` : whole ? "pass" : "pass (partial: a limit or named days)";
   if (option("--report")) writeFileSync(option("--report"), `${JSON.stringify(report, null, 2)}\n`);
-  console.log(failed === 0 ? "exhaustion-corpus: pass" : `exhaustion-corpus: ${failed} failures`);
+  console.log(`exhaustion-corpus: ${report.result}`);
   if (failed) process.exitCode = 1;
 } else {
-  throw new Error("usage: exhaustion-corpus.mjs fetch [day ...] | fetch <first> <last> <out.json> | check [--execute <workers>] [--report <file>] [day ...]");
+  throw new Error("usage: exhaustion-corpus.mjs fetch [day ...] | fetch <first> <last> <out.json> | scan <first> <last> | " +
+    "check [--execute <workers>] [--limit <blocks>] [--report <file>] [day ...]");
 }
