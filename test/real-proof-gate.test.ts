@@ -83,18 +83,20 @@ describe("real-proof gate", () => {
 
 describe("real-proof groups", () => {
   // The serial check:pool:v3 before CI split it into groups; nothing may drop out (the proof-free offline transfer check
-  // moved to check:scripts); the trail check set (slice 36), its native run (slice 42) and the browser engine's proofs
-  // (slice 39) add their own groups.
+  // moved to check:scripts); the trail check set (slice 36), its native run (slice 42), the browser engine's proofs
+  // (slice 39) and the exhaustion circuits' full-size hostile set (slice 43) add their own groups.
   const serial = [
     "check.mjs", "store-check.mjs --ergo", "history-store-check.mjs",
     "recovery-store-check.mjs", "recovery-store-check.mjs --ergo", "succession-store-check.mjs", "succession-store-check.mjs --ergo",
     "scope-store-check.mjs", "scope-store-check.mjs --ergo", "redemption-store-check.mjs", "redemption-store-check.mjs --ergo",
-    "command-drill.mjs", "succinct-drill.mjs", "local-check.mjs", "check-set-check.mjs", "check-set-check.mjs --native",
-  ].map(label => `scripts/pool/v3/${label}`).concat(["scripts/browser/check.mjs --proofs", "scripts/browser/check.mjs --wallet"]);
+    "command-drill.mjs", "succinct-drill.mjs",
+  ].map(label => `scripts/pool/v3/${label}`).concat(["scripts/venue/exhaustion-check.mjs --shipped"],
+    ["local-check.mjs", "check-set-check.mjs", "check-set-check.mjs --native"].map(label => `scripts/pool/v3/${label}`),
+    ["scripts/browser/check.mjs --proofs", "scripts/browser/check.mjs --wallet"]);
 
   it("runs every script of the serial check once, each in one group", () => {
     expect(runner.SCRIPTS.map(entry => [entry.script, ...entry.args].join(" "))).toEqual(serial);
-    expect(runner.GROUPS).toEqual(["history", "stores", "redemption", "drill", "succinct", "replay", "check-set", "native", "browser"]);
+    expect(runner.GROUPS).toEqual(["history", "stores", "redemption", "drill", "succinct", "exhaustion", "replay", "check-set", "native", "browser"]);
     for (const group of runner.GROUPS) expect(runner.SCRIPTS.some(entry => entry.group === group)).toBe(true);
   });
 

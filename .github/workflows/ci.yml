@@ -76,12 +76,13 @@ jobs:
         with:
           path: scratch/private-payment-crs
           key: proving-parameters-${{ runner.os }}-${{ hashFiles('src/pool/parameters.ts', 'src/pool/parameter-files.ts') }}
-      # The succinct drill's replica proves the venue's exhaustion (slice 43): it compiles the shipped circuits once with
-      # the pinned native compiler (the hash pins the release asset), which also computes its witnesses, and their crates
-      # are cached under the sources, the manifest that pins them and the module that lays them out. Windows has no
-      # native backend and proves none.
+      # The succinct drill's replica proves the venue's exhaustion (slice 43), and the exhaustion group executes the
+      # hostile set on the same programs: both compile the shipped circuits once with the pinned native compiler (the
+      # hash pins the release asset), which also computes their witnesses, and their crates are cached under the
+      # sources, the manifest that pins them and the module that lays them out. Windows has no native backend and
+      # proves none.
       - name: Pinned nargo for the exhaustion circuits
-        if: matrix.group == 'succinct' && runner.os == 'Linux'
+        if: (matrix.group == 'succinct' || matrix.group == 'exhaustion') && runner.os == 'Linux'
         shell: bash
         run: |
           curl -fsSL -o "$RUNNER_TEMP/nargo.tar.gz" https://github.com/noir-lang/noir/releases/download/v1.0.0-beta.26/nargo-x86_64-unknown-linux-gnu.tar.gz
@@ -89,7 +90,7 @@ jobs:
           mkdir -p "$RUNNER_TEMP/nargo" && tar -xzf "$RUNNER_TEMP/nargo.tar.gz" -C "$RUNNER_TEMP/nargo"
           echo "NARGO=$RUNNER_TEMP/nargo/nargo" >> "$GITHUB_ENV"
       - name: Exhaustion programs cache
-        if: matrix.group == 'succinct' && runner.os == 'Linux'
+        if: (matrix.group == 'succinct' || matrix.group == 'exhaustion') && runner.os == 'Linux'
         uses: actions/cache@v4
         with:
           path: scratch/exhaustion-programs

@@ -29,6 +29,9 @@ export const SCRIPTS = Object.freeze([
   ]),
   { group: "drill", script: `${v3}/command-drill.mjs`, args: [], reports: [] },
   { group: "succinct", script: `${v3}/succinct-drill.mjs`, args: [], reports: [] },
+  // The exhaustion circuits' hostile set and every header version on the shipped full-size programs (succinct-read §6),
+  // executed by the pinned nargo, which CI installs on Linux; elsewhere the check records that it ran nothing.
+  { group: "exhaustion", script: "scripts/venue/exhaustion-check.mjs", args: ["--shipped"], reports: [] },
   { group: "replay", script: `${v3}/local-check.mjs`, args: [], reports: ["scratch/pool-v3-local-replay-results.json"] },
   { group: "check-set", script: `${v3}/check-set-check.mjs`, args: [], reports: ["docs/pool-v3-check-set-verification.json"] },
   // The same on the native binary bb.js bundles (slice 42), with a leaf and a node on WebAssembly for the rate; where the
