@@ -18,6 +18,7 @@ import { copyFileSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSy
 import { dirname, join, relative, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { spawnSync } from "node:child_process";
+import { copyBuildFiles } from "./build-files.mjs";
 
 const root = resolve(import.meta.dirname, "..");
 const sha256 = bytes => createHash("sha256").update(bytes).digest("hex");
@@ -169,7 +170,7 @@ function freshBuild() {
       "--outDir", out], { cwd: root, encoding: "utf8", windowsHide: true, timeout: 300_000 });
     assert.equal(result.status, 0, `tsc: ${result.error?.message ?? result.stdout}`);
     // The data files `npm run build` copies beside the modules.
-    for (const file of ["programs.json", "check-set.json", "check-set-programs.json"]) copyFileSync(join(root, "src", "pool", "v3", file), join(out, "pool", "v3", file));
+    copyBuildFiles(out);
     const dist = join(root, "dist"), files = dir => readdirSync(dir, { recursive: true, withFileTypes: true })
       .filter(entry => entry.isFile()).map(entry => relative(dir, join(entry.parentPath, entry.name))).sort();
     const shipped = files(dist), fresh = files(out);

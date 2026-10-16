@@ -20,27 +20,19 @@ import { Noir, type CompiledCircuit, type InputMap } from "@noir-lang/noir_js";
 import { blake2b } from "@noble/hashes/blake2b.js";
 import { sha256 } from "@noble/hashes/sha2.js";
 import { bytesToHex } from "@noble/hashes/utils.js";
-import { ByteWriter, compareBytes, copyBytes, EncodingError } from "./bytes.js";
-import { EMPTY_SUBTREES, foldPublicInputs, MAP_DEPTH, type ExhaustionSet, type Fold, type FoldInputs, type MapUpdate } from "./ergo-exhaustion.js";
+import { compareBytes, copyBytes, EncodingError } from "./bytes.js";
+import { EMPTY_SUBTREES, foldPublicInputs, MAP_DEPTH, type Fold, type FoldInputs, type MapUpdate } from "./ergo-exhaustion.js";
+import { EXHAUSTION_CIRCUITS, EXHAUSTION_KEY_BYTES, EXHAUSTION_PROOF_BYTES, type BuiltCircuit, type ExhaustionCircuit, type ExhaustionCircuits }
+  from "./ergo-exhaustion-set.js";
 import { foldStateInputs, isPeriodEnd, leavesOf, stateEnd, stateHash, type ExhaustionLeaf, type LeafSizes, type PeriodLeaves }
   from "./ergo-exhaustion-prover.js";
 import type { ServedBlock } from "./ergo-exhaustion-server.js";
-import { fieldToBytes, fieldToHex, limbsOf } from "./pool/field.js";
-import { EXHAUSTION_PARAMETERS } from "./pool/parameters.js";
+import { fieldToHex, limbsOf } from "./pool/field.js";
 import { keyedVerifier, startExhaustionBackend, type CompiledProgram, type KeyedVerifier, type ProvingParameters }
   from "./pool/proof-verifier.js";
 
-/** The exhaustion circuits (§4.3): the three leaves, the node, the first and the next fold. */
-export const EXHAUSTION_CIRCUITS = Object.freeze(["leaf-t", "leaf-m", "leaf-u", "node", "fold-first", "fold-next"] as const);
-export type ExhaustionCircuit = typeof EXHAUSTION_CIRCUITS[number];
-/** Every exhaustion proof's length: UltraHonk's under the recursive target. */
-export const EXHAUSTION_PROOF_BYTES = 458 * 32;
-const KEY_BYTES = 115 * 32;
-
-/** One built circuit: its program, its key's bytes and the key hash the backend derives. */
-export interface BuiltCircuit { readonly program: CompiledProgram; readonly vk: Uint8Array; readonly keyHash: bigint }
-/** A built set of the six circuits, with the leaves' sizes read from their programs. */
-export interface ExhaustionCircuits { readonly sizes: LeafSizes; readonly circuits: Readonly<Record<ExhaustionCircuit, BuiltCircuit>> }
+export { circuitExhaustionSet, circuitIdentities, EXHAUSTION_CIRCUITS, EXHAUSTION_PROOF_BYTES, type BuiltCircuit, type ExhaustionCircuit,
+  type ExhaustionCircuits } from "./ergo-exhaustion-set.js";
 
 /** A parameter's array length in a program's ABI. */
 function abiLength(program: CompiledProgram, name: string): number {
@@ -57,50 +49,12 @@ export function readExhaustionCircuits(directory: string): ExhaustionCircuits {
     const program = JSON.parse(readFileSync(join(directory, name, "program.json"), "utf8")) as CompiledProgram;
     const vk = new Uint8Array(readFileSync(join(directory, name, "vk", "vk")));
     const hash = readFileSync(join(directory, name, "vk", "vk_hash"));
-    if (typeof program?.bytecode !== "string" || vk.length !== KEY_BYTES || hash.length !== 32) throw new EncodingError(`a malformed ${name} build`);
+    if (typeof program?.bytecode !== "string" || vk.length !== EXHAUSTION_KEY_BYTES || hash.length !== 32) throw new EncodingError(`a malformed ${name} build`);
     return [name, Object.freeze({ program, vk, keyHash: BigInt(`0x${hash.toString("hex")}`) })];
   })) as Record<ExhaustionCircuit, BuiltCircuit>;
   const sizes = Object.freeze({ t: abiLength(circuits["leaf-t"].program, "tb"), m: abiLength(circuits["leaf-m"].program, "mb"),
     u: abiLength(circuits["leaf-u"].program, "uu") });
   return Object.freeze({ sizes, circuits: Object.freeze(circuits) });
-}
-
-/** Each circuit's identities as an adoption would name them (§6): SHA-256 of its decoded bytecode and of its key, and
- * its key hash. */
-export function circuitIdentities(circuits: ExhaustionCircuits): Readonly<Record<ExhaustionCircuit, { bytecode: string; vk: string; keyHash: string }>> {
-  return Object.freeze(Object.fromEntries(EXHAUSTION_CIRCUITS.map(name => {
-    const c = circuits.circuits[name];
-    return [name, Object.freeze({ bytecode: bytesToHex(sha256(Buffer.from(c.program.bytecode, "base64"))), vk: bytesToHex(sha256(c.vk)),
-      keyHash: fieldToHex(c.keyHash) })];
-  })) as Record<ExhaustionCircuit, { bytecode: string; vk: string; keyHash: string }>);
-}
-
-/**
- * A test set over built circuits from `start` (§§1, 6): its identity frames `moe/succinct/v1/set`, the label `test`,
- * each circuit's name, decoded bytecode's and key's SHA-256 and key hash in §4.3's order, the proving points' hash and
- * the start (not the sources, compiler or backend, which an adoption names, nor a check that each key hash derives from
- * its key: whoever builds the files chooses the set); a fold verifies under the pinned
- * first-fold or next-fold key on instances of `api`'s (which reads only `[1]_1` and `[x]_2`). `close` ends its verifier.
- */
-export function circuitExhaustionSet(circuits: ExhaustionCircuits, start: { readonly id: Uint8Array; readonly height: bigint },
-    api: Barretenberg): ExhaustionSet & { close(): Promise<void> } {
-  if (!(start?.id instanceof Uint8Array) || start.id.length !== 32 || typeof start.height !== "bigint" || start.height < 0n || start.height >= 1n << 32n) {
-    throw new EncodingError("invalid exhaustion start");
-  }
-  const encoder = new TextEncoder(), w = new ByteWriter(), ids = circuitIdentities(circuits);
-  for (const part of [encoder.encode("moe/succinct/v1/set"), encoder.encode("test"), encoder.encode("exhaustion-circuits"),
-    ...EXHAUSTION_CIRCUITS.flatMap(name => [encoder.encode(name), Buffer.from(ids[name].bytecode, "hex"), Buffer.from(ids[name].vk, "hex"),
-      fieldToBytes(circuits.circuits[name].keyHash)]),
-    Buffer.from(EXHAUSTION_PARAMETERS.g1, "hex"), copyBytes(start.id), fieldToBytes(start.height)]) w.lengthPrefixed(part);
-  const verifier: KeyedVerifier = keyedVerifier(api, [{ kind: 1, vk: circuits.circuits["fold-first"].vk, publicInputs: 8 },
-    { kind: 2, vk: circuits.circuits["fold-next"].vk, publicInputs: 8 }], EXHAUSTION_PROOF_BYTES);
-  return Object.freeze({
-    identity: sha256(w.finish()), test: true, start: Object.freeze({ id: copyBytes(start.id), height: start.height }),
-    foldKeyHash: circuits.circuits["fold-next"].keyHash,
-    verifyFold: async (first: boolean, inputs: readonly bigint[], proof: Uint8Array) =>
-      proof instanceof Uint8Array && proof.length === EXHAUSTION_PROOF_BYTES && await verifier.verify(first ? 1 : 2, inputs, proof),
-    close: () => verifier.close(),
-  });
 }
 
 /** A proof as the pool holds it: its bytes and the public inputs it carries. */

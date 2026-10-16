@@ -17,7 +17,7 @@ import { V3Replica } from "../pool/v3/replica.js";
 import { V3ServiceClientError } from "../pool/v3/service-client.js";
 import { createV3EvidenceService } from "../pool/v3/service-http.js";
 import { CommandError, event, flag, has, hex, openDirectory, parseArguments, print, required, UsageError, writeReplace } from "./common.js";
-import { directoryVerifier, openCoverProver, proverBackend } from "./backend.js";
+import { directoryVerifier, openCoverProver, openExhaustionProver, proverBackend, type ExhaustionProver } from "./backend.js";
 import { nameOf } from "./construction.js";
 import { initRole, keptBackings, keptReplay, openEvidence, originOf, passedOver, presentationCommand, readAt, replicaCommand, replicaUrls, served,
   serviceCommand, supplyCommand, supplyOf, termsCommand } from "./read.js";
@@ -63,8 +63,13 @@ const roundRefusal = (error: unknown): string | undefined =>
  * a replica's evidence is judged by every reader that takes it, so it reads completely (succinct-read §1).
  */
 async function serve(argv: readonly string[]): Promise<void> {
-  const args = parseArguments(argv, { dir: "value", verifiers: "value", prove: "switch", parameters: "value", prover: "value", ...SERVE_FLAGS }, 0);
-  if (has(args, "parameters") && !has(args, "prove")) throw new UsageError("--parameters names the check set's parameters for --prove");
+  const args = parseArguments(argv, { dir: "value", verifiers: "value", prove: "switch", parameters: "value", prover: "value",
+    "prove-exhaustion": "switch", nargo: "value", ...SERVE_FLAGS }, 0);
+  const exhausting = has(args, "prove-exhaustion");
+  if (has(args, "parameters") && !has(args, "prove") && !exhausting) {
+    throw new UsageError("--parameters names where --prove and --prove-exhaustion copy their parameters from");
+  }
+  if (has(args, "nargo") && !exhausting) throw new UsageError("--nargo names the compiler --prove-exhaustion compiles the exhaustion circuits with");
   if (has(args, "prover") && !has(args, "prove")) throw new UsageError("--prover names the backend --prove proves on");
   const native = has(args, "prove") && proverBackend(args);
   const directory = openDirectory(required(args, "dir"), "reader");
@@ -74,31 +79,34 @@ async function serve(argv: readonly string[]): Promise<void> {
   const { port, onion, ms } = serveFlags(args);
   const view = openView(directory);
   let evidence: EvidenceStore | undefined, verifier: Awaited<ReturnType<typeof directoryVerifier>> | undefined;
-  let covers: Awaited<ReturnType<typeof openCoverProver>> | undefined;
+  let covers: Awaited<ReturnType<typeof openCoverProver>> | undefined, periods: ExhaustionProver | undefined;
+  const log = (line: string) => process.stderr.write(`${line}\n`);
   try {
     verifier = await directoryVerifier(directory, args);
     evidence = openEvidence(directory, true);
-    if (has(args, "prove")) covers = await openCoverProver(directory, verifier!, flag(args, "parameters"), native, line => process.stderr.write(`${line}\n`));
-  } catch (error) { await covers?.close(); await verifier?.close(); evidence?.close(); view.close(); throw error; }
+    if (has(args, "prove")) covers = await openCoverProver(directory, verifier!, flag(args, "parameters"), native, log);
+    if (exhausting) periods = await openExhaustionProver(directory, flag(args, "parameters"), flag(args, "nargo") ?? "nargo", log);
+  } catch (error) { await periods?.close(); await covers?.close(); await verifier?.close(); evidence?.close(); view.close(); throw error; }
   const replica = new V3Replica(directory.file("evidence.db"), evidence, view.venue.id);
   // The venue's exhaustion under the directory's set, kept over the view's own rows (succinct-read §4.7, slice 43).
-  const exhaustion = exhaustionOver(view);
+  const exhaustion = exhaustionOver(directory, view, periods);
   const server = createV3EvidenceService(replica, exhaustion.source);
   // A stream its file could not finish (storage damage) ended short; the replica's owner is told.
   server.on("evidenceError", (error: unknown) => { event({ event: "evidence", code: "STORAGE", message: (error as Error).message }); });
   let listened: number;
-  try { listened = await listenLoopback(server, port); } catch (error) { await covers?.close(); await verifier?.close(); evidence.close(); view.close(); throw error; }
+  try { listened = await listenLoopback(server, port); } catch (error) {
+    await exhaustion.close(); await covers?.close(); await verifier?.close(); evidence.close(); view.close(); throw error;
+  }
   const local = `http://127.0.0.1:${listened}/`, url = onion === undefined ? local : `http://${onion}/`;
   writeReplace(directory.file("replica.json"), `${JSON.stringify({ url }, null, 2)}\n`);
   const { stopping, pause: rest } = untilStopped();
-  print({ status: "serving", url, port: listened, prover: covers?.prover.backend ?? null, backings: keptBackings(directory).map(hex),
+  print({ status: "serving", url, port: listened, prover: covers?.prover.backend ?? null, exhaustion: { set: hex(exhaustion.source.set), proving: exhausting }, backings: keptBackings(directory).map(hex),
     served: keptBackings(directory).map(backing => ({ backing, sequence: replica.selection(backing)?.selection.sequence ?? null })) });
   const round = async (): Promise<void> => {
-    const synced = await view.syncWitnessed(), at = synced.witnessedIndex, folded = exhaustion.source.supplier;
-    const before = (await folded.fold(1n << 62n))?.inputs.endHeight;
-    await exhaustion.advance();
-    const after = (await folded.fold(1n << 62n))?.inputs.endHeight;
-    if (after !== undefined && after !== before) print({ status: "exhaustion", set: hex(exhaustion.source.set), foldIndex: after - venue.anchorHeight - 1n });
+    const synced = await view.syncWitnessed(), at = synced.witnessedIndex;
+    // A period proves in the background, so rounds go on meanwhile; a line names each fold served.
+    await exhaustion.advance((fold, how) => print({ status: "exhaustion", set: hex(exhaustion.source.set), foldIndex: fold.inputs.endHeight - venue.anchorHeight - 1n,
+      how }));
     for (const backing of keptBackings(directory)) {
       if (stopping()) return;
       try {
@@ -129,7 +137,8 @@ async function serve(argv: readonly string[]): Promise<void> {
    * ones are not proved again), until PROVE_ROUND_MS has passed or the replica stops. */
   let failures = 0, retryAt = 0;
   const prove = async (): Promise<void> => {
-    if (covers === undefined || stopping() || Date.now() < retryAt) return;
+    // One proof at a time: covers wait while a period proves (each fills most of a 16-GB machine's memory).
+    if (covers === undefined || stopping() || Date.now() < retryAt || exhaustion.busy) return;
     const { prover } = covers, until = Date.now() + PROVE_ROUND_MS;
     try {
       const walked = await replica.prove(prover, { stop: () => Date.now() >= until || stopping() });
@@ -151,7 +160,7 @@ async function serve(argv: readonly string[]): Promise<void> {
     }
   } finally {
     await closeListener(server);
-    await covers?.close(); await verifier?.close(); evidence.close(); view.close();
+    await exhaustion.close(); await covers?.close(); await verifier?.close(); evidence.close(); view.close();
   }
   print({ status: "stopped" });
 }

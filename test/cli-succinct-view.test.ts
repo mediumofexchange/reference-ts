@@ -5,7 +5,10 @@ import { bytesToHex } from "@noble/hashes/utils.js";
 import { afterEach, describe, expect, it } from "vitest";
 import { ExhaustionServer } from "../src/ergo-exhaustion-server.js";
 import { transactionsRoot } from "../src/ergo-profile.js";
-import { exhaustionSet, openView, venueText } from "../src/cli/venue.js";
+import { testExhaustionSet } from "../src/ergo-exhaustion.js";
+import { exhaustionOver, openView, venueText } from "../src/cli/venue.js";
+import type { ExhaustionProver } from "../src/cli/backend.js";
+import type { Fold } from "../src/ergo-exhaustion.js";
 import { POOL_V3, type Construction } from "../src/pool/v3/construction.js";
 import { ReplayStore } from "../src/pool/v3/replay-store.js";
 import type { Directory } from "../src/cli/common.js";
@@ -23,19 +26,19 @@ const chain = new Chain(), A = chain.anchor.height, profile = chain.profile(3n),
 const blocks = chain.extend(chain.anchor, 12, i => i === 3 ? [transaction([recordOutput(1, s, new Uint8Array(136).fill(1)), plainOutput, recordOutput(2, s, new Uint8Array(233))])] : []);
 const root = (b: Block): Uint8Array => transactionsRoot(2n, b.section.map(x => ({ id: blake2b(x.unsigned, { dkLen: 32 }), witnessId: x.witnessId })));
 
-function directory(): Directory {
+function directory(succinct = true): Directory {
   mkdirSync(resolve("scratch"), { recursive: true });
   const path = mkdtempSync(resolve("scratch/cli-succinct-")); directories.push(path);
   writeFileSync(join(path, "venue.json"), venueText(profile, A));
   writeFileSync(join(path, "anchor.json"), `${JSON.stringify(chain.context.map(bytesToHex))}\n`);
-  return Object.freeze({ path, config: { role: "wallet" as const, nodes: ["http://127.0.0.1:9/"], read: "succinct" as const }, construction: POOL_V3 as Construction,
-    succinct: true, file: (name: string) => join(path, name) });
+  return Object.freeze({ path, config: { role: succinct ? "wallet" as const : "reader" as const, nodes: ["http://127.0.0.1:9/"],
+    ...(succinct ? { read: "succinct" as const } : {}) }, construction: POOL_V3 as Construction, succinct, file: (name: string) => join(path, name) });
 }
 
 describe("a succinct directory's view", () => {
   it("drops a set that disagrees, discards its view and kept answers, and reads without it", async () => {
-    const dir = directory(), file = { profile, anchorHeight: A, id: new Uint8Array(32), reference: { context: profile.reference, profile } } as never;
-    const set = exhaustionSet(file);
+    // A test set in place of the shipped one, whose folds take minutes to prove.
+    const dir = directory(), set = testExhaustionSet("cli-succinct-view.test", { id: profile.anchor, height: A }), exhaustion = { exhaustion: set };
     // A map over an altered block 3: one shaped output for s where the real transaction has two.
     const map = new ExhaustionServer({ start: set.start, foldKeyHash: set.foldKeyHash, prove: (f, i) => set.prove(f, i) });
     const honest = new ExhaustionServer({ start: set.start, foldKeyHash: set.foldKeyHash, prove: (f, i) => set.prove(f, i) });
@@ -47,7 +50,7 @@ describe("a succinct directory's view", () => {
     expect(kept.answersThrough()).toBe(5n);
     kept.close();
     // A copy of the view as it stood with indices read under the set, before the disagreement.
-    let view = openView(dir);
+    let view = openView(dir, exhaustion);
     view.venue.follow(s);
     const early = new ExhaustionServer({ start: set.start, foldKeyHash: set.foldKeyHash, prove: (f, i) => set.prove(f, i) });
     await early.extend(blocks.slice(0, 3).map(b => ({ id: b.id, transactionsRoot: root(b), section: b.section })));
@@ -55,12 +58,12 @@ describe("a succinct directory's view", () => {
     expect(view.venue.succinctSummary()!.succinctIndices).toBe(3n);
     view.close();
     copyFileSync(dir.file("succinct-venue.db"), dir.file("before.db"));
-    view = openView(dir);
+    view = openView(dir, exhaustion);
     await expect(view.venue.sync([new BranchSupplier("node", blocks.at(-1)!, chain)],
       [{ name: "unsound", fold: h => map.fold(h), key: (e, k, f) => map.key(e, k, f), transaction: (h, p) => honest.transaction(h, p) }]))
       .rejects.toThrow("the exhaustion set disagreed");
     view.close();
-    view = openView(dir);
+    view = openView(dir, exhaustion);
     try {
       expect(JSON.parse(readFileSync(dir.file("exhaustion.json"), "utf8"))).toEqual({ dropped: [bytesToHex(set.identity)] });
       expect(view.venue.disagreed()).toBe(false);
@@ -77,7 +80,50 @@ describe("a succinct directory's view", () => {
     // The copy restored after the drop holds indices read under the dropped set: it is dropped again.
     for (const suffix of ["-wal", "-shm"]) rmSync(dir.file(`succinct-venue.db${suffix}`), { force: true });
     copyFileSync(dir.file("before.db"), dir.file("succinct-venue.db"));
-    view = openView(dir);
+    view = openView(dir, exhaustion);
     try { expect(view.venue.succinctSummary()!.succinctIndices).toBe(0n); } finally { view.close(); }
+  });
+
+  it("proves a replica's periods in the background, keeps its fold and serves it again after a restart without a prover", async () => {
+    const dir = directory(false), set = testExhaustionSet("cli-succinct-view.test", { id: profile.anchor, height: A }), events: unknown[] = [];
+    const write = process.stderr.write.bind(process.stderr);
+    process.stderr.write = ((chunk: string) => { events.push(JSON.parse(chunk)); return true; }) as never;
+    try {
+      const view = openView(dir);
+      await view.venue.sync([new BranchSupplier("node", blocks[5]!, chain)]);
+      let release: () => void = () => {}, proved = 0, cleared = 0;
+      const prover: ExhaustionProver = {
+        fold: async (first, inputs) => { proved++; await new Promise<void>(done => { release = done; }); return set.prove(first, inputs); },
+        folded: () => { cleared++; }, close: async () => { release(); },
+      };
+      const replica = exhaustionOver(dir, view, prover, { exhaustion: set }), heard: [Fold, string][] = [];
+      await replica.advance((fold, how) => heard.push([fold, how]));
+      // The period proves in the background: a round goes on, and a second advance starts none meanwhile.
+      expect(replica.busy).toBe(true);
+      expect(await replica.source.supplier.fold(1n << 40n)).toBeUndefined();
+      await replica.advance(() => {});
+      expect(proved).toBe(1);
+      release();
+      await expect.poll(() => heard.length).toBe(1);
+      expect(replica.busy).toBe(false);
+      const [fold, how] = heard[0]!;
+      expect([how, fold.first, fold.inputs.endHeight, cleared]).toEqual(["proved", true, A + 1n + view.venue.witnessedIndex(), 1]);
+      expect(existsSync(dir.file("exhaustion-fold.bin"))).toBe(true);
+      await replica.close();
+      // Started again without a prover: the kept fold is verified, checked against the map and served again.
+      const again = exhaustionOver(dir, view, undefined, { exhaustion: set }), served: [Fold, string][] = [];
+      await again.advance((f, h) => served.push([f, h]));
+      expect(served).toEqual([[fold, "kept"]]);
+      expect(await again.source.supplier.fold(1n << 40n)).toEqual(fold);
+      // A kept fold of another set is passed over by name; one that is no fold too.
+      const other = exhaustionOver(dir, view, undefined, { exhaustion: testExhaustionSet("another", { id: profile.anchor, height: A }) });
+      await other.advance(() => { throw new Error("served"); });
+      expect(await other.source.supplier.fold(1n << 40n)).toBeUndefined();
+      writeFileSync(dir.file("exhaustion-fold.bin"), new Uint8Array(3));
+      await exhaustionOver(dir, view, undefined, { exhaustion: set }).advance(() => { throw new Error("served"); });
+      expect(events.map(e => (e as { code?: string }).code)).toEqual(["KEPT", "KEPT"]);
+      expect(String((events[0] as { message: string }).message)).toContain("another start or key hash");
+      view.close();
+    } finally { process.stderr.write = write; }
   });
 });

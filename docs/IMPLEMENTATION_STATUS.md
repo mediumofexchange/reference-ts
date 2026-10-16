@@ -146,9 +146,14 @@ folds 48 mainnet blocks with it, the reader taking each fold ([report](ergo-exha
 [slice 43](../decisions/2026-10.md#2026-10-15--prove-a-replicas-exhaustion-periods-in-a-resumable-prover-pool-from-pinned-222-points-and-fold-real-ergo-mainnet-blocks-slice-43-next-12)).
 The Ergo view reads the venue succinctly where its owner asks
 (`ErgoVenue`'s `succinct` option): headers natively, the subjects it follows below an exhaustion supplier's fold, sections
-natively above; a replica serves its map and test-set folds (`reader serve`, `ExhaustionServer`, `GET /exhaustion`) and a
-`--read succinct` directory's view reads them, which `npm test` holds to the complete view and CI's `succinct` group
-drives through the commands ([slice 43](../decisions/2026-10.md#2026-10-15--read-the-venue-succinctly-in-a-succinct-directorys-view-its-backings-subjects-below-a-replicas-fold-and-sections-natively-above-it-slice-43-next-12)).
+natively above; a replica serves its map (`reader serve`, `ExhaustionServer`, `GET /exhaustion`) and a `--read succinct`
+directory's view reads it, which `npm test` holds to the complete view
+([slice 43](../decisions/2026-10.md#2026-10-15--read-the-venue-succinctly-in-a-succinct-directorys-view-its-backings-subjects-below-a-replicas-fold-and-sections-natively-above-it-slice-43-next-12)).
+The commands read and serve under the circuit set the package ships (`src/ergo-exhaustion-set.ts`: keys, sources in
+`src/exhaustion-circuits/` and pinned identities, checked by `scripts/venue/exhaustion-set.mjs`); `reader serve
+--prove-exhaustion` compiles the sources with the pinned nargo (`src/ergo-exhaustion-programs.ts`) and proves periods
+with the pool in the background, keeping its latest fold, which a restarted replica adopts again
+(`ExhaustionServer.adopt`); CI's `succinct` group drives it through the commands on Linux (slice 43, decision of 2026-10-16).
 
 The holder's read path also runs in a browser engine (slice 39, [probes](POOL_DEPLOYMENT_PROBES.md#the-holders-read-path-in-a-browser-engine-slice-39)):
 `scripts/browser/build.mjs` bundles the library with `src/browser/`'s substitutes for node:sqlite (SQLite's

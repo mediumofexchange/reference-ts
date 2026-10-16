@@ -15,7 +15,7 @@ import { compile_program, createFileManager } from "@noir-lang/noir_wasm";
 import { foldFirst, foldNext, leafM, leafT, leafU, node } from "./exhaustion-sources.mjs";
 
 export const root = path.resolve(import.meta.dirname, "../..");
-const shared = path.join(import.meta.dirname, "exhaustion-circuits");
+const shared = path.join(root, "src/exhaustion-circuits");
 const sponge = path.join(root, "src/pool/circuits/vendor/poseidon2.nr");
 export const BB = path.join(root, `node_modules/@aztec/bb.js/build/${process.arch === "arm64" ? "arm64" : "amd64"}-${process.platform === "darwin" ? "macos" : "linux"}/bb`);
 export const CRS = process.env.CRS_PATH ?? path.join(root, "scratch/exhaustion-crs");
@@ -118,8 +118,8 @@ export const EXHAUSTION_SPECIFICATION = "succinct-read 282c925";
  * readers' sources, and `extra` for a report that depends on more. */
 export function sourceHashes(extra = []) {
   const files = ["scripts/venue/exhaustion-build.mjs", "scripts/venue/exhaustion-sources.mjs", "scripts/venue/exhaustion-periods.mjs",
-    "scripts/venue/exhaustion-check.mjs", "scripts/venue/exhaustion-prove.mjs", "scripts/venue/exhaustion-circuits/exhaustion.nr",
-    "scripts/venue/exhaustion-circuits/blake2b.nr", "src/pool/circuits/vendor/poseidon2.nr", "src/ergo-exhaustion-prover.ts", "src/ergo-exhaustion.ts",
+    "scripts/venue/exhaustion-check.mjs", "scripts/venue/exhaustion-prove.mjs", "src/exhaustion-circuits/exhaustion.nr",
+    "src/exhaustion-circuits/blake2b.nr", "src/pool/circuits/vendor/poseidon2.nr", "src/ergo-exhaustion-prover.ts", "src/ergo-exhaustion.ts",
     "src/ergo-scan.ts", "src/ergo-synthetic.ts", "src/ergo-profile.ts", "src/pool/poseidon2.ts", "src/pool/proof-verifier.ts", ...extra];
   return Object.fromEntries(files.map(file => [file, sha(Buffer.from(readFileSync(path.join(root, file), "utf8").replace(/\r\n/g, "\n"), "utf8"))]));
 }

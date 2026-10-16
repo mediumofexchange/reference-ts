@@ -20,8 +20,10 @@ import { ERGO_SYNTHETIC_REFERENCE, ERGO_TESTNET_REFERENCE, ergoProfileIdentity, 
   type ErgoReferenceContext } from "../ergo-profile.js";
 import { ErgoPublisher, ergoNodePublisher, payToPublicKeyTree, readPlainBox, rowOutbox, verifyErgoProof, type ErgoPublisherPersistence,
   type ErgoPublishingSupplier } from "../ergo-publisher.js";
-import { testExhaustionSet, type ExhaustionSet, type ExhaustionSupplier } from "../ergo-exhaustion.js";
-import { ExhaustionServer } from "../ergo-exhaustion-server.js";
+import { foldPublicInputs, type ExhaustionSet, type ExhaustionSupplier, type Fold } from "../ergo-exhaustion.js";
+import { ExhaustionServer, type ServedBlock } from "../ergo-exhaustion-server.js";
+import { shippedExhaustionSet } from "../ergo-exhaustion-set.js";
+import { decodeFold, encodeFold } from "../ergo-exhaustion-wire.js";
 import { ErgoVenueJournal } from "../ergo-store.js";
 import { EvidenceRefusal } from "../pool/v3/refusals.js";
 import { ReplayStore } from "../pool/v3/replay-store.js";
@@ -32,6 +34,7 @@ import { MempoolNode } from "../ergo-synthetic.js";
 import type { RecordKind } from "../record-range.js";
 import type { VenueReference } from "../pool/v3/guard.js";
 import { VenueError } from "../venue-error.js";
+import { directoryBackend, type ExhaustionProver } from "./backend.js";
 import { keptTerms } from "./terms.js";
 import { CommandError, event, fresh, openDirectory, parseArguments, print, readJson, readOptional, readSecret, required, UsageError, writeExclusive,
   writeReplace, type Directory } from "./common.js";
@@ -189,10 +192,11 @@ export async function createVenue(directory: Directory, options: { readonly synt
   return { venue, created: true };
 }
 
-/** The exhaustion set a succinct directory reads its venue under and a replica serves (succinct-read §4, slice 43): a
- * test set (no set is adopted, §6), whose start is the venue's anchor, so every party computes it from the venue file. */
-export function exhaustionSet(file: VenueFile): ExhaustionSet & { prove: ReturnType<typeof testExhaustionSet>["prove"] } {
-  return testExhaustionSet("moe/cli", { id: file.profile.anchor, height: file.anchorHeight });
+/** The exhaustion set a succinct directory reads its venue under and a replica serves (succinct-read §4, slice 43): the
+ * circuit set the package ships, a test set (no set is adopted, §6), from the venue's anchor, so every party computes it
+ * from the venue file. Its folds verify on a verifier started from the directory's parameters at the first fold. */
+export function exhaustionSet(directory: Pick<Directory, "path">, file: VenueFile): ExhaustionSet & { close(): Promise<void> } {
+  return shippedExhaustionSet({ id: file.profile.anchor, height: file.anchorHeight }, () => directoryBackend(directory));
 }
 /** The file a directory keeps its view in: a succinct directory's (`--read succinct`) is a succinct view of its own
  * (succinct-read §4), never the complete `venue.db`, which neither form's view opens as the other. */
@@ -270,11 +274,12 @@ function dropSet(directory: Directory, set: Uint8Array): void {
   event({ event: "exhaustion-dropped", set: name });
 }
 
-export function openView(directory: Directory): View {
+/** The directory's view. `exhaustion` stands in for the shipped set of a succinct directory (tests; so in `exhaustionOver`). */
+export function openView(directory: Directory, options: { readonly exhaustion?: ExhaustionSet & { close?(): Promise<void> } } = {}): View {
   const file = requireVenue(directory);
   let journal = new ErgoVenueJournal(directory.file(viewFile(directory)), file.id);
+  const set = directory.succinct ? options.exhaustion ?? exhaustionSet(directory, file) : undefined;
   try {
-    const set = directory.succinct ? exhaustionSet(file) : undefined;
     const open = () => new ErgoVenue(file.profile, readContext(directory), {}, undefined, journal, set === undefined ? undefined : { set });
     let venue = open();
     // A view holding indices read under a dropped set (one restored from before the drop) is dropped again.
@@ -318,28 +323,101 @@ export function openView(directory: Directory): View {
       }
     };
     const own = venue, ownJournal = journal;
-    return { file, venue: own, journal: ownJournal, sync, syncWitnessed, following, close: () => ownJournal.close() };
-  } catch (error) { journal.close(); throw error; }
+    return { file, venue: own, journal: ownJournal, sync, syncWitnessed, following, close: () => { ownJournal.close(); void set?.close?.(); } };
+  } catch (error) { journal.close(); void set?.close?.(); throw error; }
 }
 
-/** A replica's exhaustion over its own view (succinct-read §4.7, slice 43): the map from the set's start, extended
- * after each sync by the indices the view newly read, a fold sealed at the last; transactions come from the view's
- * rows. `advance` extends it; `source` is what the replica's listener serves. */
-export function exhaustionOver(view: View): { readonly source: ExhaustionSource; advance(): Promise<void> } {
-  const set = exhaustionSet(view.file), anchorHeight = view.file.anchorHeight;
-  const block = (height: bigint) => view.venue.section(height - anchorHeight - 1n);
-  const server = new ExhaustionServer({ start: set.start, foldKeyHash: set.foldKeyHash, prove: (first, inputs) => set.prove(first, inputs), block,
-    name: "replica" });
+/** A replica's exhaustion: what its listener serves, and the work its rounds do. */
+export interface ReplicaExhaustion {
+  readonly source: ExhaustionSource;
+  /** Whether a period is proving now. */
+  readonly busy: boolean;
+  /** Take the kept fold if not yet taken, then, with a prover and none proving, start proving the indices the view newly
+   * read as one period (or a period whose proof failed, after a wait), in the background: `folded` hears each fold. */
+  advance(folded: (fold: Fold, how: "kept" | "proved") => void): Promise<void>;
+  /** Stop: a period proving is abandoned (its kept leaf proofs stay for the next start). */
+  close(): Promise<void>;
+}
+/** How long a replica waits before proving a period whose proof failed again, at most. */
+const PERIOD_RETRY_MS = 60_000, PERIOD_RETRY_MAX_MS = 3_600_000;
+
+/**
+ * A replica's exhaustion over its own view (succinct-read §4.7, slice 43): the map under the directory's set from the
+ * venue's anchor over the view's rows; the latest fold kept in `exhaustion-fold.bin` and taken again at the next start
+ * (it must verify and the map over the view's rows must end at its end with its root, or it is passed over); and, with
+ * a prover, a period proved over the indices the view newly read each time none is proving, so that rounds go on while
+ * one proves (a period costs minutes of proving at least). Without a prover it serves its kept fold.
+ */
+export function exhaustionOver(directory: Pick<Directory, "path" | "file">, view: View, prover?: ExhaustionProver,
+    options: { readonly exhaustion?: ExhaustionSet & { close?(): Promise<void> } } = {}): ReplicaExhaustion {
+  const set = options.exhaustion ?? exhaustionSet(directory, view.file), anchorHeight = view.file.anchorHeight, keptFile = directory.file("exhaustion-fold.bin");
+  const block = (height: bigint): ServedBlock | undefined => view.venue.section(height - anchorHeight - 1n);
+  const make = () => new ExhaustionServer({ start: set.start, foldKeyHash: set.foldKeyHash, block, name: "replica",
+    prove: (first, inputs, period) => {
+      if (prover === undefined) throw new CommandError("PROVER", "this replica proves no exhaustion");
+      return prover.fold(first, inputs, period);
+    } });
+  let server = make(), proving: Promise<void> | undefined, retryAt = 0, failures = 0;
+  let kept: Fold | undefined | null = null;
+  const verify = async (fold: Fold): Promise<boolean> => {
+    const inputs = foldPublicInputs(fold.inputs);
+    return inputs !== undefined && await set.verifyFold(fold.first, inputs, fold.proof) === true;
+  };
+  /** The kept fold, read once: undefined where none is kept or it does not decode. */
+  const readKept = (): Fold | undefined => {
+    try {
+      const bytes = readOptional(keptFile);
+      return bytes === undefined ? undefined : decodeFold(bytes);
+    } catch { event({ event: "exhaustion", code: "KEPT", message: `${keptFile} is no fold; it is passed over` }); return undefined; }
+  };
+  const blocksTo = (top: bigint): ServedBlock[] | undefined => {
+    const blocks: ServedBlock[] = [];
+    for (let height = server.height + 1n; height <= top; height++) {
+      const read = block(height);
+      if (read === undefined) return undefined;
+      blocks.push(read);
+    }
+    return blocks;
+  };
   return {
-    source: { set: set.identity, supplier: server },
-    async advance() {
-      const top = anchorHeight + 1n + view.venue.witnessedIndex(), blocks = [];
-      for (let height = server.height + 1n; height <= top; height++) {
-        const read = block(height);
-        if (read === undefined) return;
-        blocks.push(read);
+    source: { set: set.identity, get supplier() { return server; } },
+    get busy() { return proving !== undefined; },
+    async advance(folded) {
+      if (proving !== undefined) return;
+      if (kept === null) kept = readKept();
+      if (kept !== undefined && server.latest === undefined) {
+        const top = anchorHeight + 1n + view.venue.witnessedIndex();
+        // Taken once the view's rows reach its end; a server that refused it is replaced, and the fold is passed over.
+        const blocks = kept.inputs.endHeight <= top ? blocksTo(kept.inputs.endHeight) : undefined;
+        if (blocks !== undefined) {
+          const fold = kept;
+          kept = undefined;
+          try { folded(await server.adopt(fold, blocks, verify), "kept"); } catch (error) {
+            server = make();
+            event({ event: "exhaustion", code: "KEPT", message: `the kept fold to ${fold.inputs.endHeight} is passed over: ${(error as Error).message}` });
+          }
+        } else return;
       }
-      if (blocks.length > 0) await server.extend(blocks);
+      if (prover === undefined || Date.now() < retryAt) return;
+      const top = anchorHeight + 1n + view.venue.witnessedIndex(), blocks = top > server.height ? blocksTo(top) : [];
+      if (blocks === undefined || (blocks.length === 0 && server.pending === undefined)) return;
+      const run = server.extend(blocks).then(fold => {
+        failures = 0;
+        writeReplace(keptFile, encodeFold(fold));
+        prover.folded();
+        folded(fold, "proved");
+      }).catch((error: unknown) => {
+        failures++;
+        const wait = Math.min(PERIOD_RETRY_MS * 2 ** Math.min(failures - 1, 6), PERIOD_RETRY_MAX_MS);
+        retryAt = Date.now() + wait;
+        event({ event: "exhaustion", code: "PROVER", message: (error as Error).message, failures, retryMs: wait });
+      }).finally(() => { proving = undefined; });
+      proving = run;
+    },
+    async close() {
+      await prover?.close();
+      await proving;
+      await set.close?.();
     },
   };
 }

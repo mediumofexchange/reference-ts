@@ -46,7 +46,7 @@
     "LICENSE"
   ],
   "scripts": {
-    "build": "node -e \"require('node:fs').rmSync('dist',{recursive:true,force:true})\" && tsc -p tsconfig.build.json && node -e \"for (const f of ['programs.json','check-set.json','check-set-programs.json']) require('node:fs').copyFileSync('src/pool/v3/'+f,'dist/pool/v3/'+f)\"",
+    "build": "node -e \"require('node:fs').rmSync('dist',{recursive:true,force:true})\" && tsc -p tsconfig.build.json && node scripts/build-files.mjs",
     "build:browser": "node scripts/browser/build.mjs",
     "test": "vitest run",
     "test:watch": "vitest",
