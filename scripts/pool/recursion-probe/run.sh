@@ -6,7 +6,7 @@
 # (native assertions set to warn) for limbs, aliased and off-curve coordinates and a key hash; and (3) the review's
 # cases: a node aggregating two recursive verifications, and W = (0, 0), which puts P1 at infinity.
 # Builds bb's stdlib_honk_verifier_tests at the pinned tag with probe.test.cpp added (about 15 minutes on 4 cores;
-# clang 18, cmake, ninja) and runs it; the CRS is fetched from Aztec's host. Output as in result.log.
+# clang 18, cmake, ninja) and runs it; the CRS is fetched from Aztec's host. Output as in result.txt.
 # Usage: bash scripts/pool/recursion-probe/run.sh <empty work directory>
 set -euo pipefail
 here=$(cd "$(dirname "$0")" && pwd)

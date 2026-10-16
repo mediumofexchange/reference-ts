@@ -1,0 +1,25 @@
+MOE-PROBE honest: inner_native=1 outer_satisfied=1 accumulator_P0_infinity=0 accumulator_P1_infinity=0 outer_native=1
+MOE-PROBE honest: outer pairing-point public inputs (0 = zero field): xxxxxxxx
+MOE-PROBE moved_w: inner_native=0 outer_satisfied=1 accumulator_P0_infinity=0 accumulator_P1_infinity=0 outer_native=0
+MOE-PROBE moved_w: outer pairing-point public inputs (0 = zero field): xxxxxxxx
+MOE-PROBE infinity_w: inner_native=0 (Cannot aggregate: incoming pairing points are at infinity (probably uninitialized).) outer_satisfied=1 accumulator_P0_infinity=1 accumulator_P1_infinity=0 outer_native=1
+MOE-PROBE infinity_w: outer pairing-point public inputs (0 = zero field): 0000xxxx
+MOE-PROBE verdict: outer proof over the infinity-W inner proof verifies natively: 1
+[       OK ] MoeInfinityProbe.InnerPcsPointAtInfinity (57298 ms)
+MOE-PROBE malicious none (honest witness): satisfied=1 first_failure=""
+MOE-PROBE malicious x low limb past 136 bits, same value: satisfied=0 first_failure="decompose_non_native_field_double_width_limb: limbs too large: hi limb."
+MOE-PROBE malicious x + q (aliased coordinate): satisfied=0 first_failure="bigfield::unsafe_assert_less_than: r2 or r3 too large: hi limb."
+MOE-PROBE malicious y + 1 (off the curve): satisfied=0 first_failure="biggroup::validate_on_curve"
+MOE-PROBE malicious x = 0 with y kept: satisfied=0 first_failure="biggroup::validate_on_curve"
+MOE-PROBE malicious key hash + 1: satisfied=0 first_failure="field_t::assert_equal"
+[       OK ] MoeInfinityProbe.MaliciousProverWitnesses (14648 ms)
+Note: Google Test filter = MoeReviewProbe.*
+[----------] 1 test from MoeReviewProbe
+[ RUN      ] MoeReviewProbe.NodeAggregation
+MOE-REVIEW node honest+honest: satisfied=1 object=xxxxxxxx native=1 mixed(refused by fix)=0 accepted_after_fix=1
+MOE-REVIEW node forged+honest: satisfied=1 object=xxxxxxxx native=0 mixed(refused by fix)=0 accepted_after_fix=0
+MOE-REVIEW node honest+forged: satisfied=1 object=xxxxxxxx native=0 mixed(refused by fix)=0 accepted_after_fix=0
+MOE-REVIEW node forged+forged: satisfied=1 object=0000xxxx native=1 mixed(refused by fix)=1 accepted_after_fix=0
+MOE-REVIEW leaf w_inf (P1 at infinity, asserts warn): satisfied=1 object=xxxx0000 native=1 mixed(refused by fix)=1 accepted_after_fix=0
+[       OK ] MoeReviewProbe.NodeAggregation (209808 ms)
+[----------] 1 test from MoeReviewProbe (209808 ms total)
