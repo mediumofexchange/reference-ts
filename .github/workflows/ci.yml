@@ -161,8 +161,9 @@ jobs:
 
   check:
     runs-on: ${{ matrix.os }}
-    # Windows took about 14 minutes before the browser host's check (slice 39) added about two.
-    timeout-minutes: 20
+    # Windows took about 14 minutes before the browser host's check (slice 39) added about two, and 19.4–19.6 by
+    # slice 43's agreement corpus; the exhaustion check's header versions (slice 43) took it past 20.
+    timeout-minutes: 30
     strategy:
       fail-fast: false
       matrix:
