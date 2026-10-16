@@ -183,7 +183,7 @@ holder's succinct reading below.
 | Operator: 4 cores, 8 GiB, SSD | ≤ 1 GiB, independent of history length | Restart resumes from its journal without re-verifying retained history | Admission ≤ 1 s per statement at peak, venue wait excluded | Retains its closure, about 20 GB |
 | Independent, supply or backer reader: 8 cores, 16 GiB, 100 Mbit/s | ≤ 1 GiB, independent of history length | ≤ 24 h | ≤ 10 CPU-minutes and ≤ 50 MB transferred a day | Retains the closure it judged, about 20 GB |
 | Holder wallet (release command): as the reader | ≤ 1 GiB, independent of history length | ≤ 24 h, seed restore included | As the reader | The closure for its scopes |
-| Phone holder (succinct reading), declared 2026-10-16, per scope: a mid-range Android phone of about 2023, 8 ARM cores (at least two Cortex-A76 class or newer), 4 GiB, 64 GB, Android 11+ with a current WebView, metered data | ≤ 1 GiB of the wallet processes' PSS, independent of history length | ≤ 12 h and ≤ 1.5 GB transferred, seed restore included, resuming after an interruption | ≤ 2 CPU-minutes and ≤ 5 MB transferred a day; each command (`request`, `pay` with its proof, `fulfill`, a mean day's sync) ≤ 30 s, a peak day's sync ≤ 3 min; depth and network waits excluded | ≤ 2 GB |
+| Phone holder (succinct reading), declared 2026-10-16, per scope: a mid-range Android phone of about 2023, 8 ARM cores (at least two Cortex-A76 class or newer), 4 GiB, 64 GB, Android 11+ with a current WebView, metered data | ≤ 1 GiB of the wallet processes' PSS, independent of history length | ≤ 12 h and ≤ 1.5 GB transferred, seed restore included, resuming after an interruption | A mean day ≤ 2 CPU-minutes and ≤ 5 MB transferred; each command (`request`, `pay` with its proof, `fulfill`, a mean day's sync) ≤ 30 s, a peak day's sync ≤ 3 min; depth and network waits excluded | ≤ 2 GB |
 | A holder's own recovery evidence | | | | Openings, seed, receipts, own requests and publications, and the last state it was given (C2.7.2). The trail comes from replicas (C2b.3.3) |
 
 The design point's cost, modelled from the [replay](POOL_DEPLOYMENT_PROBES.md#replay-and-retention-cost),
@@ -222,7 +222,9 @@ browser runs of slices 39–41). Summed from desktop probe rates in one Node thr
 design point costs about 4 h and 1.1 GB, a mean day about 13 s and 1 MB, a peak day about 69 s, and `pay` 9.0 s.
 Break-even slowdowns, tightest first: a mean day's sync about 2.3 times that thread's time, a peak day's 2.6, the
 restore 3.0, `pay` 3.3; no phone is measured. The budgets assume replicas keep covers and folds within about two hours
-of the tip: above them the phone reads sections and tail proofs natively, about 1.8 MB an hour of lag. Accepted limit:
+of the tip: above them the phone reads sections and tail proofs natively, about 1.8 MB an hour of lag at today's mean,
+so two hours take most of a 5 MB day. The shipped replica lags 2–4 hours (64-block periods); its lever is in WORK.md
+Next 12. Accepted limit:
 strangers' publications at a backing's location cost every phone holder of it, and about 320 a day (about $0.13 of
 fees) pass the 5 MB day. Holders below the declared class may miss the time budgets
 ([decision](../decisions/2026-10.md#2026-10-16--make-the-phone-holder-a-release-gate-with-budgets-declared-before-any-phone-run-and-hold-cd-as-a-gate-item-direction)).
