@@ -434,7 +434,9 @@ privacy claim**: every statement names its inputs, outputs, backing and quantiti
 - Side channels on a holder's device, such as proving time, memory or power.
 - Qualified device custody, storage, backup or mainnet operation. These are open release gates needing provisioning
   authority (WORK.md, retained boundaries).
-- A phone or browser wallet, which lie outside the release target.
+- Succinct reading and a phone wallet. The phone holder joined the release target on 2026-10-16
+  ([gate](PRODUCTION_REQUIREMENTS.md#release-gates)). This argument gains a section on it once its circuit set is
+  adopted, and the external review a second scope.
 - Interoperability across two releases. A release that changes bytes, identities or verdicts is a successor
   construction.
 
