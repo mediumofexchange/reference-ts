@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { isMalformedProofFailure } from "../src/pool/proof-verifier.js";
+import { isMalformedProofFailure, mixedPairingObject } from "../src/pool/proof-verifier.js";
 
 // The pinned backend's own messages (scripts/pool/v3/check.mjs raises each on a real proof).
 const MALFORMED = [
@@ -27,5 +27,43 @@ describe("the verifier's classification of backend failures", () => {
       { message: MALFORMED[3] },
       undefined,
     ]) expect(isMalformedProofFailure(failure)).toBe(false);
+  });
+});
+
+describe("the verifier's reading of a proof's pairing-point object (succinct-read §2 rule 2)", () => {
+  // Words 0-3 are the first point, 4-7 the second; a point at infinity is four zero words.
+  const proof = (first: boolean, second: boolean, length = 14656): Uint8Array => {
+    const bytes = new Uint8Array(length).fill(0x11);
+    if (!first) bytes.fill(0, 0, 128);
+    if (!second) bytes.fill(0, 128, 256);
+    return bytes;
+  };
+
+  it("refuses an object with exactly one point at infinity", () => {
+    expect(mixedPairingObject(proof(false, true))).toBe(true);
+    expect(mixedPairingObject(proof(true, false))).toBe(true);
+  });
+
+  it("takes both at infinity, as a circuit verifying no proof publishes, and neither, as a recursive one does", () => {
+    expect(mixedPairingObject(proof(false, false))).toBe(false);
+    expect(mixedPairingObject(proof(true, true))).toBe(false);
+  });
+
+  it("reads a point as finite on any nonzero byte of its four words", () => {
+    for (const at of [0, 31, 127]) {
+      const bytes = proof(false, true);
+      bytes[at] = 1;
+      expect(mixedPairingObject(bytes)).toBe(false);
+    }
+    for (const at of [128, 200, 255]) {
+      const bytes = proof(true, false);
+      bytes[at] = 1;
+      expect(mixedPairingObject(bytes)).toBe(false);
+    }
+  });
+
+  it("leaves bytes too short for an object to the backend's own length refusal", () => {
+    expect(mixedPairingObject(new Uint8Array(255))).toBe(false);
+    expect(mixedPairingObject(proof(false, true, 256))).toBe(true);
   });
 });

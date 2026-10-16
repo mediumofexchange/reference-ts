@@ -27,7 +27,7 @@ import { performance } from "node:perf_hooks";
 import { Noir } from "@noir-lang/noir_js";
 import { UltraHonkBackend } from "@aztec/bb.js";
 import { prepareCheckSetParameters, readCheckSetParameters } from "../../../dist/pool/parameter-files.js";
-import { keyedVerifier, nativeRefusal, PROOF_OPTIONS, startCheckSetBackend } from "../../../dist/pool/proof-verifier.js";
+import { keyedVerifier, mixedPairingObject, nativeRefusal, PROOF_OPTIONS, startCheckSetBackend } from "../../../dist/pool/proof-verifier.js";
 import { fieldToHex } from "../../../dist/pool/field.js";
 import { adoptedDomain } from "../../../dist/pool/v3/configuration.js";
 import { openTrailProver } from "../../../dist/pool/v3/aggregator.js";
@@ -202,6 +202,21 @@ try {
   const flipped = Uint8Array.from(top.proof); flipped[5000] ^= 1;
   await refused(undefined, top.digest, flipped, "a flipped byte");
   check("a cover covers nothing under another kind's leaf key or the node key, for another digest, at another length or with a flipped byte, and kinds 5 and 7 have no leaf");
+
+  // §2 rule 2: a cover publishes the pairing points it defers with neither at infinity (a statement proof, which
+  // verifies no proof, publishes both), and a cover whose object has exactly one at infinity is refused before the
+  // backend, whose verification would adopt the cover's own opening in its place.
+  const atInfinity = (proof, from) => proof.subarray(from, from + 128).every(byte => byte === 0);
+  for (const cover of [...Object.values(leaves), left, right, top]) {
+    assert(!atInfinity(cover.proof, 0) && !atInfinity(cover.proof, 128), "a genuine cover's pairing points are finite");
+  }
+  for (const record of Object.values(records)) assert(atInfinity(record.proof, 0) && atInfinity(record.proof, 128), "a statement proof publishes both at infinity");
+  for (const from of [0, 128]) {
+    const mixed = Uint8Array.from(top.proof); mixed.fill(0, from, from + 128);
+    assert(mixedPairingObject(mixed));
+    await refused(undefined, top.digest, mixed, `a cover with pairing point ${from / 128} at infinity`);
+  }
+  check("every genuine cover's pairing-point object has neither point at infinity and every statement proof's both, and a cover with exactly one at infinity covers nothing");
 
   // §2 rules 1-2: the node-key input is free in every circuit; a tree proved under another value verifies under the
   // pinned node key with that value as its input, and only the reader's comparison refuses it.

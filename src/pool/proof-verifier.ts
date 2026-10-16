@@ -295,6 +295,25 @@ const MALFORMED_PROOF = Object.freeze([
   "Cannot aggregate: incoming pairing points are at infinity",
 ]);
 
+// A proof's pairing-point object: the last eight public inputs the backend appends
+// to the circuit's own, so the first eight words of the proof bytes, two points
+// of two coordinates of two limbs each, a point at infinity as four zero words.
+const PAIRING_OBJECT_WORDS = 8;
+
+/**
+ * Whether exactly one point of the proof's pairing-point object is at infinity
+ * (succinct-read §2 rule 2). bb.js 5.2.0's verification then adopts the proof's
+ * own opening in place of the object and checks none of the pairing an inner
+ * proof deferred; a prover reaches it by choosing an inner proof's last opening
+ * commitment. A circuit that verifies no proof publishes both at infinity, one
+ * that does publishes neither, so the refusal changes no other verdict.
+ */
+export function mixedPairingObject(proof: Uint8Array): boolean {
+  if (proof.length < PAIRING_OBJECT_WORDS * 32) return false;
+  const zero = (from: number): boolean => proof.subarray(from, from + 128).every(byte => byte === 0);
+  return zero(0) !== zero(128);
+}
+
 /** Whether a failure of the pinned backend's verification is one of its malformed-proof failures. */
 export function isMalformedProofFailure(error: unknown): boolean {
   if (!(error instanceof Error)) return false;
@@ -468,7 +487,7 @@ function lanesOver(loaded: { readonly generator: Uint8Array; readonly g2: Uint8A
       if (closed) throw new Error("the proof verifier is closed");
       const key = keys.get(kind);
       const fields = key === undefined ? undefined : ownFields(publicInputs, key.publicInputs), bytes = ownProof(proof);
-      if (key === undefined || fields === undefined || bytes === undefined) return false;
+      if (key === undefined || fields === undefined || bytes === undefined || mixedPairingObject(bytes)) return false;
       const input = { proof: bytes, publicInputs: fields.map(fieldToHex), verificationKey: key.vk };
       const lane = lanes.reduce((best, next) => next.waiting < best.waiting ? next : best);
       return serially(lane, async () => {
