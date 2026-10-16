@@ -200,7 +200,7 @@ describe("a succinct directory's view", () => {
       expect(heard).toEqual([[long.fold, "taken", "long"]]);
       expect(await replica.source.supplier.fold(1n << 40n)).toEqual(long.fold);
       expect(decodeFold(readFileSync(dir.file("exhaustion-fold.bin")))).toEqual(long.fold);
-      expect(events).toEqual([{ event: "exhaustion", code: "PEER", peer: "down", message: expect.stringContaining("did not answer") },
+      expect(events).toEqual([{ event: "exhaustion", code: "PEER", peer: "down", message: expect.stringMatching(/did not answer.*not asked again for 60000 ms/) },
         { event: "exhaustion", code: "PEER", peer: "malformed", message: expect.stringContaining("its fold is malformed") }]);
       // Nothing higher within the view: nothing more is taken, and neither is asked meanwhile.
       await replica.advance((...args) => heard.push(args));
@@ -281,8 +281,8 @@ describe("a succinct directory's view", () => {
       expect([throwing.asked, taking.length]).toEqual([5, 1]);
       expect(events.at(-1)).toMatchObject({ code: "PEER", peer: "throwing", message: expect.stringContaining("could not be verified in 5 turns") });
 
-      // A proving replica whose period's proof failed takes a peer's fold that reaches the pending period's end, on a
-      // fresh map in its place, and none below it.
+      // A proving replica whose period's proof failed takes a peer's fold above the one it serves, on a fresh map in place
+      // of the pending period, and proves on from it.
       const failing = await synced(), full = await peerOver("full", blocks.slice(0, 9)), takenOver: unknown[][] = [];
       let offers: ExhaustionSupplier[] = [];
       const broken: ExhaustionProver = { fold: async () => { throw new Error("out of memory"); }, folded: () => {}, close: async () => {} };
@@ -291,9 +291,16 @@ describe("a succinct directory's view", () => {
       await stuck.advance(() => { throw new Error("proved"); });
       await expect.poll(() => events.some(e => e.code === "PROVER")).toBe(true);
       await expect.poll(() => stuck.busy).toBe(false);
+      expect(await stuck.source.supplier.fold(1n << 40n)).toBeUndefined();
       offers = [long.supplier];
       await stuck.advance((...args) => takenOver.push(args));
-      expect([takenOver, await stuck.source.supplier.fold(1n << 40n)]).toEqual([[], undefined]);
+      expect([takenOver, await stuck.source.supplier.fold(1n << 40n)]).toEqual([[[long.fold, "taken", "long"]], long.fold]);
+      // Its next period, from the taken fold, fails too (no wait left from the old one); a peer's fold above it replaces it.
+      offers = [];
+      await stuck.advance(() => { throw new Error("proved"); });
+      await expect.poll(() => events.filter(e => e.code === "PROVER").length).toBe(2);
+      await expect.poll(() => stuck.busy).toBe(false);
+      takenOver.length = 0;
       offers = [full.supplier];
       await stuck.advance((...args) => takenOver.push(args));
       expect(takenOver).toEqual([[full.fold, "taken", "full"]]);

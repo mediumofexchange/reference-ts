@@ -29,7 +29,7 @@ import { decodeFold, encodeFold } from "../ergo-exhaustion-wire.js";
 import { ErgoVenueJournal } from "../ergo-store.js";
 import { EvidenceRefusal } from "../pool/v3/refusals.js";
 import { ReplayStore } from "../pool/v3/replay-store.js";
-import { exhaustionClient } from "../pool/v3/service-client.js";
+import { exhaustionClient, V3ServiceClientError } from "../pool/v3/service-client.js";
 import type { ExhaustionSource } from "../pool/v3/service-http.js";
 import { ergoNodeSupplier, nodeText, parseNodeJson, type ErgoSupplier } from "../ergo-supplier.js";
 import { MempoolNode } from "../ergo-synthetic.js";
@@ -488,18 +488,20 @@ export function exhaustionOver(directory: Pick<Directory, "path" | "file">, view
   };
   /** Peers passed over, by URL: until when, the wait that set it, and how often their fold's verification could not run. */
   const silent = new Map<string, { readonly until: number; readonly wait: number }>(), unverifiable = new Map<string, number>();
-  const silence = (name: string, why: string): void => {
-    const wait = Math.min((silent.get(name)?.wait ?? PEER_WAIT_MS / 2) * 2, PEER_WAIT_MAX_MS);
+  /** A refused fold doubles its peer's wait; one that did not answer waits the least (`doubling` false). */
+  const silence = (name: string, why: string, doubling = true): void => {
+    const wait = doubling ? Math.min((silent.get(name)?.wait ?? PEER_WAIT_MS / 2) * 2, PEER_WAIT_MAX_MS) : PEER_WAIT_MS;
     silent.set(name, { until: Date.now() + wait, wait });
     event({ event: "exhaustion", code: "PEER", peer: name, message: `${why}; not asked again for ${wait} ms` });
   };
   /** Take the highest fold a peer offers above the map and within the view: whether one was taken. Peers are asked at
-   * once, so one that does not answer costs a turn its timeout at most, and is then passed over like one whose fold is
-   * refused. Where a period is pending (its proof failed), only a fold reaching its end is taken, on a fresh map in
-   * place of the pending one. */
+   * once, so one that does not answer costs a turn its timeout at most, and is then passed over for a minute; one whose
+   * fold is refused, for a doubling wait, reset by any answer that decodes. Where a period is pending (its proof
+   * failed), a fold above the one served is taken on a fresh map in place of the pending one. */
   const takeFromPeers = async (folded: (fold: Fold, how: "taken", from: string) => void): Promise<boolean> => {
-    // Above the map, or reaching a pending period's end.
-    const top = anchorHeight + 1n + view.venue.witnessedIndex(), pending = server.pending, floor = pending === undefined ? server.height : server.height - 1n;
+    // Above the map, or above the served fold where a period is pending.
+    const top = anchorHeight + 1n + view.venue.witnessedIndex(), pending = server.pending;
+    const floor = pending === undefined ? server.height : server.latest?.inputs.endHeight ?? set.start.height;
     if (options.peers === undefined || top <= floor) return false;
     const now = Date.now();
     const asked = options.peers().map(peer => ({ name: peer.name ?? "peer", peer })).filter(({ name }) => (silent.get(name)?.until ?? 0) <= now);
@@ -508,11 +510,15 @@ export function exhaustionOver(directory: Pick<Directory, "path" | "file">, view
     answers.forEach((answer, i) => {
       const { name } = asked[i]!;
       if (answer.status === "rejected") {
-        // Bytes that are no fold are the peer's failure (§2 rule 5); one that does not answer is passed over too.
+        // Bytes that are no fold are the peer's failure (§2 rule 5); one that does not answer is passed over for a
+        // minute; the replica's own proxy refusing the route is no peer's.
         const error = answer.reason as Error;
-        silence(name, error instanceof EncodingError ? `its fold is malformed: ${error.message}` : `it did not answer: ${error?.message}`);
+        if (error instanceof EncodingError) silence(name, `its fold is malformed: ${error.message}`);
+        else if (!(error instanceof V3ServiceClientError && error.code === "PROXY" && error.status === 0)) silence(name, `it did not answer: ${error?.message}`, false);
+        else event({ event: "exhaustion", code: "PROXY", peer: name, message: error.message });
         return;
       }
+      silent.delete(name);
       const fold = answer.value;
       if (fold !== undefined && fold.inputs.endHeight > floor && fold.inputs.endHeight <= top) offered.push({ name, fold });
     });
@@ -521,8 +527,9 @@ export function exhaustionOver(directory: Pick<Directory, "path" | "file">, view
       // Over a pending period, a fresh map from the start: the pending one stays where the fold is not taken.
       const target = pending === undefined ? server : make(), refused = await adopt(target, fold, "peer");
       if (refused === undefined) {
-        silent.delete(name); unverifiable.delete(name);
-        server = target;
+        unverifiable.delete(name);
+        // A taken fold replaces a pending period: the next period is proved from it, with no wait left from the old.
+        server = target; failures = 0; retryAt = 0;
         // Kept, so a restart takes it again; a prover's kept leaves are of periods it no longer proves.
         try { writeReplace(keptFile, encodeFold(fold)); prover?.folded(); } catch (error) {
           event({ event: "exhaustion", code: "KEPT", message: `the fold to ${fold.inputs.endHeight} could not be kept: ${(error as Error).message}` });
