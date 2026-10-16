@@ -8,7 +8,7 @@
 //   node scripts/venue/exhaustion-pool.mjs --blocks <recorded.json> [--periods N] [--circuits <dir>] [--proofs <dir>]
 //     [--report <file>]
 //
-// Run after `npm run build`, `node scripts/pool/prepare-crs.mjs`, the recorded blocks (exhaustion-fetch.mjs), the
+// Run after `npm run build`, `node scripts/pool/prepare-crs.mjs`, the recorded blocks (`exhaustion-corpus.mjs fetch <first> <last> <out.json>`), the
 // circuits built with keys (`NARGO=<nargo> node scripts/venue/exhaustion-build.mjs 167 380 746 --keys`) and their
 // parameters (`prepareExhaustionParameters` into scratch/exhaustion-crs). The keys are a test set's: no set is adopted.
 import { writeFileSync } from "node:fs";

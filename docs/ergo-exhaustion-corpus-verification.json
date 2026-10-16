@@ -1,0 +1,229 @@
+{
+  "specification": "succinct-read §6 (agreement corpus); venue-ergo §§3–6",
+  "node": "https://node.ergo.watch",
+  "host": "Intel(R) Xeon(R) Processor @ 2.10GHz",
+  "revision": "d29032a05c4b1e6948ad49deab29fa6908cdcbf1",
+  "run": {
+    "days": [
+      "v2-to-v3",
+      "v3-to-v4",
+      "slice-43"
+    ],
+    "workers": 4,
+    "limit": null,
+    "whole": true
+  },
+  "sources": {
+    "scripts/venue/exhaustion-corpus.mjs": "4b2a02e6762b09e064d79bb5e65532535437aceff448a6a7607057063784b7ae",
+    "scripts/venue/exhaustion-periods.mjs": "c898d40c6e01c5ffec838862dc3b0c16a1decd27ea17d8c61221690e5c9e0b08",
+    "src/ergo-scan.ts": "73352b1f5412cc13ac8bede4387007196f6beace1462a7db0d016969673417e7",
+    "src/ergo-profile.ts": "3ba1e1306fb4328d5394466630900d9a33b776ee8fae2df63446d57297b3a022",
+    "src/ergo-headers.ts": "dfadfef3a6c1f66b4c1bcb796727b174b32a474668f619f6f4100c456dae2cc5",
+    "src/ergo-exhaustion.ts": "943ed44ba9ef458c7c058104401e1a4838971695a258d4cb8097e1a0e6b191de",
+    "src/ergo-exhaustion-prover.ts": "5f743571d6b40242781a2d65dd7aad22867c6d4eb05ebc28a8afb11d08d41cf4",
+    "src/ergo-exhaustion-set.ts": "fe71fc3d6d790b45842ad3a353e864b79fd8a020a17e37e126913fde8457e895",
+    "src/ergo-exhaustion-programs.ts": "19441518fe53b6e4ad89a28448b614953e21d569102b480416aece1bc5f005af",
+    "src/ergo-supplier.ts": "91c27f0b87f6aea8329dbc1d4ba40c236a0cf49fe8b0055b2f5886fa025661d4",
+    "src/ergo-synthetic.ts": "659d27646efef374f7224c536206cbe6ad0783a7fb8aa4015440033444d314e8",
+    "src/pool/poseidon2.ts": "c33b48e98263bdf99efc9650b81f57d90136017be2c843963ef38043bb09f308",
+    "src/pool/field.ts": "bea76598133a80199b39fc8b93943b35dcd92148a8d89837a7fca13f276cf8a0",
+    "src/bytes.ts": "e22afb403ee5c994857e32c0c08ac7bd361e3691405baaf28758d82cdf9555b3",
+    "src/record-range.ts": "d1dee26da4bb12364650470bffdbd322292a51167cab4db1bdf525e4f7159dac",
+    "src/contexts.ts": "b6cdffda9910803c72afa6dcedc0e69acbf8397420e9cf2af1c0c13c15a3a1bb",
+    "src/exhaustion-circuits/exhaustion.nr": "d245fd0162c9a998ece823a40e94973a01dd0a75684b9e9ddd5aeef99efc81d3",
+    "src/exhaustion-circuits/blake2b.nr": "2c021e29c19bd09b735354d8ac80effb8772f014c0d6e2c4a60472929d7c5100",
+    "src/exhaustion-circuits/leaf-t.nr": "080ffd2a7f66f17e891eb29fd4b585e5fd1443882bd34036ec0b96a019068838",
+    "src/exhaustion-circuits/leaf-m.nr": "5ce613a765de530bec1e6608d34a9d98c03dbfa2d3a0d9cb46b31139c763b601",
+    "src/exhaustion-circuits/leaf-u.nr": "d791eccb0c32df940cb8054dab0217a75533ae4fe4c1a1b2373d6982c07f1357",
+    "src/exhaustion-circuits/node.nr": "3c77eb2066ebcf45d7d50352bfb3612dcf977af837c17e5292303f5a9a6eceb4",
+    "src/exhaustion-circuits/fold-first.nr": "8aa15e90053fdc073a848d383123e697f867beb28b90829839411df325680dca",
+    "src/exhaustion-circuits/fold-next.nr": "b3d6b16a1044d3ff161c269b71fc3ab0ad28148452d507eb1cc634f13624b043",
+    "src/pool/circuits/vendor/poseidon2.nr": "44f3a3d1abe7d5fa2da5c0339e52018195d55f295c320e530d355f9cc62159d8"
+  },
+  "circuits": {
+    "compiler": "nargo 1.0.0-beta.26+40d6574f851d926f93e0c3a271bac3e6e82ac905",
+    "sizes": {
+      "t": 167,
+      "m": 380,
+      "u": 746
+    },
+    "bytecode": {
+      "leaf-t": "82cd725db1094c67497372691c666dd08e5f007b2783343b9a2417c58e64e42c",
+      "leaf-m": "9fae587c658321b9d420e27a619781681f42ebb6bc5f84fb30effe9ea6ca81c7",
+      "leaf-u": "6a7b8d6fe23a3e7dbf0b9b63ab21c87ef007bde9e652ad964789aae427263823",
+      "node": "1df15219c293298eea602ed29021859a3d13625112f27effe8312f6144ab01e8",
+      "fold-first": "539398acab4641d1ee228a3f5d8f8e62b01e98a49d89974b6bbed64cdb178ebf",
+      "fold-next": "f054df2a0b832b27f42054464d179fc91e63ff8eeee11d9b69f2d08ceafb9367"
+    }
+  },
+  "days": [
+    {
+      "name": "v2-to-v3",
+      "covers": "header version 2 to 3 (the first version-3 block is 889,856)",
+      "first": 889496,
+      "last": 890215,
+      "recorded": "047ae7fc22b263376eddc1e0ae1ccb573cf3e0e863d6b034a029e9afffd9cc87",
+      "start": "936a24c51a2fb70513f60dd2811c624f13d197f4f22576cef670d341004a2e98",
+      "end": "3c998f3593bdb6b35a5a7c3257f646e206a22584c893a3d41db0d9136479da53",
+      "blocks": 720,
+      "unsignedBytes": 7233849,
+      "unsupplied": [],
+      "agreement": {
+        "transactions": 4147,
+        "grammatical": 1276,
+        "framerEntries": 0,
+        "ungrammatical": 2871,
+        "scanEntriesOutside": 0,
+        "disagreements": [],
+        "versions": {
+          "2": 360,
+          "3": 360
+        },
+        "mapRoot": "0x2ba93abef7d14e3e4509bd040c861f7a110d4bd5993263940d454dffb8dda344",
+        "framerRoot": "0x2ba93abef7d14e3e4509bd040c861f7a110d4bd5993263940d454dffb8dda344",
+        "rootsEqual": true
+      },
+      "execution": {
+        "periods": 12,
+        "leaves": {
+          "t": 359,
+          "m": 53,
+          "u": 0
+        },
+        "nodes": 400,
+        "folds": 12,
+        "refusals": [],
+        "control": {
+          "leaf": "t",
+          "refusal": "Assertion failed: end state"
+        },
+        "minutes": 32.6
+      }
+    },
+    {
+      "name": "v3-to-v4",
+      "covers": "header version 3 to 4 (the first version-4 block is 1,628,160)",
+      "first": 1627800,
+      "last": 1628519,
+      "recorded": "3e2ae6a2b47f9e94389aaab462995654c507bff556c1faeaab8f002c17a002db",
+      "start": "adcb43d542e44bf5b84d42d9192d13115d682dbb33e029d6d02e7d5784d1206b",
+      "end": "f9bfe5c4c508301295a0bc93820e43dc4c22cf81e3516bb7a59e50d0a7636bdf",
+      "blocks": 720,
+      "unsignedBytes": 4357585,
+      "unsupplied": [],
+      "agreement": {
+        "transactions": 5235,
+        "grammatical": 646,
+        "framerEntries": 0,
+        "ungrammatical": 4589,
+        "scanEntriesOutside": 0,
+        "disagreements": [],
+        "versions": {
+          "3": 360,
+          "4": 360
+        },
+        "mapRoot": "0x2ba93abef7d14e3e4509bd040c861f7a110d4bd5993263940d454dffb8dda344",
+        "framerRoot": "0x2ba93abef7d14e3e4509bd040c861f7a110d4bd5993263940d454dffb8dda344",
+        "rootsEqual": true
+      },
+      "execution": {
+        "periods": 12,
+        "leaves": {
+          "t": 230,
+          "m": 63,
+          "u": 0
+        },
+        "nodes": 281,
+        "folds": 12,
+        "refusals": [],
+        "control": {
+          "leaf": "t",
+          "refusal": "Assertion failed: end state"
+        },
+        "minutes": 21.8
+      }
+    },
+    {
+      "name": "slice-43",
+      "covers": "a heavy version-4 day (13.3 MB unsigned), slice 43's",
+      "first": 1893905,
+      "last": 1894624,
+      "recorded": "249883613c350253914a1ab345825e1b6070ebf99a60f2714e2a96c572854e44",
+      "start": "57f2fdb9399bb450b9fd8062dbc1531fe52579270302fa010792aa3dfc886a43",
+      "end": "28126b658dc707da6f5d17ba678806c91e2f3a1074825c1ab6ebf77c150b98b3",
+      "blocks": 720,
+      "unsignedBytes": 13846052,
+      "unsupplied": [],
+      "agreement": {
+        "transactions": 6125,
+        "grammatical": 640,
+        "framerEntries": 0,
+        "ungrammatical": 5485,
+        "scanEntriesOutside": 0,
+        "disagreements": [],
+        "versions": {
+          "4": 720
+        },
+        "mapRoot": "0x2ba93abef7d14e3e4509bd040c861f7a110d4bd5993263940d454dffb8dda344",
+        "framerRoot": "0x2ba93abef7d14e3e4509bd040c861f7a110d4bd5993263940d454dffb8dda344",
+        "rootsEqual": true
+      },
+      "execution": {
+        "periods": 12,
+        "leaves": {
+          "t": 673,
+          "m": 75,
+          "u": 0
+        },
+        "nodes": 736,
+        "folds": 12,
+        "refusals": [],
+        "control": {
+          "leaf": "t",
+          "refusal": "Assertion failed: end state"
+        },
+        "minutes": 55
+      }
+    }
+  ],
+  "synthetic": {
+    "agreement": {
+      "transactions": 17,
+      "grammatical": 16,
+      "framerEntries": 20,
+      "ungrammatical": 1,
+      "scanEntriesOutside": 1,
+      "disagreements": [],
+      "versions": {
+        "3": 9
+      },
+      "mapRoot": "0x23374b86b345c827f3e9441103a0abd4d0c120145302cc617a025ca9c546d621",
+      "framerRoot": "0x23374b86b345c827f3e9441103a0abd4d0c120145302cc617a025ca9c546d621",
+      "rootsEqual": true
+    },
+    "execution": {
+      "periods": 1,
+      "leaves": {
+        "t": 1,
+        "m": 1,
+        "u": 1
+      },
+      "nodes": 2,
+      "folds": 1,
+      "refusals": [],
+      "control": {
+        "leaf": "t",
+        "refusal": "Assertion failed: end state"
+      },
+      "minutes": 0.5
+    }
+  },
+  "crafted": {
+    "transactions": 65,
+    "grammatical": 43,
+    "entries": 260,
+    "refusals": []
+  },
+  "programsUnchanged": true,
+  "result": "pass"
+}

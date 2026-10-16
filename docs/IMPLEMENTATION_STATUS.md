@@ -144,6 +144,10 @@ Their keys are a test set's (none is adopted). A prover pool (`src/ergo-exhausti
 `ExhaustionServer` hands it on the native backend from pinned 2^22 points, resuming from kept proofs; `exhaustion-pool.mjs`
 folds 48 mainnet blocks with it, the reader taking each fold ([report](ergo-exhaustion-pool-verification.json);
 [slice 43](../decisions/2026-10.md#2026-10-15--prove-a-replicas-exhaustion-periods-in-a-resumable-prover-pool-from-pinned-222-points-and-fold-real-ergo-mainnet-blocks-slice-43-next-12)).
+`exhaustion-corpus.mjs` executes every leaf, node and fold of three named mainnet days (header versions 2–4) through the
+shipped full-size programs, holding the scan to the framer, and scans every version-4 block for (cd)
+([report](ergo-exhaustion-corpus-verification.json);
+[slice 43](../decisions/2026-10.md#2026-10-16--execute-the-shipped-exhaustion-circuits-over-named-mainnet-days-hold-their-scan-to-the-framer-and-scan-every-version-4-block-for-cd-slice-43-next-12)).
 The Ergo view reads the venue succinctly where its owner asks
 (`ErgoVenue`'s `succinct` option): headers natively, the subjects it follows below an exhaustion supplier's fold, sections
 natively above; a replica serves its map (`reader serve`, `ExhaustionServer`, `GET /exhaustion`) and a `--read succinct`
