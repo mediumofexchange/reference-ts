@@ -1,66 +1,143 @@
-// The exhaustion circuits' execution check (succinct-read §4.3), over the circuits compiled at small slot counts from
-// the same sources as the full-size set: every leaf of synthetic periods and of recorded mainnet blocks executes, the
-// leaves join end to start, a period ends where a fold requires with the map's root equal to src/ergo-exhaustion.ts'
-// SubjectMap; and hostile witnesses, each otherwise consistent with the state hashes, are refused by the named check.
-// Folds are executed with placeholder proofs and key hashes: execution checks every constraint but the recursive
-// verifications, which the proving check (exhaustion-prove.mjs) covers.
+// The exhaustion circuits' execution check (succinct-read §4.3). By default over the circuits compiled at small slot
+// counts from the same sources as the full-size set; with --shipped over the shipped full-size programs an adoption
+// names (§6), compiled by the pinned nargo and executed by it, which also computes a prover's witnesses. Either way:
+// every leaf of synthetic periods and of recorded mainnet blocks executes, the leaves join end to start, a period ends
+// where a fold requires with the map's root equal to src/ergo-exhaustion.ts' SubjectMap; real blocks of every header
+// version (1 to 4) execute and each block's tree-and-header leaves are refused with its header's parent or transactions
+// root altered; and hostile witnesses, each otherwise consistent with the state hashes, are refused by the named check.
+// Folds are executed with placeholder proofs: execution checks every constraint but the recursive verifications, which
+// the proving check (exhaustion-prove.mjs) covers.
 //
 //   node scripts/venue/exhaustion-check.mjs [--mainnet <recorded blocks.json>] [--report <file>]
+//   node scripts/venue/exhaustion-check.mjs --shipped [--workers <n>] [--report <file>]
 //
-// Run after `npm run build`. With NARGO set it also compares nargo's bytecode with the pinned noir_wasm's.
+// Run after `npm run build`. Without --shipped and with NARGO set it also compares nargo's bytecode with the pinned
+// noir_wasm's; --shipped needs NARGO (the pinned nargo) and keeps the compiled crates in scratch/exhaustion-programs
+// (about ten minutes the first time). The report holds one section per mode; writing one keeps the other.
 import { execFileSync } from "node:child_process";
-import { readFileSync, writeFileSync } from "node:fs";
+import { createHash } from "node:crypto";
+import { cpSync, existsSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { blake2b } from "@noble/hashes/blake2b.js";
 import { Noir } from "@noir-lang/noir_js";
 import { build, compile, EXHAUSTION_SPECIFICATION, root, sourceHashes } from "./exhaustion-build.mjs";
 import { foldFirst, foldNext, node as nodeSource } from "./exhaustion-sources.mjs";
-import { craftedTransactions, recordedPeriod, syntheticPeriod } from "./exhaustion-periods.mjs";
+import { craftedTransactions, recordedPeriod, recordedPeriodOf, syntheticPeriod } from "./exhaustion-periods.mjs";
 import { scanTransaction } from "../../dist/ergo-scan.js";
 import { EMPTY_SUBTREES, SubjectMap } from "../../dist/ergo-exhaustion.js";
-import { foldStateInputs, isPeriodEnd, mapUpdateLeaf, periodLeaves, periodStreams, startState, stateEnd, transactionLeaf, treeLeaf }
-  from "../../dist/ergo-exhaustion-prover.js";
-import { identifierOf, limbsOf } from "../../dist/pool/field.js";
+import { bytesOf, compress, foldStateInputs, isPeriodEnd, iv0, mapUpdateLeaf, periodLeaves, periodStreams, startState, stateEnd, stateHash,
+  transactionLeaf, treeLeaf, wordsOf } from "../../dist/ergo-exhaustion-prover.js";
+import { EXHAUSTION_CIRCUITS, EXHAUSTION_SET_MANIFEST, exhaustionKeys } from "../../dist/ergo-exhaustion-set.js";
+import { crateName, exhaustionPrograms, nargoWitness } from "../../dist/ergo-exhaustion-programs.js";
+import { fieldToHex, identifierOf, limbsOf } from "../../dist/pool/field.js";
 
 const argv = process.argv.slice(2);
 const option = name => (argv.includes(name) ? argv[argv.indexOf(name) + 1] : undefined);
-const SIZES = { t: 6, m: 12, u: 6 };
-const KEYS = { t: "0x01", m: "0x02", u: "0x03", n: "0x04" }, FOLD_KEY = 5n, FIRST_KEY = "0x06";
-const report = { specification: EXHAUSTION_SPECIFICATION, sources: sourceHashes(), sizes: SIZES, periods: [], hostile: [], folds: [] };
+const shipped = argv.includes("--shipped");
+const VERSION_BLOCKS = "test/fixtures/ergo-mainnet-version-blocks.json";
+const section = {
+  sources: sourceHashes(["src/ergo-exhaustion-set.ts", "src/ergo-exhaustion-programs.ts", ...EXHAUSTION_CIRCUITS.map(c => `src/exhaustion-circuits/${c}.nr`),
+    VERSION_BLOCKS]),
+  periods: [], versions: [], hostile: [], folds: [],
+};
 let failed = 0;
 const fail = message => { failed++; console.error(`FAIL ${message}`); };
 
-const built = await build({ CT: SIZES.t, CM: SIZES.m, E: SIZES.u }, { directory: path.join(root, "scratch/exhaustion/check"), log: () => {} });
-if (process.env.NARGO) {
-  for (const name of ["leaf-t", "leaf-m", "leaf-u"]) {
-    const project = path.join(built.directory, name);
-    const wasm = JSON.parse(readFileSync(path.join(project, "program.json"), "utf8")).bytecode;
-    execFileSync(process.env.NARGO, ["compile", "--program-dir", project], { stdio: "ignore" });
-    const native = JSON.parse(readFileSync(path.join(project, "target", `moe_succinct_exhaustion_${name.replaceAll("-", "_")}.json`), "utf8")).bytecode;
-    report.nargoEqualsWasm = (report.nargoEqualsWasm ?? true) && native === wasm;
-    if (native !== wasm) fail(`${name}: nargo's bytecode differs from noir_wasm's`);
+// The runner: `exec(circuit, inputs)` is the refusal's message, or undefined where the circuit executes. The keys are
+// the key hashes the node and folds hold as constants (the leaves' own where shipped, placeholders at small sizes).
+let SIZES, KEYS, FOLD_KEY, FIRST_KEY, exec, finish = () => {};
+if (!shipped) {
+  SIZES = { t: 6, m: 12, u: 6 };
+  KEYS = { t: "0x01", m: "0x02", u: "0x03", n: "0x04" };
+  FOLD_KEY = "0x05";
+  FIRST_KEY = "0x06";
+  const built = await build({ CT: SIZES.t, CM: SIZES.m, E: SIZES.u }, { directory: path.join(root, "scratch/exhaustion/check"), log: () => {} });
+  if (process.env.NARGO) {
+    for (const name of ["leaf-t", "leaf-m", "leaf-u"]) {
+      const project = path.join(built.directory, name);
+      const wasm = JSON.parse(readFileSync(path.join(project, "program.json"), "utf8")).bytecode;
+      execFileSync(process.env.NARGO, ["compile", "--program-dir", project], { stdio: "ignore" });
+      const native = JSON.parse(readFileSync(path.join(project, "target", `moe_succinct_exhaustion_${name.replaceAll("-", "_")}.json`), "utf8")).bytecode;
+      section.nargoEqualsWasm = (section.nargoEqualsWasm ?? true) && native === wasm;
+      if (native !== wasm) fail(`${name}: nargo's bytecode differs from noir_wasm's`);
+    }
   }
+  const load = name => new Noir(JSON.parse(readFileSync(path.join(built.directory, name, "program.json"), "utf8")));
+  const emptyRoot = "0x" + EMPTY_SUBTREES[32].toString(16);
+  const programs = {
+    "leaf-t": load("leaf-t"), "leaf-m": load("leaf-m"), "leaf-u": load("leaf-u"),
+    node: new Noir(await compile(built.directory, "node", nodeSource({ t: KEYS.t, m: KEYS.m, u: KEYS.u }))),
+    "fold-first": new Noir(await compile(built.directory, "fold-first", foldFirst(KEYS, emptyRoot))),
+    "fold-next": new Noir(await compile(built.directory, "fold-next", foldNext(KEYS, FIRST_KEY))),
+  };
+  exec = async (circuit, inputs) => {
+    try { await programs[circuit].execute(inputs); return undefined; } catch (error) {
+      const text = String(error?.message ?? error);
+      return text.replace(/^.*Circuit execution failed: /s, "").split("\n")[0] || text;
+    }
+  };
+} else {
+  const nargo = process.env.NARGO;
+  // CI installs the pinned nargo on Linux only (its real-proof group runs on Windows too); anywhere else it is required.
+  if (!nargo && process.platform === "win32") {
+    console.log("exhaustion-check --shipped: no pinned nargo on this Windows host; nothing executed");
+    process.exit(0);
+  }
+  if (!nargo) throw new Error("--shipped needs NARGO, the pinned nargo");
+  const keys = exhaustionKeys(), hash = circuit => fieldToHex(keys[circuit].keyHash);
+  SIZES = EXHAUSTION_SET_MANIFEST.sizes;
+  KEYS = { t: hash("leaf-t"), m: hash("leaf-m"), u: hash("leaf-u"), n: hash("node") };
+  FOLD_KEY = hash("fold-next");
+  FIRST_KEY = hash("fold-first");
+  const directory = path.join(root, "scratch/exhaustion-programs");
+  exhaustionPrograms({ nargo, directory, log: console.log });
+  // nargo holds a lock on a crate's manifest while it executes, so each worker executes in a copy of its own.
+  const workers = Number(option("--workers") ?? 4);
+  if (!Number.isSafeInteger(workers) || workers < 1) throw new Error("--workers takes a positive integer");
+  const copies = path.join(root, "scratch/exhaustion", `crates-${process.pid}`);
+  rmSync(copies, { recursive: true, force: true });
+  const crate = (w, circuit) => path.join(copies, String(w), circuit);
+  const witnesses = Array.from({ length: workers }, (_, w) => {
+    cpSync(directory, path.join(copies, String(w)), { recursive: true });
+    return nargoWitness(nargo, Object.fromEntries(EXHAUSTION_CIRCUITS.map(circuit => [circuit, crate(w, circuit)])));
+  });
+  const free = witnesses.map((_, w) => w), waiting = [];
+  exec = async (circuit, inputs) => {
+    const w = free.length ? free.pop() : await new Promise(resolve => waiting.push(resolve));
+    try { await witnesses[w](circuit, inputs); return undefined; } catch (error) {
+      if (error?.name !== "ExhaustionWitnessError") throw error;
+      return error.message.slice(circuit.length + 2);
+    } finally {
+      const next = waiting.shift();
+      if (next) next(w);
+      else free.push(w);
+    }
+  };
+  // Every copy's program must still be the manifest's afterwards: nargo compiles a crate again, unchecked, where it
+  // does not take the kept program as its own.
+  finish = () => {
+    section.programs = Object.fromEntries(EXHAUSTION_CIRCUITS.map(circuit => [circuit, EXHAUSTION_SET_MANIFEST.circuits[circuit].bytecode]));
+    section.programsUnchanged = witnesses.every((_, w) => EXHAUSTION_CIRCUITS.every(circuit => {
+      const program = JSON.parse(readFileSync(path.join(crate(w, circuit), "target", `${crateName(circuit)}.json`), "utf8"));
+      return createHash("sha256").update(Buffer.from(program.bytecode, "base64")).digest("hex") === EXHAUSTION_SET_MANIFEST.circuits[circuit].bytecode;
+    }));
+    if (!section.programsUnchanged) fail("a crate copy's program is no longer the manifest's");
+    rmSync(copies, { recursive: true, force: true });
+  };
 }
-const load = name => new Noir(JSON.parse(readFileSync(path.join(built.directory, name, "program.json"), "utf8")));
-const leaf = { t: load("leaf-t"), m: load("leaf-m"), u: load("leaf-u") };
-const emptyRoot = "0x" + EMPTY_SUBTREES[32].toString(16);
-const first = new Noir(await compile(built.directory, "fold-first", foldFirst(KEYS, emptyRoot)));
-const next = new Noir(await compile(built.directory, "fold-next", foldNext(KEYS, FIRST_KEY)));
+section.sizes = SIZES;
+const node = BigInt(KEYS.n);
+const leafOf = kind => `leaf-${kind}`;
 
-/** Execute; the refusal's message, or undefined where it executes. */
-async function refusal(program, inputs) {
-  try { await program.execute(inputs); return undefined; } catch (error) {
-    const text = String(error?.message ?? error);
-    return text.replace(/^.*Circuit execution failed: /s, "").split("\n")[0] || text;
-  }
-}
 const dec = x => x.toString();
+const placeholderKey = () => Array(115).fill("0"), placeholderProof = () => Array(458).fill("0");
 function foldInputs(start, end, startOf, map, extra = {}) {
   const [sh, sl] = limbsOf(startOf.id), { id, height } = stateEnd(end), [eh, el] = limbsOf(id);
   return { start_hi: dec(sh), start_lo: dec(sl), start_height: dec(startOf.height), end_hi: dec(eh), end_lo: dec(el), end_height: dec(height),
-    map_root: dec(map.root), fold_key_hash: dec(FOLD_KEY), key: Array(115).fill("0"), proof: Array(458).fill("0"), key_hash: KEYS.n,
+    map_root: dec(map.root), fold_key_hash: FOLD_KEY, key: placeholderKey(), proof: placeholderProof(), key_hash: KEYS.n,
     ...foldStateInputs(start, "0"), ...foldStateInputs(end, "1"), ...extra };
 }
+const nextFoldExtra = () => ({ previous_key: placeholderKey(), previous_proof: placeholderProof(), previous_key_hash: FIRST_KEY });
 
 /** A period's honest leaves executed and joined, its end checked against the map, and its fold executed. */
 async function period(label, p, periods = 1) {
@@ -69,31 +146,37 @@ async function period(label, p, periods = 1) {
   let leaves = 0, entries = 0, previousEnd;
   for (let k = 0; k < periods; k++) {
     const blocks = p.blocks.slice(k * per, (k + 1) * per);
-    const startOf = map.end;
-    const run = periodLeaves(map, blocks, SIZES, BigInt(KEYS.n));
+    const run = periodLeaves(map, blocks, SIZES, node);
     let joined = run.leaves[0]?.sin;
-    for (const [i, l] of run.leaves.entries()) {
+    const work = run.leaves.map((l, i) => {
       if (l.sin !== joined) fail(`${label}: leaf ${i} does not join`);
       joined = l.sout;
-      const why = await refusal(leaf[l.kind], l.inputs);
-      if (why !== undefined) fail(`${label}: honest leaf ${i} (${l.kind}) refused: ${why}`);
       if (l.kind === "u") entries += l.inputs.uu.filter(Boolean).length;
-    }
+      return exec(leafOf(l.kind), l.inputs).then(why => why === undefined || fail(`${label}: honest leaf ${i} (${l.kind}) refused: ${why}`));
+    });
     leaves += run.leaves.length;
     if (!isPeriodEnd(run.end)) fail(`${label}: the period does not end at a block boundary`);
     if (run.end.u.root !== map.root) fail(`${label}: the leaves' map root is not the SubjectMap's`);
     if (Buffer.compare(Buffer.from(stateEnd(run.end).id), Buffer.from(blocks.at(-1).id)) !== 0) fail(`${label}: the period ends elsewhere`);
-    const why = k === 0
-      ? await refusal(first, foldInputs(run.start, run.end, p.start, map))
-      : await refusal(next, foldInputs(run.start, run.end, p.start, map, { previous_key: Array(115).fill("0"), previous_proof: Array(458).fill("0"), previous_key_hash: FIRST_KEY }));
-    if (why !== undefined) fail(`${label}: honest fold ${k} refused: ${why}`);
+    work.push((k === 0 ? exec("fold-first", foldInputs(run.start, run.end, p.start, map)) : exec("fold-next", foldInputs(run.start, run.end, p.start, map, nextFoldExtra())))
+      .then(why => why === undefined || fail(`${label}: honest fold ${k} refused: ${why}`)));
+    await Promise.all(work);
     previousEnd = run;
   }
   const transactions = p.blocks.reduce((n, b) => n + b.transactions.length, 0);
-  report.periods.push({ label, blocks: p.blocks.length, periods, transactions, leaves, entries });
+  section.periods.push({ label, blocks: p.blocks.length, periods, transactions, leaves, entries });
   console.log(`${label}: ${p.blocks.length} blocks, ${transactions} transactions, ${leaves} leaves, ${entries} entries in ${periods} period(s)`);
   return previousEnd;
 }
+
+/** One refused case recorded in `list`: refused by the check whose name `expected` is, or a failure. */
+function judge(list, name, why, expected, extra = {}) {
+  list.push({ name, ...extra, refusal: why ?? null, expected: expected ?? null });
+  if (why === undefined) fail(`${name}: executes`);
+  else if (expected !== undefined && !why.includes(expected)) fail(`${name}: refused by "${why}", not "${expected}"`);
+  else console.log(`${name}: refused (${why})`);
+}
+const hostile = async (name, kind, built, expected) => judge(section.hostile, `hostile ${name}`, await exec(leafOf(kind), built.leaf.inputs), expected, { kind });
 
 // Honest periods: synthetic (both root rules, shaped outputs for keys shared and not, an ungrammatical transaction),
 // the same as two periods (a next fold), and recorded mainnet blocks.
@@ -102,23 +185,52 @@ await period("synthetic", synthetic);
 await period("synthetic in two periods", synthetic, 2);
 if (option("--mainnet")) await period("mainnet", recordedPeriod(option("--mainnet")));
 
-// Hostile witnesses: each a leaf the prover builds consistently but for one departure, refused by the named check.
-async function hostile(name, kind, built, expected) {
-  const why = await refusal(leaf[kind], built.leaf.inputs);
-  report.hostile.push({ name, kind, refusal: why ?? null, expected });
-  if (why === undefined) fail(`hostile ${name}: executes`);
-  else if (expected !== undefined && !why.includes(expected)) fail(`hostile ${name}: refused by "${why}", not "${expected}"`);
-  else console.log(`hostile ${name}: refused (${why})`);
+// Every header version: real mainnet blocks at each version change, every leaf of each period executed, and each
+// block's tree-and-header leaves (as many as its operations take) refused with its header's parent id or transactions
+// root altered. The circuit reads a header's bytes 1–33 and 65–97, which every version lays out alike (venue-ergo §3),
+// and hashes the rest, whatever its length.
+const flip = (bytes, at) => { const b = Uint8Array.from(bytes); b[at] ^= 1; return b; };
+{
+  const recorded = JSON.parse(readFileSync(path.join(root, VERSION_BLOCKS), "utf8"));
+  for (const record of recorded.periods) {
+    const p = recordedPeriodOf(record);
+    await period(`mainnet ${p.blocks[0].height}–${p.blocks.at(-1).height}`, p);
+    let state = startState(p.start.id, p.start.height, new SubjectMap(p.start.id, p.start.height).root);
+    for (const block of p.blocks) {
+      const ops = periodStreams([block]).m, h = ops.findIndex(o => o.op === "hdr");
+      /** The block's operations from `state` in leaves of SIZES.m: the first refusal, and the state after. */
+      const leaves = async list => {
+        let s = state;
+        for (let i = 0; i < list.length; i += SIZES.m) {
+          const r = treeLeaf(s, list.slice(i, i + SIZES.m), SIZES.m, node);
+          const why = await exec("leaf-m", r.leaf.inputs);
+          if (why !== undefined) return { why };
+          s = r.after;
+        }
+        return { after: s };
+      };
+      const version = block.header[0], rule = ops.some(o => o.op === "wid") ? "witness" : "ids";
+      const label = `version ${version} header at ${block.height}`;
+      const honest = await leaves(ops);
+      if (honest.why !== undefined) fail(`${label}: refused: ${honest.why}`);
+      const altered = at => ops.map((o, k) => (k === h ? { ...o, bytes: flip(o.bytes, at) } : o));
+      const parent = (await leaves(altered(5))).why, transactionsRoot = (await leaves(altered(70))).why;
+      judge(section.versions, `${label}, its parent altered`, parent, "parent id", { height: Number(block.height), version, rule, headerBytes: block.header.length, operations: ops.length });
+      judge(section.versions, `${label}, its transactions root altered`, transactionsRoot, "transactions root", { height: Number(block.height), version, rule });
+      state = honest.after ?? state;
+    }
+  }
 }
+
+// Hostile witnesses: each a leaf the prover builds consistently but for one departure, refused by the named check.
 const p = syntheticPeriod(3);
 const map0 = new SubjectMap(p.start.id, p.start.height);
 const s0 = startState(p.start.id, p.start.height, map0.root);
 const { t: tSlots, m: mOps } = periodStreams(p.blocks);
-const node = BigInt(KEYS.n);
 const firstSlots = tSlots.slice(0, SIZES.t);
 const honestT = transactionLeaf(s0, firstSlots, SIZES.t, node);
 if (honestT.entries.length < 2) throw new Error("the hostile period's first leaf emits fewer than two entries");
-if (await refusal(leaf.t, honestT.leaf.inputs) !== undefined) fail("hostile base: the honest transaction leaf is refused");
+if (await exec("leaf-t", honestT.leaf.inputs) !== undefined) fail("hostile base: the honest transaction leaf is refused");
 const withList = f => transactionLeaf(s0, firstSlots, SIZES.t, node, f);
 await hostile("an emitted entry left out of the list", "t", withList(e => e.slice(1)), "list");
 await hostile("an entry added to the list", "t", withList(e => [...e, { ...e.at(-1), output: e.at(-1).output + 1n }]), "list");
@@ -128,7 +240,10 @@ await hostile("a listed height changed", "t", withList(e => [{ ...e[0], height: 
 // The order's range check carries no message; it is the only 96-bit check in the leaf, and nothing else changes here.
 await hostile("the list reordered", "t", withList(e => [e[1], e[0], ...e.slice(2)]), "assert_max_bit_size");
 await hostile("a gap in the list", "t", withList(e => [e[0], { ...e[0], unused: true }, ...e.slice(1)]), "list prefix");
-await hostile("a listed position aliased past 32 bits", "t", withList(e => [{ ...e[0], height: e[0].height - 1n, position: e[0].position + (1n << 32n) }, ...e.slice(1)]), "does not match the specified type");
+// noir_js and nargo refuse the u32 parameter as they read it, before execution; a proof's ABI range constraint
+// refuses it in the circuit.
+await hostile("a listed position aliased past 32 bits", "t", withList(e => [{ ...e[0], height: e[0].height - 1n, position: e[0].position + (1n << 32n) }, ...e.slice(1)]),
+  "does not match the specified type");
 const multi = firstSlots.findIndex(s => !s.start);
 if (multi < 1) throw new Error("the hostile period's first leaf has no transaction over one slot");
 const slotsWith = (i, change) => firstSlots.map((s, k) => (k === i ? { ...s, ...change } : s));
@@ -144,9 +259,8 @@ await hostile("a block started inside a transaction", "t", transactionLeaf(s0, s
 const firstHeader = mOps.findIndex(o => o.op === "hdr");
 const blockOps = mOps.slice(0, mOps.findIndex(o => o.op === "hdr" && o.last) + 1);
 if (blockOps.length > SIZES.m || blockOps.filter(o => o.op === "hdr").length < 2) throw new Error("the hostile block does not fit one tree leaf with a two-chunk header");
-if (await refusal(leaf.m, treeLeaf(s0, blockOps, SIZES.m, node).leaf.inputs) !== undefined) fail("hostile base: the honest tree leaf is refused");
+if (await exec("leaf-m", treeLeaf(s0, blockOps, SIZES.m, node).leaf.inputs) !== undefined) fail("hostile base: the honest tree leaf is refused");
 const opsWith = (i, op) => blockOps.map((o, k) => (k === i ? op : o));
-const flip = (bytes, at) => { const b = Uint8Array.from(bytes); b[at] ^= 1; return b; };
 const headerOp = blockOps[firstHeader];
 await hostile("a header's transactions root altered", "m", treeLeaf(s0, opsWith(firstHeader, { ...headerOp, bytes: flip(headerOp.bytes, 70) }), SIZES.m, node), "transactions root");
 await hostile("a header's parent altered", "m", treeLeaf(s0, opsWith(firstHeader, { ...headerOp, bytes: flip(headerOp.bytes, 5) }), SIZES.m, node), "parent id");
@@ -159,6 +273,29 @@ await hostile("a lift carrying a right child", "m", treeLeaf(s0, [blockOps[0], {
 const extra = { op: "id", id: blake2b(Uint8Array.of(9), { dkLen: 32 }) };
 await hostile("a leaf below a block's tree", "m", treeLeaf(s0, [extra, ...blockOps], SIZES.m, node), "one root");
 await hostile("a tree step inside a header", "m", treeLeaf(s0, [...blockOps.slice(0, firstHeader + 1), extra, ...blockOps.slice(firstHeader + 1)], SIZES.m, node), "tree inside a header");
+// A merge or lift slot hashing other bytes than the stack's entries, its end state the prover's over those bytes. The
+// merge hashes the real root's preimage over two made-up ids, so the leaf reaches the header's root with an id chain
+// of made-up ids: with the check removed, a false absence and made-up transactions.
+{
+  const tree = blockOps.slice(0, firstHeader), headers = blockOps.slice(firstHeader);
+  if (tree.at(-1).op !== "mrg") throw new Error("the hostile block's tree does not end in a merge");
+  const below = treeLeaf(s0, tree.slice(0, -1), SIZES.m, node).after.m;
+  const made = [1, 2].map(k => ({ op: "id", id: blake2b(Uint8Array.of(k), { dkLen: 32 }) }));
+  /** The leaf over `ops` with slot `i` hashing `bytes` (its length kept) and writing `entry` at stack position 2. */
+  const patched = (ops, i, bytes, entry) => {
+    const r = treeLeaf(s0, ops, SIZES.m, node), slot = new Uint8Array(128);
+    slot.set(bytes);
+    r.leaf.inputs.mb[i] = [...slot].map(String);
+    r.after.m.stack[2] = entry;
+    r.leaf.inputs.sout = stateHash(r.after).toString();
+    return r;
+  };
+  const merge = Uint8Array.from([1, ...bytesOf(below.stack[below.sp]), ...bytesOf(below.stack[below.sp + 1])]);
+  await hostile("a merge hashing the real root's children over made-up ids", "m",
+    patched([...made, { op: "mrg" }, ...headers], 2, merge, wordsOf(headerOp.bytes.subarray(65, 97))), "merged entries");
+  const lift = Uint8Array.from([1, ...blake2b(Uint8Array.of(3), { dkLen: 32 })]);
+  await hostile("a lift hashing another entry", "m", patched([made[0], { op: "lift" }], 1, lift, compress(iv0(), Uint8Array.from({ length: 128 }, (_, i) => lift[i] ?? 0), 33n, true).slice(0, 4)), "lifted entry");
+}
 
 // The map-update leaf over the period's first updates.
 const mapU = new SubjectMap(p.start.id, p.start.height);
@@ -166,7 +303,7 @@ const updates = p.blocks.flatMap(b => mapU.appendBlock(b.id, b.transactions.map(
 const someUpdates = updates.slice(0, SIZES.u);
 const repeated = someUpdates.findIndex(x => x.before.count > 0n);
 if (repeated < 0) throw new Error("the hostile period's first updates never repeat a key");
-if (await refusal(leaf.u, mapUpdateLeaf(s0, someUpdates, SIZES.u, node).leaf.inputs) !== undefined) fail("hostile base: the honest map-update leaf is refused");
+if (await exec("leaf-u", mapUpdateLeaf(s0, someUpdates, SIZES.u, node).leaf.inputs) !== undefined) fail("hostile base: the honest map-update leaf is refused");
 const updatesWith = (i, before) => someUpdates.map((x, k) => (k === i ? { ...x, before: { ...x.before, ...before } } : x));
 const sibs = someUpdates[0].before.siblings;
 await hostile("a wrong map sibling", "u", mapUpdateLeaf(s0, updatesWith(0, { siblings: [sibs[0] + 1n, ...sibs.slice(1)] }), SIZES.u, node), "map path");
@@ -190,13 +327,12 @@ function rerun(slots, ops, ups) {
 const streamStart = startState(p.start.id, p.start.height, new SubjectMap(p.start.id, p.start.height).root);
 async function streamCase(name, { end, leaves }, expected) {
   let why;
-  for (const l of leaves) if ((why = await refusal(leaf[l.kind], l.inputs)) !== undefined) { why = `${l.kind} leaf: ${why}`; break; }
-  why ??= await refusal(first, foldInputs(streamStart, end, p.start, mapU));
-  report.folds.push({ name, refusal: why ?? null, expected: expected ?? null });
-  if (expected === undefined) { if (why !== undefined) fail(`stream ${name}: refused by "${why}"`); else console.log(`stream ${name}: the fold executes`); }
-  else if (why === undefined) fail(`stream ${name}: the fold executes`);
-  else if (!why.includes(expected)) fail(`stream ${name}: refused by "${why}", not "${expected}"`);
-  else console.log(`stream ${name}: refused (${why})`);
+  for (const l of leaves) if ((why = await exec(leafOf(l.kind), l.inputs)) !== undefined) { why = `${l.kind} leaf: ${why}`; break; }
+  why ??= await exec("fold-first", foldInputs(streamStart, end, p.start, mapU));
+  if (expected !== undefined) return judge(section.folds, `stream ${name}`, why, expected);
+  section.folds.push({ name: `stream ${name}`, refusal: why ?? null, expected: null });
+  if (why !== undefined) fail(`stream ${name}: refused by "${why}"`);
+  else console.log(`stream ${name}: the fold executes`);
 }
 const txs = [];
 for (const slot of tSlots) (slot.start ? txs.push([slot]) : txs.at(-1).push(slot));
@@ -212,6 +348,8 @@ await streamCase("map entries reordered", rerun(tSlots, mOps, [updates[1], updat
 await streamCase("the last map entry left out", rerun(tSlots, mOps, updates.slice(0, -1)), "period end: entry chains");
 await streamCase("a map entry applied twice", rerun(tSlots, mOps, [updates[0], ...updates]), "map path");
 await streamCase("a header left out", rerun(tSlots, mOps.slice(0, mOps.length - 1), updates), "period end: header open");
+const lastTree = mOps.findLastIndex(o => o.op !== "hdr");
+await streamCase("the last block's tree and transactions without its header", rerun(tSlots, mOps.slice(0, lastTree + 1), updates), "period end: stack");
 const plain = txs.find(x => x.length > 1)[0];
 await streamCase("a transaction left open after the last block", rerun([...tSlots, { ...plain, newBlock: false, last: false }], mOps, updates), "period end: transaction open");
 
@@ -221,46 +359,45 @@ await streamCase("a transaction left open after the last block", rerun([...tSlot
   const run = periodLeaves(map, p.blocks, SIZES, node);
   const base = foldInputs(run.start, run.end, p.start, map);
   const cases = [
-    ["another start id", first, { start_lo: dec(BigInt(base.start_lo) ^ 1n) }, "start id"],
-    ["another start height", first, { start_height: dec(BigInt(base.start_height) + 1n) }, "start height"],
-    ["another end id", first, { end_hi: dec(BigInt(base.end_hi) ^ 1n) }, "end id"],
-    ["another end height", first, { end_height: dec(BigInt(base.end_height) - 1n) }, "end height"],
-    ["another map root", first, { map_root: "7" }, "map root"],
-    ["a tree under a key outside the set", first, { key_hash: "0x09" }, "tree key"],
-    ["a first map not empty", first, foldStateInputs({ ...run.start, u: { ...run.start.u, root: 7n } }, "0"), "empty map"],
-    ["a start with an entry list chain", first, foldStateInputs({ ...run.start, t: { ...run.start.t, echain: 7n } }, "0"), "period start: entry list chain"],
-    ["a start with an entry stream", first, foldStateInputs({ ...run.start, u: { ...run.start.u, chain: 7n } }, "0"), "period start: entry stream"],
-    ["a start with an id chain", first, foldStateInputs({ ...run.start, m: { ...run.start.m, chain: 7n } }, "0"), "period start: tree id chain"],
-    ["a start inside a transaction", first, foldStateInputs({ ...run.start, t: { ...run.start.t, inTx: true } }, "0"), "period start: transaction open"],
-    ["an end inside a header", first, foldStateInputs({ ...run.end, m: { ...run.end.m, inHeader: true } }, "1"), "period end: header open"],
-    ["a previous fold under another key", next, { previous_key: Array(115).fill("0"), previous_proof: Array(458).fill("0"), previous_key_hash: "0x09" }, "previous fold key"],
+    ["another start id", "fold-first", { start_lo: dec(BigInt(base.start_lo) ^ 1n) }, "start id"],
+    ["another start height", "fold-first", { start_height: dec(BigInt(base.start_height) + 1n) }, "start height"],
+    ["another end id", "fold-first", { end_hi: dec(BigInt(base.end_hi) ^ 1n) }, "end id"],
+    ["another end height", "fold-first", { end_height: dec(BigInt(base.end_height) - 1n) }, "end height"],
+    ["another map root", "fold-first", { map_root: "7" }, "map root"],
+    ["a tree under a key outside the set", "fold-first", { key_hash: "0x09" }, "tree key"],
+    ["a first map not empty", "fold-first", foldStateInputs({ ...run.start, u: { ...run.start.u, root: 7n } }, "0"), "empty map"],
+    ["a start with an entry list chain", "fold-first", foldStateInputs({ ...run.start, t: { ...run.start.t, echain: 7n } }, "0"), "period start: entry list chain"],
+    ["a start with an entry stream", "fold-first", foldStateInputs({ ...run.start, u: { ...run.start.u, chain: 7n } }, "0"), "period start: entry stream"],
+    ["a start with an id chain", "fold-first", foldStateInputs({ ...run.start, m: { ...run.start.m, chain: 7n } }, "0"), "period start: tree id chain"],
+    ["a start inside a transaction", "fold-first", foldStateInputs({ ...run.start, t: { ...run.start.t, inTx: true } }, "0"), "period start: transaction open"],
+    // A stale live entry at the start: with the check removed, a block's tree merges it in place of its first id,
+    // whose transaction then reads as absent.
+    ["a start with a live stack entry", "fold-first", foldStateInputs({ ...run.start, m: { ...run.start.m, sp: 1,
+      stack: run.start.m.stack.map((w, i) => (i === 2 ? wordsOf(blake2b(Uint8Array.of(0, ...p.blocks[0].id), { dkLen: 32 })) : w)) } }, "0"), "period start: stack"],
+    ["a start inside a header", "fold-first", foldStateInputs({ ...run.start, m: { ...run.start.m, inHeader: true } }, "0"), "period start: header open"],
+    ["a start at another position", "fold-first", foldStateInputs({ ...run.start, m: { ...run.start.m, j: 1n } }, "0"), "period start: position"],
+    ["a start with the streams at two heights", "fold-first", foldStateInputs({ ...run.start, t: { ...run.start.t, height: run.start.t.height + 1n } }, "0"), "period start: heights"],
+    ["a start with a transaction id chain", "fold-first", foldStateInputs({ ...run.start, t: { ...run.start.t, chain: 7n } }, "0"), "period start: id chain"],
+    ["an end inside a header", "fold-first", foldStateInputs({ ...run.end, m: { ...run.end.m, inHeader: true } }, "1"), "period end: header open"],
+    ["a previous fold under another key", "fold-next", { ...nextFoldExtra(), previous_key_hash: "0x09" }, "previous fold key"],
   ];
-  for (const [name, program, change, expected] of cases) {
-    const why = await refusal(program, { ...base, ...change });
-    report.folds.push({ name, refusal: why ?? null, expected });
-    if (why === undefined) fail(`fold ${name}: executes`);
-    else if (!why.includes(expected)) fail(`fold ${name}: refused by "${why}", not "${expected}"`);
-    else console.log(`fold ${name}: refused (${why})`);
-  }
+  for (const [name, circuit, change, expected] of cases) judge(section.folds, `fold ${name}`, await exec(circuit, { ...base, ...change }), expected);
 }
 
 // The node's admission, executed with placeholder proofs (its joins are recursive: exhaustion-prove.mjs).
 {
-  const nodeProgram = new Noir(await compile(built.directory, "node", nodeSource({ t: KEYS.t, m: KEYS.m, u: KEYS.u })));
-  const base = { sin: "1", sout: "2", node_key_hash: KEYS.n, keys: [Array(115).fill("0"), Array(115).fill("0")], proofs: [Array(458).fill("0"), Array(458).fill("0")],
+  const base = { sin: "1", sout: "2", node_key_hash: KEYS.n, keys: [placeholderKey(), placeholderKey()], proofs: [placeholderProof(), placeholderProof()],
     key_hashes: [KEYS.t, KEYS.n], middle: "3" };
-  const honest = await refusal(nodeProgram, base);
+  const honest = await exec("node", base);
   if (honest !== undefined) fail(`node: admitted keys refused: ${honest}`);
-  const why = await refusal(nodeProgram, { ...base, key_hashes: [KEYS.t, "0x09"] });
-  report.folds.push({ name: "a node child under a key outside the set", refusal: why ?? null, expected: "child key" });
-  if (why === undefined || !why.includes("child key")) fail(`node: a child under a key outside the set: ${why ?? "executes"}`);
-  else console.log(`node a child under a key outside the set: refused (${why})`);
+  judge(section.folds, "node a child under a key outside the set", await exec("node", { ...base, key_hashes: [KEYS.t, "0x09"] }), "child key");
 }
 
 // The scan's agreement beyond the synthetic chain: crafted and mutated transactions (tokens, extensions, data inputs,
 // fixed trees, minimal shaped outputs, bytes outside the grammar), each one leaf from a fresh state: the leaf executes
-// with the prover's list, which must be scanTransaction's outputs.
-{
+// with the prover's list, which must be scanTransaction's outputs. Small sizes only: exhaustion-corpus.mjs runs them
+// through the full-size leaf.
+if (!shipped) {
   let entries = 0, transactions = 0;
   const s1 = startState(new Uint8Array(32).fill(1), 900000n, 0n);
   for (const unsigned of craftedTransactions(SIZES.t * 128)) {
@@ -271,15 +408,22 @@ await streamCase("a transaction left open after the last block", rerun([...tSlot
     const same = scanned.length === r.entries.length && scanned.every((x, i) => BigInt(x.output) === r.entries[i].output &&
       Buffer.from(x.subject).equals(Buffer.from(identifierOf(r.entries[i].hi, r.entries[i].lo))));
     if (!same) fail(`crafted transaction ${transactions}: the prover's entries are not scanTransaction's`);
-    const why = await refusal(leaf.t, r.leaf.inputs);
+    const why = await exec("leaf-t", r.leaf.inputs);
     if (why !== undefined) fail(`crafted transaction ${transactions}: refused: ${why}`);
     transactions++; entries += r.entries.length;
   }
-  report.crafted = { transactions, entries };
+  section.crafted = { transactions, entries };
   console.log(`crafted: ${transactions} transactions, ${entries} entries, each leaf executed`);
 }
 
-report.result = failed === 0 ? "pass" : `${failed} failures`;
-if (option("--report")) writeFileSync(option("--report"), `${JSON.stringify(report, null, 2)}\n`);
+finish();
+section.result = failed === 0 ? "pass" : `${failed} failures`;
+if (option("--report")) {
+  const file = option("--report");
+  const kept = existsSync(file) ? JSON.parse(readFileSync(file, "utf8")) : {};
+  const report = { specification: EXHAUSTION_SPECIFICATION, small: kept.small ?? null, shipped: kept.shipped ?? null };
+  report[shipped ? "shipped" : "small"] = { ...section, revision: execFileSync("git", ["-C", root, "rev-parse", "HEAD"], { encoding: "utf8" }).trim() };
+  writeFileSync(file, `${JSON.stringify(report, null, 2)}\n`);
+}
 console.log(failed === 0 ? "exhaustion-check: pass" : `exhaustion-check: ${failed} failures`);
 if (failed) process.exitCode = 1;

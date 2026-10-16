@@ -32,8 +32,9 @@ export function syntheticPeriod(count = 9) {
 }
 
 /** Recorded consecutive mainnet blocks (exhaustion-corpus.mjs fetch): the parent of the first and each block. */
-export function recordedPeriod(file) {
-  const data = JSON.parse(readFileSync(file, "utf8"));
+export const recordedPeriod = file => recordedPeriodOf(JSON.parse(readFileSync(file, "utf8")));
+/** The same from a record already read. */
+export function recordedPeriodOf(data) {
   const hex = x => Uint8Array.from(Buffer.from(x, "hex"));
   const missing = data.blocks.find(b => b.txs === undefined);
   if (missing) throw new Error(`block ${missing.height} was recorded without its section (unsupplied ${missing.unsupplied?.join(", ")})`);
