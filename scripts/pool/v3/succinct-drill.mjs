@@ -17,7 +17,7 @@
 // unless scratch/exhaustion-programs holds them from an earlier run, where the drill keeps them after.
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
-import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import { cpSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { join, resolve, sep } from "node:path";
 import { prepareCheckSetParameters, prepareExhaustionParameters } from "../../../dist/pool/parameter-files.js";
 import { nativeRefusal } from "../../../dist/pool/proof-verifier.js";
@@ -32,7 +32,12 @@ const PROGRAMS = join(root, "scratch", "exhaustion-programs"), native = nativeRe
 const copyPrograms = (from, to) => {
   if (!existsSync(from)) return;
   mkdirSync(to, { recursive: true });
-  for (const name of readdirSync(from).filter(n => /^[a-z-]+\.json$/.test(n))) copyFileSync(join(from, name), join(to, name));
+  // Each circuit's kept crate (its sources and nargo's compiled program, which its witnesses reuse).
+  // Each replaces what was there: a file left from another layout would make nargo compile again at a witness.
+  for (const name of readdirSync(from).filter(n => /^[a-z-]+$/.test(n))) {
+    rmSync(join(to, name), { recursive: true, force: true });
+    cpSync(join(from, name), join(to, name), { recursive: true });
+  }
 };
 mkdirSync(join(root, "scratch"), { recursive: true });
 const scratch = realpathSync(mkdtempSync(join(realpathSync(join(root, "scratch")), "succinct-drill-")));
@@ -244,9 +249,10 @@ try {
   await check("the succinct holder pays a succinct shop, which fulfills over the tail's fetched proof", async () => {
     // The replica serves on without proving, so the payment is the tail no cover reaches: its proof is fetched.
     provedLines = replica.lines.filter(line => line.status === "proved");
-    // The folds it proved, and each period's proving as the pool logged it (leaves, nodes, seconds).
+    // The folds it proved, and each period's proving as the pool logged it: each proof's witness and proof seconds, then
+    // the period's leaves, nodes and seconds.
     folds = replica.lines.filter(line => line.status === "exhaustion");
-    periods = replica.log().split("\n").filter(line => /^period to \d+: \d+ leaves/.test(line));
+    periods = replica.log().split("\n").filter(line => /^period to \d+: /.test(line));
     await replica.stop();
     const lastFold = replica.lines.filter(line => line.status === "exhaustion").at(-1);
     replica = background(["reader", "serve", "--dir", RP, "--poll-ms", "500", "--port", new URL(replicaUrl).port]);

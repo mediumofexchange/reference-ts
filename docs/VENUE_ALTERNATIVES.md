@@ -291,9 +291,9 @@ Slot costs are fits over 2 and 6 slots; the full-size leaves land 0.0–1.0% abo
 compressions, 25,069 tree or header ones, no entry) takes 643 transaction leaves and 66 tree-and-header leaves, 11.9
 prover hours at the means, and about 708 nodes, 3.6 hours: 15.4 hours, so one 4-vCPU machine keeps up 1.55 times (the
 probe's slot costs gave 1.29). Witnesses computed by noir_js on one core add 4.6 hours where they share the machine (1.20 times).
-Native witness generation is the lever: `nargo execute` gave a full mainnet transaction leaf's witness in 15.7 s
-against noir_js' 28.9 s, byte for byte the same, which makes the day 18.2 hours (1.32 times). Two machines keep up
-about two and a half times.
+Native witness generation was the lever, since taken: `nargo execute` in a process of its own overlaps each proof fully,
+so the day takes about 15.6 hours (1.54 times; [native witnesses](#native-witnesses-slice-43)). Two machines keep up
+about three times.
 
 **The departures from the probe.** `H` over seven inputs puts three permutations on each chain an entry joins (the
 stream in two leaves, its key's chain): a map update costs 5.7% more and a transaction slot 3.4% more (its list's
@@ -338,11 +338,29 @@ Measured 2026-10-15 ([decision](../decisions/2026-10.md#2026-10-15--prove-a-repl
 | Next fold | 19.9 s | 2 |
 
 - *The built key cuts a leaf's proof:* bb.js's `generateProof` passes no key and derives it again each proof (about 100 s a leaf here); with the key, a leaf proves in 52.6 s, under the 58–62 s of `bb prove -k` before.
-- *Overlapping the witness buys nothing on four cores:* a leaf proved beside the next witness takes 77.7 s, as long as the witness and the proof one after the other (78.0 s). The overlap pays only where witnesses run on other cores or natively (`nargo execute`, 15.7 s).
+- *Overlapping a noir_js witness buys nothing:* a leaf proved beside the next witness takes 77.7 s, as long as the witness and the proof one after the other (78.0 s). noir_js holds the event loop for the whole witness, so the proof's answer waits on it; a native witness overlaps ([native witnesses](#native-witnesses-slice-43)).
 - *This window is heavier than slice 43's day:* 1.40 MB in 48 blocks is about 21 MB a day against that day's 13.3 MB; its last period (16 blocks, 32 minutes of chain) took 42 minutes, so one prover keeps up with it 0.76 times. At these means slice 43's day (709 leaves, 708 nodes) takes 19.1 hours, one prover keeping up 1.26 times (the estimate was 1.20).
 - *Memory:* proving left at least 5.4 GiB of the 15.7 available; one native instance at a time.
 
 **Limits.** A test set over circuits built here (no adoption); one run on one host; 48 blocks, not a day; no map-update leaf on real blocks; witnesses by noir_js; one prover.
+
+### Native witnesses (slice 43)
+
+Measured 2026-10-16 ([decision](../decisions/2026-10.md#2026-10-16--compute-the-exhaustions-witnesses-with-the-pinned-compiler-in-a-process-of-their-own-slice-43-next-12); probe [`scripts/venue/exhaustion-witness-ab.mjs`](https://github.com/mediumofexchange/reference-ts/blob/20078cd/scripts/venue/exhaustion-witness-ab.mjs)). One full-size transaction leaf (167 slots, the first leaf of eight mainnet blocks to height 1,894,700) is proved under the shipped key on bb.js's native binary, on one 4-vCPU Xeon at 2.10 GHz (15 GB). It is proved alone, beside a noir_js witness of the same leaf in the same process (as the pool ran it), and beside a `nargo execute` witness in a process of its own (as the commands now run it). Each way ran in a process of its own, after a warm-up proof.
+
+| Leaf proof | Proof | Witness | Longest event-loop stall |
+|---|---|---|---|
+| Alone | 58.9–61.3 s (6), once 79.2 s | | 0.5–0.7 s |
+| Beside a nargo witness | 58.8–62.0 s (3) | 18.1–19.3 s | 0.6 s |
+| Beside a noir_js witness | 82.1 and 83.6 s, once 179.8 s | 25.2–33.4 s | the whole witness |
+| Witness alone | | nargo 17.4–17.7 s, noir_js 24.9–25.3 s | |
+
+- *A native witness costs a proof nothing:* beside nargo a leaf takes its proof's time. Beside noir_js it takes about the witness and the proof in turn, as the [pool](#the-prover-pool-over-mainnet-blocks-slice-43) measured (77.7 s).
+- *The day:* at 60 s a leaf and 19 s a node, slice 43's day (709 leaves, about 708 nodes) takes about 15.6 hours on one prover, which keeps up 1.54 times; with noir_js witnesses, at the pool's means, 19.1 hours and 1.26 times.
+- *The replica keeps answering:* with noir_js, a proving replica's listener and rounds stopped for 25–33 s at every leaf of a period.
+- *Same bytes, little memory:* nargo's witness equals noir_js' byte for byte. It reuses the crate's compiled program, paying its front end (3.8 s for a tree-and-header leaf) and no compile. Its peak is 1.4 GB, with at least 3.8 GiB left free beside the proof.
+
+**Limits.** One leaf kind, one host, two or three rounds a way. The two slow runs came after noir_js' WebAssembly memory had grown (3.3 and 2.8 GiB free), and their cause is not isolated. Node and fold witnesses are timed only in the succinct drill's log.
 
 ### The venue recheck (slice 29)
 

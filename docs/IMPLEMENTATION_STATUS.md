@@ -151,7 +151,8 @@ directory's view reads it, which `npm test` holds to the complete view
 ([slice 43](../decisions/2026-10.md#2026-10-15--read-the-venue-succinctly-in-a-succinct-directorys-view-its-backings-subjects-below-a-replicas-fold-and-sections-natively-above-it-slice-43-next-12)).
 The commands read and serve under the circuit set the package ships (`src/ergo-exhaustion-set.ts`: keys, sources in
 `src/exhaustion-circuits/` and pinned identities, checked by `scripts/venue/exhaustion-set.mjs`); `reader serve
---prove-exhaustion` compiles the sources with the pinned nargo (`src/ergo-exhaustion-programs.ts`) and proves periods
+--prove-exhaustion` compiles the sources with the pinned nargo (`src/ergo-exhaustion-programs.ts`), which also computes
+the witnesses in processes of their own ([slice 43](../decisions/2026-10.md#2026-10-16--compute-the-exhaustions-witnesses-with-the-pinned-compiler-in-a-process-of-their-own-slice-43-next-12)), and proves periods
 with the pool in the background, keeping its latest fold, which a restarted replica adopts again
 (`ExhaustionServer.adopt`); CI's `succinct` group drives it through the commands on Linux
 ([slice 43](../decisions/2026-10.md#2026-10-16--prove-the-venues-exhaustion-in-a-replica-under-the-circuit-set-the-package-ships-keep-its-fold-across-restarts-and-read-succinct-directories-under-it-slice-43-next-12)).

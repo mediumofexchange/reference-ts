@@ -24,6 +24,7 @@ import { prepareExhaustionParameters, readExhaustionParameters } from "../../dis
 import { EXHAUSTION_PARAMETERS } from "../../dist/pool/parameters.js";
 import { startBackend } from "../../dist/pool/proof-verifier.js";
 import { readParameters } from "../pool/prepare-crs.mjs";
+import { Noir } from "@noir-lang/noir_js";
 
 const argv = process.argv.slice(2);
 const option = name => (argv.includes(name) ? argv[argv.indexOf(name) + 1] : undefined);
@@ -57,6 +58,10 @@ const circuits = readExhaustionCircuits(circuitDir);
 report.circuits = { sizes: circuits.sizes, identities: circuitIdentities(circuits) };
 await prepareExhaustionParameters(crs, { log });
 const parameters = () => readExhaustionParameters(crs);
+// This probe's circuits are a build directory's programs, without the crates `exhaustionPrograms` keeps for nargo's
+// witnesses (the commands' prover), so its witnesses are noir_js' (the same bytes, in about twice the time).
+const noir = new Map(Object.entries(circuits.circuits).map(([name, c]) => [name, new Noir(c.program)]));
+const witness = async (circuit, inputs) => (await noir.get(circuit).execute(inputs)).witness;
 
 // A stopped run ends its native instance rather than leaving it proving (its kept proofs stay for the next run).
 let running;
@@ -64,7 +69,7 @@ for (const signal of ["SIGINT", "SIGTERM"]) process.on(signal, () => { void Prom
 
 /** Prove every period through a server and pool over `proofs`; the folds and each period's record. */
 async function run(label) {
-  const backend = running = nativeExhaustionBackend(circuits, parameters, { threads: os.cpus().length });
+  const backend = running = nativeExhaustionBackend(circuits, witness, parameters, { threads: os.cpus().length });
   const pool = new ExhaustionPool({ circuits, backend, proofs: proofDirectory(proofDir), log: line => log(`${label}: ${line}`) });
   const server = new ExhaustionServer({ start: recorded.start, foldKeyHash: pool.foldKeyHash, prove: (first, inputs, period) => pool.fold(first, inputs, period) });
   const folds = [], records = [];

@@ -77,8 +77,9 @@ jobs:
           path: scratch/private-payment-crs
           key: proving-parameters-${{ runner.os }}-${{ hashFiles('src/pool/parameters.ts', 'src/pool/parameter-files.ts') }}
       # The succinct drill's replica proves the venue's exhaustion (slice 43): it compiles the shipped circuits once with
-      # the pinned native compiler (the hash pins the release asset), and their programs are cached under the sources
-      # and the manifest that pins them. Windows has no native backend and proves none.
+      # the pinned native compiler (the hash pins the release asset), which also computes its witnesses, and their crates
+      # are cached under the sources, the manifest that pins them and the module that lays them out. Windows has no
+      # native backend and proves none.
       - name: Pinned nargo for the exhaustion circuits
         if: matrix.group == 'succinct' && runner.os == 'Linux'
         shell: bash
@@ -92,7 +93,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: scratch/exhaustion-programs
-          key: exhaustion-programs-${{ hashFiles('src/exhaustion-circuits/**', 'src/ergo-exhaustion-set.ts', 'src/pool/circuits/vendor/poseidon2.nr') }}
+          key: exhaustion-programs-${{ hashFiles('src/exhaustion-circuits/**', 'src/ergo-exhaustion-set.ts', 'src/ergo-exhaustion-programs.ts', 'src/pool/circuits/vendor/poseidon2.nr') }}
       - name: Pool-v3 real-proof group ${{ matrix.group }}, with the Ergo adapter
         run: npm run check:pool:v3 -- --group ${{ matrix.group }} --ergo --collect scratch/ci-reports
       - name: Retain this group's source-bound v3 acceptance reports

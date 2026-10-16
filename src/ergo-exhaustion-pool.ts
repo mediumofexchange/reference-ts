@@ -5,7 +5,7 @@
 // proof must carry the public inputs its place requires, so a disagreement costs no hours of proving.
 //
 // Leaves and nodes are independent proofs: one prover proves them one at a time while it computes the next leaf's
-// witness, which takes less time than a proof; provers on several machines share a period by the same tree. Each proof
+// witness (natively, in a process of its own: `exhaustionPrograms`), which takes less time than a proof; provers on several machines share a period by the same tree. Each proof
 // is kept under the hash of its circuit and inputs (`proofs`), so a prover that stops resumes where it stood and a
 // period proved again costs a verification of each kept proof, not the proofs.
 //
@@ -16,7 +16,6 @@ import { randomUUID } from "node:crypto";
 import { join } from "node:path";
 import { gunzipSync } from "node:zlib";
 import type { Barretenberg } from "@aztec/bb.js";
-import { Noir, type CompiledCircuit, type InputMap } from "@noir-lang/noir_js";
 import { blake2b } from "@noble/hashes/blake2b.js";
 import { sha256 } from "@noble/hashes/sha2.js";
 import { bytesToHex } from "@noble/hashes/utils.js";
@@ -60,11 +59,16 @@ export function readExhaustionCircuits(directory: string): ExhaustionCircuits {
 /** A proof as the pool holds it: its bytes and the public inputs it carries. */
 export interface ExhaustionProof { readonly circuit: ExhaustionCircuit; readonly proof: Uint8Array; readonly publicInputs: readonly bigint[] }
 
-/** What proves one circuit's statement: a witness from inputs, then a proof from the witness. The pool's own runs on
- * noir_js and the native backend; tests give another. */
+/** A circuit's inputs by parameter name: strings, booleans, arrays and structs, as `ergo-exhaustion-prover.ts` builds them. */
+export type CircuitInputs = Readonly<Record<string, unknown>>;
+/** A circuit's witness over its inputs, compressed as the backend takes it. A refusal names the failed check. */
+export type ExhaustionWitness = (circuit: ExhaustionCircuit, inputs: CircuitInputs) => Promise<Uint8Array>;
+
+/** What proves one circuit's statement: a witness from inputs, then a proof from the witness. The pool's own computes
+ * witnesses natively and proves on the native backend; tests give another. */
 export interface ExhaustionBackend {
-  /** The witness of `circuit` over `inputs` (noir_js' compressed form). A refusal names the failed check. */
-  witness(circuit: ExhaustionCircuit, inputs: InputMap): Promise<Uint8Array>;
+  /** The witness of `circuit` over `inputs`. A refusal names the failed check. */
+  witness: ExhaustionWitness;
   /** A proof of `circuit` from `witness`, under the recursive target. */
   prove(circuit: ExhaustionCircuit, witness: Uint8Array): Promise<{ proof: Uint8Array; publicInputs: readonly bigint[] }>;
   /** Whether `proof` verifies under `circuit`'s key with exactly `publicInputs`. */
@@ -75,15 +79,14 @@ export interface ExhaustionBackend {
 /** UltraHonk's settings under the recursive target (`PROOF_OPTIONS`), as bb.js 5.2.0 derives them. */
 const RECURSIVE_SETTINGS = Object.freeze({ ipaAccumulation: false, oracleHashType: "poseidon2", disableZk: false, optimizedSolidityVerifier: false });
 
-/** The pool's backend: noir_js witnesses and native proofs on an instance started from `parameters` at the first proof
+/** The pool's backend: witnesses by `witnesses` (`exhaustionPrograms`' native ones) and native proofs on an instance started from `parameters` at the first proof
  * and again after any failure, which retires the instance that failed (as the trail aggregator does). Each proof is
  * made with the circuit's built key (bb.js's `generateProof` passes none and derives it again at every proof, about
  * two fifths of a leaf's time). Proofs are verified apart from the prover, under the built keys on verifying instances
  * of their own (`keyedVerifier`, which reads the started instance's `[1]_1` and `[x]_2` once): bytes that are no proof
  * verify as false and retire only a verifying instance, never the one proving. */
-export function nativeExhaustionBackend(circuits: ExhaustionCircuits, parameters: () => Promise<ProvingParameters>,
+export function nativeExhaustionBackend(circuits: ExhaustionCircuits, witnesses: ExhaustionWitness, parameters: () => Promise<ProvingParameters>,
     options: { readonly threads?: number } = {}): ExhaustionBackend {
-  const noir = new Map(EXHAUSTION_CIRCUITS.map(name => [name, new Noir(circuits.circuits[name].program as unknown as CompiledCircuit)] as const));
   const bytecode = new Map(EXHAUSTION_CIRCUITS.map(name =>
     [name, gunzipSync(Buffer.from(circuits.circuits[name].program.bytecode, "base64"))] as const));
   type Instance = { readonly api: Barretenberg };
@@ -110,7 +113,7 @@ export function nativeExhaustionBackend(circuits: ExhaustionCircuits, parameters
     try { return await task(await used); } catch (error) { await retire(used); throw error; }
   };
   return {
-    async witness(circuit, inputs) { return (await noir.get(circuit)!.execute(inputs)).witness; },
+    witness: (circuit, inputs) => witnesses(circuit, inputs),
     prove: (circuit, witness) => guarded(async ({ api }) => {
       const made = await api.circuitProve({ witness: gunzipSync(witness),
         circuit: { name: circuit, bytecode: bytecode.get(circuit)!, verificationKey: circuits.circuits[circuit].vk }, settings: RECURSIVE_SETTINGS });
@@ -290,7 +293,7 @@ export class ExhaustionPool {
     for (const [k, leaf] of run.leaves.entries()) {
       const circuit = `leaf-${leaf.kind}` as const;
       const expected = [leaf.sin, leaf.sout, this.nodeKeyHash];
-      const one = this.#prove(circuit, leaf.inputs as InputMap, expected, `period to ${inputs.endHeight}: leaf ${k + 1}/${run.leaves.length} (${leaf.kind})`,
+      const one = this.#prove(circuit, leaf.inputs, expected, `period to ${inputs.endHeight}: leaf ${k + 1}/${run.leaves.length} (${leaf.kind})`,
         proving, tally);
       one.catch(() => {});
       leafProofs.push(one);
@@ -319,12 +322,12 @@ export class ExhaustionPool {
       throw new ExhaustionProverError("PUBLIC_INPUTS", "the period's tree does not span its states");
     }
     const [sh, sl] = limbsOf(inputs.startId), [eh, el] = limbsOf(inputs.endId);
-    const foldInputs: InputMap = {
+    const foldInputs: Record<string, unknown> = {
       start_hi: fieldToHex(sh), start_lo: fieldToHex(sl), start_height: fieldToHex(inputs.startHeight), end_hi: fieldToHex(eh), end_lo: fieldToHex(el),
       end_height: fieldToHex(inputs.endHeight), map_root: fieldToHex(inputs.mapRoot), fold_key_hash: fieldToHex(inputs.foldKeyHash),
       key: this.#keys[root.circuit].fields, proof: fields(root.proof), key_hash: this.#keys[root.circuit].hash,
       ...foldStateInputs(run.start, "0"), ...foldStateInputs(run.end, "1"),
-    } as InputMap;
+    };
     if (period.previous !== undefined) {
       const previous = this.#keys[period.previous.first ? "fold-first" : "fold-next"];
       Object.assign(foldInputs, { previous_key: previous.fields, previous_proof: fields(period.previous.proof), previous_key_hash: previous.hash });
@@ -337,7 +340,7 @@ export class ExhaustionPool {
   }
 
   /** `circuit` over `inputs`, kept or proved after `after` settles; the proof must carry `expected`. */
-  async #prove(circuit: ExhaustionCircuit, inputs: InputMap, expected: readonly bigint[], label: string, after: Promise<unknown>,
+  async #prove(circuit: ExhaustionCircuit, inputs: CircuitInputs, expected: readonly bigint[], label: string, after: Promise<unknown>,
       tally: (fresh: boolean) => void): Promise<ExhaustionProof> {
     const { backend, proofs, log } = this.#options;
     const name = bytesToHex(sha256(new TextEncoder().encode(`${circuit}\n${JSON.stringify(inputs)}`)));
