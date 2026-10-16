@@ -6,7 +6,7 @@
 // pinned ones: a prover derives none, and a program whose key differed would make proofs that do not verify under them,
 // which the pool refuses before keeping any.
 import { execFileSync, spawnSync } from "node:child_process";
-import { copyFileSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
+import { copyFileSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { randomUUID } from "node:crypto";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -16,10 +16,12 @@ import { EXHAUSTION_CIRCUITS, EXHAUSTION_SET_MANIFEST, exhaustionKeys, Exhaustio
   type ExhaustionCircuits } from "./ergo-exhaustion-set.js";
 import type { CompiledProgram } from "./pool/proof-verifier.js";
 
-/** The shipped sources, beside this module. */
+/** The shipped sources, beside this module, and the vendored sponge they share. */
 const SOURCES = fileURLToPath(new URL("./exhaustion-circuits/", import.meta.url));
-/** The shared modules every circuit's crate holds beside its `main.nr`. */
-export const SHARED_SOURCES = Object.freeze(["exhaustion.nr", "blake2b.nr", "poseidon2.nr"] as const);
+const SPONGE = fileURLToPath(new URL("./pool/circuits/vendor/poseidon2.nr", import.meta.url));
+/** The shared modules every circuit's crate holds beside its `main.nr`, by where each is read from. */
+const SHARED_SOURCES: readonly (readonly [string, string])[] = Object.freeze([["exhaustion.nr", join(SOURCES, "exhaustion.nr")],
+  ["blake2b.nr", join(SOURCES, "blake2b.nr")], ["poseidon2.nr", SPONGE]]);
 /** A circuit's crate name, as the build names it. */
 export const crateName = (name: ExhaustionCircuit): string => `moe_succinct_exhaustion_${name.replaceAll("-", "_")}`;
 
@@ -48,6 +50,8 @@ function kept(file: string, name: ExhaustionCircuit): CompiledProgram | undefine
 export function exhaustionPrograms(options: { readonly nargo: string; readonly directory: string; readonly log?: (line: string) => void }): ExhaustionCircuits {
   const { nargo, directory, log } = options, keys = exhaustionKeys();
   mkdirSync(directory, { recursive: true });
+  // What a compile stopped part-way left (its crate, a program not yet renamed into place) is never read; it goes.
+  for (const name of readdirSync(directory)) if (/^build-|\.tmp$/.test(name)) rmSync(join(directory, name), { recursive: true, force: true });
   let checked = false;
   const circuits = {} as Record<ExhaustionCircuit, BuiltCircuit>;
   for (const name of EXHAUSTION_CIRCUITS) {
@@ -68,7 +72,7 @@ export function exhaustionPrograms(options: { readonly nargo: string; readonly d
         mkdirSync(join(project, "src"), { recursive: true });
         writeFileSync(join(project, "Nargo.toml"), `[package]\nname = "${crateName(name)}"\ntype = "bin"\nauthors = []\n[dependencies]\n`);
         copyFileSync(join(SOURCES, `${name}.nr`), join(project, "src", "main.nr"));
-        for (const shared of SHARED_SOURCES) copyFileSync(join(SOURCES, shared), join(project, "src", shared));
+        for (const [name, from] of SHARED_SOURCES) copyFileSync(from, join(project, "src", name));
         const started = Date.now();
         const run = spawnSync(nargo, ["compile", "--program-dir", project], { encoding: "utf8", maxBuffer: 1 << 26 });
         const out = `${run.stdout}${run.stderr}`;

@@ -979,14 +979,17 @@ export class ErgoVenue implements RecordVenue, RecordPublisher {
     return encodeRangeAnswer({ request: own, entries: orderedEntries(own.kind, objects) }, bound);
   }
 
-  /** The section this view read natively at `index`, with its header's id and transactions root; undefined past the
+  /** The section this view read natively at `index`, with its header's id, transactions root and bytes; undefined past the
    * clock or where it read the index succinctly. For a supplier serving the venue's exhaustion from its own rows. */
-  section(index: bigint): { readonly id: Uint8Array; readonly transactionsRoot: Uint8Array; readonly section: readonly ErgoTransactionView[] } | undefined {
+  section(index: bigint): { readonly id: Uint8Array; readonly transactionsRoot: Uint8Array; readonly section: readonly ErgoTransactionView[];
+    readonly header: Uint8Array } | undefined {
     const snapshot = this.requireSnapshot();
     if (typeof index !== "bigint" || index < 0n || index > snapshot.witnessed) return undefined;
     const row = this.journal.section(index), header = this.store.bestAt(this.store.tip().anchorHeight + 1n + index);
     if (row === undefined || header === undefined || compareBytes(header.id, row.header) !== 0) return undefined;
-    return { id: header.id, transactionsRoot: header.transactionsRoot, section: row.views };
+    const bytes = this.store.bytesOf(header.id);
+    if (bytes === undefined) return undefined;
+    return { id: header.id, transactionsRoot: header.transactionsRoot, section: row.views, header: bytes };
   }
 
   /** `ERGO_INDEX_LIMITS`: no section this view reads holds more under one kind and subject. */

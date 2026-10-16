@@ -363,6 +363,9 @@ export interface ErgoHeaderStore {
   forkHeight(id: Uint8Array): bigint | undefined;
   /** The height of an accepted header; undefined for one the store has not accepted. */
   heightOf(id: Uint8Array): bigint | undefined;
+  /** An accepted header's canonical bytes above the anchor, checked to reproduce its id; undefined for one the store
+   * has not accepted above it. */
+  bytesOf(id: Uint8Array): Uint8Array | undefined;
   /** An accepted header above the anchor and its ancestors off the best chain, from it down; empty for a header on
    * the best chain or not accepted. Linear in the distance to the best chain. */
   offBest(id: Uint8Array): readonly Uint8Array[];
@@ -625,6 +628,10 @@ export function ergoHeaderStore(anchorId: Uint8Array, context: readonly Uint8Arr
       const owned = ownBytes(id);
       if (owned === undefined || owned.length !== 32) return undefined;
       return below.get(bytesToHex(owned))?.height ?? rows.get(owned)?.height;
+    },
+    bytesOf(id: Uint8Array): Uint8Array | undefined {
+      const owned = ownBytes(id), at = owned === undefined || owned.length !== 32 ? undefined : stored(owned);
+      return at === undefined ? undefined : copyBytes(at.header.bytes);
     },
     prune(witnessed: Uint8Array, protectedIds: readonly Uint8Array[]): void {
       const final = stored(witnessed);

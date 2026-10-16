@@ -88,8 +88,10 @@ export function nativeExhaustionBackend(circuits: ExhaustionCircuits, parameters
     [name, gunzipSync(Buffer.from(circuits.circuits[name].program.bytecode, "base64"))] as const));
   type Instance = { readonly api: Barretenberg };
   // One instance at a time: concurrent calls share the start in flight, and a failure retires only the instance it ran on.
-  let current: Promise<Instance> | undefined, verifying: Promise<KeyedVerifier> | undefined;
+  let current: Promise<Instance> | undefined, verifying: Promise<KeyedVerifier> | undefined, closed = false;
   const instance = (): Promise<Instance> => {
+    // A closed backend starts nothing: a period proving when it closed stops at its next proof or verification.
+    if (closed) return Promise.reject(new Error("the exhaustion backend is closed"));
     current ??= (async () => {
       const api = await startExhaustionBackend(await parameters(), options.threads === undefined ? {} : { threads: options.threads });
       return { api };
@@ -125,6 +127,7 @@ export function nativeExhaustionBackend(circuits: ExhaustionCircuits, parameters
       return (await verifying).verify(EXHAUSTION_CIRCUITS.indexOf(circuit), publicInputs, proof);
     },
     async close() {
+      closed = true;
       const verifier = verifying;
       verifying = undefined;
       await Promise.all([retire(), verifier?.then(v => v.close(), () => {}).catch(() => {})]);

@@ -1,6 +1,6 @@
 // The data files `npm run build` copies beside the compiled modules: the pool's programs and the trail check set
-// (src/pool/v3), and the exhaustion set's keys and the sources a prover compiles (src/exhaustion-circuits, with the
-// vendored sponge they share). A library for release.mjs's fresh-build check and a command:
+// (src/pool/v3), and the exhaustion set's keys and the sources a prover compiles (src/exhaustion-circuits, and the
+// vendored sponge they share at its own path). A library for release.mjs's fresh-build check and a command:
 //
 //   node scripts/build-files.mjs [<out directory>]   (default dist)
 import { copyFileSync, mkdirSync } from "node:fs";
@@ -13,7 +13,7 @@ export const BUILD_FILES = Object.freeze([
   ["src/exhaustion-set.json", "exhaustion-set.json"],
   ...["exhaustion.nr", "blake2b.nr", "leaf-t.nr", "leaf-m.nr", "leaf-u.nr", "node.nr", "fold-first.nr", "fold-next.nr"]
     .map(file => [`src/exhaustion-circuits/${file}`, `exhaustion-circuits/${file}`]),
-  ["src/pool/circuits/vendor/poseidon2.nr", "exhaustion-circuits/poseidon2.nr"],
+  ["src/pool/circuits/vendor/poseidon2.nr", "pool/circuits/vendor/poseidon2.nr"],
 ]);
 /** Copy every build file under `out`. */
 export function copyBuildFiles(out) {

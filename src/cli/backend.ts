@@ -133,7 +133,7 @@ export async function openExhaustionProver(directory: Pick<Directory, "path" | "
   return {
     fold: (first, inputs, period) => pool.fold(first, inputs, period),
     folded() {
-      for (const name of readdirSync(proofs)) if (/^[0-9a-f]{64}\.json$/.test(name)) rmSync(join(proofs, name), { force: true });
+      for (const name of readdirSync(proofs)) rmSync(join(proofs, name), { force: true });
     },
     close: () => backend.close(),
   };

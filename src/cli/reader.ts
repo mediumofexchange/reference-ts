@@ -89,7 +89,10 @@ async function serve(argv: readonly string[]): Promise<void> {
   } catch (error) { await periods?.close(); await covers?.close(); await verifier?.close(); evidence?.close(); view.close(); throw error; }
   const replica = new V3Replica(directory.file("evidence.db"), evidence, view.venue.id);
   // The venue's exhaustion under the directory's set, kept over the view's own rows (succinct-read §4.7, slice 43).
-  const exhaustion = exhaustionOver(directory, view, periods);
+  let exhaustion: ReturnType<typeof exhaustionOver>;
+  try { exhaustion = exhaustionOver(directory, view, periods); } catch (error) {
+    await periods?.close(); await covers?.close(); await verifier?.close(); evidence.close(); view.close(); throw error;
+  }
   const server = createV3EvidenceService(replica, exhaustion.source);
   // A stream its file could not finish (storage damage) ended short; the replica's owner is told.
   server.on("evidenceError", (error: unknown) => { event({ event: "evidence", code: "STORAGE", message: (error as Error).message }); });
@@ -104,9 +107,6 @@ async function serve(argv: readonly string[]): Promise<void> {
     served: keptBackings(directory).map(backing => ({ backing, sequence: replica.selection(backing)?.selection.sequence ?? null })) });
   const round = async (): Promise<void> => {
     const synced = await view.syncWitnessed(), at = synced.witnessedIndex;
-    // A period proves in the background, so rounds go on meanwhile; a line names each fold served.
-    await exhaustion.advance((fold, how) => print({ status: "exhaustion", set: hex(exhaustion.source.set), foldIndex: fold.inputs.endHeight - venue.anchorHeight - 1n,
-      how }));
     for (const backing of keptBackings(directory)) {
       if (stopping()) return;
       try {
@@ -152,10 +152,16 @@ async function serve(argv: readonly string[]): Promise<void> {
       event({ event: "prove", code: "PROVER", message: (error as Error).message, failures, retryMs: wait });
     }
   };
+  /** The exhaustion's turn, after the covers' (so a period ending during a rest never keeps them waiting): its kept
+   * fold taken, or a period started over the indices the view newly read, proving in the background while rounds go
+   * on. A line names each fold served. */
+  const exhaust = () => exhaustion.advance((fold, how) => print({ status: "exhaustion", set: hex(exhaustion.source.set),
+    foldIndex: fold.inputs.endHeight - venue.anchorHeight - 1n, how }));
   try {
     while (!stopping()) {
       await round();
       await prove();
+      if (!stopping()) await exhaust();
       await rest(ms);
     }
   } finally {

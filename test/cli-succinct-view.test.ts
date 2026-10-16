@@ -9,6 +9,8 @@ import { testExhaustionSet } from "../src/ergo-exhaustion.js";
 import { exhaustionOver, openView, venueText } from "../src/cli/venue.js";
 import type { ExhaustionProver } from "../src/cli/backend.js";
 import type { Fold } from "../src/ergo-exhaustion.js";
+import { EXHAUSTION_CIRCUITS, ExhaustionPool } from "../src/ergo-exhaustion-pool.js";
+import { encodeFold } from "../src/ergo-exhaustion-wire.js";
 import { POOL_V3, type Construction } from "../src/pool/v3/construction.js";
 import { ReplayStore } from "../src/pool/v3/replay-store.js";
 import type { Directory } from "../src/cli/common.js";
@@ -92,8 +94,17 @@ describe("a succinct directory's view", () => {
       const view = openView(dir);
       await view.venue.sync([new BranchSupplier("node", blocks[5]!, chain)]);
       let release: () => void = () => {}, proved = 0, cleared = 0;
+      // The pool's own check of a period (its headers chain from its start, its leaves end at the fold's end with its
+      // root) over what the replica hands it, at small leaf sizes.
+      const pool = new ExhaustionPool({ circuits: { sizes: { t: 64, m: 64, u: 16 }, circuits: Object.fromEntries(EXHAUSTION_CIRCUITS.map(name =>
+        [name, { program: {}, vk: new Uint8Array(115 * 32), keyHash: 7n }])) } as never, backend: {} as never });
       const prover: ExhaustionProver = {
-        fold: async (first, inputs) => { proved++; await new Promise<void>(done => { release = done; }); return set.prove(first, inputs); },
+        fold: async (first, inputs, period) => {
+          proved++;
+          expect(pool.leaves(inputs, period).leaves.length).toBeGreaterThan(0);
+          await new Promise<void>(done => { release = done; });
+          return set.prove(first, inputs);
+        },
         folded: () => { cleared++; }, close: async () => { release(); },
       };
       const replica = exhaustionOver(dir, view, prover, { exhaustion: set }), heard: [Fold, string][] = [];
@@ -123,6 +134,29 @@ describe("a succinct directory's view", () => {
       await exhaustionOver(dir, view, undefined, { exhaustion: set }).advance(() => { throw new Error("served"); });
       expect(events.map(e => (e as { code?: string }).code)).toEqual(["KEPT", "KEPT"]);
       expect(String((events[0] as { message: string }).message)).toContain("another start or key hash");
+      // A kept fold that verifies but ends past the view's rows waits for them, proving nothing meanwhile.
+      const far = await (async () => {
+        const map = new ExhaustionServer({ start: set.start, foldKeyHash: set.foldKeyHash, prove: (f, i) => set.prove(f, i) });
+        return map.extend(blocks.slice(0, 10).map(b => ({ id: b.id, transactionsRoot: root(b), section: b.section })));
+      })();
+      writeFileSync(dir.file("exhaustion-fold.bin"), encodeFold(far));
+      const waiting = exhaustionOver(dir, view, prover, { exhaustion: set });
+      await waiting.advance(() => { throw new Error("served"); });
+      await waiting.advance(() => { throw new Error("served"); });
+      expect([proved, waiting.busy, events.at(-1)]).toEqual([1, false, expect.objectContaining({ code: "WAITING" })]);
+      expect(events.filter(e => (e as { code?: string }).code === "WAITING")).toHaveLength(1);
+      // A kept fold that verifies over the view's blocks with another map (a set that is unsound, or this map) is kept
+      // aside as evidence, and the replica serves that set no more.
+      const forged = { ...fold, inputs: { ...fold.inputs, mapRoot: fold.inputs.mapRoot + 1n } };
+      writeFileSync(dir.file("exhaustion-fold.bin"), encodeFold({ ...forged, proof: set.prove(true, forged.inputs) }));
+      const unsound = exhaustionOver(dir, view, prover, { exhaustion: set });
+      await unsound.advance(() => { throw new Error("served"); });
+      await unsound.advance(() => { throw new Error("served"); });
+      expect([proved, unsound.busy, existsSync(dir.file("exhaustion-fold.bin")), existsSync(dir.file("exhaustion-fold.disagreement.bin"))])
+        .toEqual([1, false, false, true]);
+      expect(events.at(-1)).toMatchObject({ code: "DISAGREEMENT" });
+      expect(await unsound.source.supplier.fold(1n << 40n)).toBeUndefined();
+      expect(await unsound.source.supplier.transaction(A + 1n, 0n)).toBeUndefined();
       view.close();
     } finally { process.stderr.write = write; }
   });

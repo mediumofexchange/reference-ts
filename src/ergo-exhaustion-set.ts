@@ -122,6 +122,12 @@ export function exhaustionSetOver(identities: Readonly<Record<ExhaustionCircuit,
     folds: { readonly first: ExhaustionKey; readonly next: ExhaustionKey }, start: { readonly id: Uint8Array; readonly height: bigint },
     source: ExhaustionVerifierSource, options: VerifierOptions = {}): ExhaustionSet & { close(): Promise<void> } {
   const identity = exhaustionSetIdentity(identities, start);
+  // The keys it verifies under must be the ones its identity names.
+  for (const [name, key] of [["fold-first", folds.first], ["fold-next", folds.next]] as const) {
+    if (bytesToHex(sha256(key.vk)) !== identities[name].vk || fieldToHex(key.keyHash) !== identities[name].keyHash) {
+      throw new EncodingError(`the ${name} key is not the one the set's identity names`);
+    }
+  }
   const pinned = [{ kind: 1, vk: copyBytes(folds.first.vk), publicInputs: 8 }, { kind: 2, vk: copyBytes(folds.next.vk), publicInputs: 8 }];
   const over = (api: Barretenberg): KeyedVerifier => keyedVerifier(api, pinned, EXHAUSTION_PROOF_BYTES, options);
   let verifier: Promise<KeyedVerifier> | undefined, closed = false;

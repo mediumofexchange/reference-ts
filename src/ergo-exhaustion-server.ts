@@ -5,7 +5,8 @@
 // A fold proof comes from `prove`: a prover pool's (`ExhaustionPool`), or a test set's hash (`testExhaustionSet`),
 // which attests nothing. The server computes the map natively and hands `prove` the inputs a fold would carry with the
 // period itself: where it begins, its blocks and the map's updates over them. A period whose proof fails is proved
-// again before the next, so the folds always continue one another.
+// again before the next, so the folds always continue one another. A fold proved elsewhere, or kept from before a
+// restart, is taken by `adopt` once it verifies and the map over its blocks reproduces it.
 import { compareBytes, copyBytes, EncodingError } from "./bytes.js";
 import {
   foldPublicInputs, sectionInclusionPath, SubjectMap, type ExhaustionSupplier, type Fold, type FoldInputs, type IncludedTransaction, type KeyAnswer, type MapUpdate,
@@ -138,12 +139,15 @@ export class ExhaustionServer implements ExhaustionSupplier {
     try {
       if (!Array.isArray(blocks)) throw new EncodingError("invalid exhaustion period");
       owned = blocks.map(ownBlock);
-      const inputs = fold?.inputs, fields = inputs === undefined ? undefined : foldPublicInputs(inputs);
-      if (fold === null || typeof fold !== "object" || typeof fold.first !== "boolean" || !(fold.proof instanceof Uint8Array) || fields === undefined) {
+      if (fold === null || typeof fold !== "object") throw new EncodingError("invalid exhaustion fold");
+      // Each value read once: what is checked is what is kept.
+      const { first, proof, inputs } = fold;
+      const read = inputs === null || typeof inputs !== "object" ? undefined : { startId: inputs.startId, startHeight: inputs.startHeight,
+        endId: inputs.endId, endHeight: inputs.endHeight, mapRoot: inputs.mapRoot, foldKeyHash: inputs.foldKeyHash };
+      if (typeof first !== "boolean" || !(proof instanceof Uint8Array) || read === undefined || foldPublicInputs(read) === undefined) {
         throw new EncodingError("invalid exhaustion fold");
       }
-      own = Object.freeze({ first: fold.first, proof: copyBytes(fold.proof), inputs: Object.freeze({ ...inputs!, startId: copyBytes(inputs!.startId),
-        endId: copyBytes(inputs!.endId) }) });
+      own = Object.freeze({ first, proof: copyBytes(proof), inputs: Object.freeze({ ...read, startId: copyBytes(read.startId), endId: copyBytes(read.endId) }) });
     } catch (error) { return Promise.reject(error); }
     const run = this.#queue.then(() => this.#adopt(own, owned, verify));
     this.#queue = run.catch(() => {});
@@ -160,14 +164,15 @@ export class ExhaustionServer implements ExhaustionSupplier {
     if (inputs.endHeight !== this.#ahead.end.height + BigInt(owned.length) || owned.length === 0) {
       throw new ExhaustionServerError("FOLD", `the fold ends at ${inputs.endHeight}, not ${owned.length} blocks above the map's end ${this.#ahead.end.height}`);
     }
+    if (compareBytes(owned.at(-1)!.id, inputs.endId) !== 0) throw new ExhaustionServerError("FOLD", "the fold ends at another header than its blocks");
     if (await verify(fold) !== true) throw new ExhaustionServerError("FOLD", "the fold does not verify");
     this.#usable();
     for (const own of owned) {
       this.#ahead.appendBlock(own.id, own.section.map(t => t.unsigned));
       if (this.#options.block === undefined) this.#blocks.set(this.#ahead.end.height, own);
     }
-    if (compareBytes(this.#ahead.end.id, inputs.endId) !== 0 || this.#ahead.root !== inputs.mapRoot) {
-      this.#broken = `a fold to ${inputs.endHeight} verified, but the map over its blocks ends elsewhere`;
+    if (this.#ahead.root !== inputs.mapRoot) {
+      this.#broken = `a fold to ${inputs.endHeight} verified, but the map over its blocks has another root`;
       throw new ExhaustionServerError("DISAGREEMENT", this.#broken);
     }
     for (const own of owned) this.#served.appendBlock(own.id, own.section.map(t => t.unsigned));
@@ -208,7 +213,7 @@ export class ExhaustionServer implements ExhaustionSupplier {
   }
 
   async transaction(height: bigint, position: bigint): Promise<IncludedTransaction | undefined> {
-    if (height > this.#ahead.end.height) return undefined;
+    if (this.#broken !== undefined || height > this.#ahead.end.height) return undefined;
     const block = this.#options.block?.(height) ?? this.#blocks.get(height), j = Number(position);
     const unsigned = block?.section[j]?.unsigned;
     if (block === undefined || unsigned === undefined) return undefined;
