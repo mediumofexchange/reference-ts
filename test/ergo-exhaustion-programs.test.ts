@@ -11,19 +11,22 @@ const root = mkdtempSync(join(tmpdir(), "moe-exhaustion-programs-"));
 afterAll(() => rmSync(root, { recursive: true, force: true }));
 
 /** A stand-in nargo: `--version` as `version` says; `execute` writes its prover file back as the witness, fails a
- * prover file holding "fail" as a failed assertion does, and refuses a second execution while one runs. */
+ * prover file holding "fail" as a failed assertion does, "badtype" as a type error after a warning, and "kill" by a
+ * signal, and refuses a second execution while one runs in any crate (a marker beside the stand-in). */
 function fakeNargo(version = "1.0.0-beta.26"): string {
   const file = join(root, `nargo-${Math.random().toString(36).slice(2)}`);
   writeFileSync(file, `#!/usr/bin/env node
 const fs = require("fs"), path = require("path"), a = process.argv.slice(2);
 if (a[0] === "--version") { console.log("nargo version = ${version}\\nnoirc version = ${version}+0000"); process.exit(0); }
 if (a[0] !== "execute") process.exit(2);
-const dir = a[a.indexOf("--program-dir") + 1], name = a[a.indexOf("--prover-name") + 1], busy = path.join(dir, "busy");
+const dir = a[a.indexOf("--program-dir") + 1], name = a[a.indexOf("--prover-name") + 1], busy = __filename + ".busy";
 const toml = fs.readFileSync(path.join(dir, name + ".toml"), "utf8");
 if (fs.existsSync(busy)) { console.error("two executions at once"); process.exit(3); }
 fs.writeFileSync(busy, "");
 setTimeout(() => {
   fs.rmSync(busy);
+  if (toml.includes("kill")) process.kill(process.pid, "SIGKILL");
+  if (toml.includes("badtype")) { console.error("warning: unused variable e\\nerror: Invalid type for x"); process.exit(1); }
   if (toml.includes("fail")) { console.error("error: Assertion failed: the leaf's list is not the scan's\\n  ┌─ src/main.nr:4:5"); process.exit(1); }
   fs.mkdirSync(path.join(dir, "target"), { recursive: true });
   fs.writeFileSync(path.join(dir, "target", a.at(-1) + ".gz"), toml);
@@ -69,10 +72,28 @@ describe("a prover's witnesses (succinct-read §4.3, slice 43)", () => {
     expect(leftovers(at["leaf-t"])).toEqual([]);
   });
 
-  it.skipIf(process.platform === "win32")("refuses an input nargo cannot read before running it", async () => {
+  it.skipIf(process.platform === "win32")("reads the inputs at the call: an unreadable one is refused at once, and a later change reaches no witness", async () => {
     const at = crates(), witness = nargoWitness(fakeNargo(), at);
-    await expect(witness("leaf-u", { x: 1n })).rejects.toThrow(TypeError);
+    const inputs = { sin: "2" };
+    let settled = false;
+    const ahead = witness("leaf-t", { sin: "1" }).finally(() => { settled = true; }), made = witness("leaf-u", inputs);
+    inputs.sin = "999";
+    let refused = false;
+    await witness("leaf-u", { x: 1n }).catch(e => { refused = e instanceof TypeError; });
+    // Refused while the witness ahead of it still runs.
+    expect(refused).toBe(true);
+    expect(settled).toBe(false);
+    await ahead;
+    expect(Buffer.from(await made).toString()).toBe('sin = "2"\n');
+    await expect(witness("leaf-u", { x: "\x7f" })).rejects.toThrow(TypeError);
     expect(leftovers(at["leaf-u"])).toEqual([]);
+  });
+
+  it.skipIf(process.platform === "win32")("names nargo's error line, not a warning before it, and a nargo stopped by a signal", async () => {
+    const at = crates(), witness = nargoWitness(fakeNargo(), at);
+    await expect(witness("node", { sin: "badtype" })).rejects.toThrow("node: nargo failed: error: Invalid type for x");
+    await expect(witness("node", { sin: "kill" })).rejects.toThrow("node: nargo was stopped by SIGKILL");
+    expect(leftovers(at.node)).toEqual([]);
   });
 
   it.skipIf(process.platform === "win32")("refuses a compiler that is not the pinned one, even with every crate kept", () => {

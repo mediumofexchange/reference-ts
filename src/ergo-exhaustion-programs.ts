@@ -51,13 +51,19 @@ export interface ExhaustionPrograms extends ExhaustionCircuits { readonly witnes
 
 const bytecodeIdentity = (bytecode: string): string => bytesToHex(sha256(Buffer.from(bytecode, "base64")));
 
-/** A kept crate's program, where every file is the shipped one and its program's bytecode the manifest's. */
+/** A kept crate's program, where its files are exactly the shipped ones (any other source file changes nargo's hash of
+ * the program, so `nargo execute` would compile again, unchecked, at the first witness) and its program is the pinned
+ * compiler's with the manifest's bytecode. */
 function kept(crate: string, name: ExhaustionCircuit): CompiledProgram | undefined {
   try {
-    for (const [file, shipped] of crateFiles(name)) if (!readFileSync(join(crate, file)).equals(shipped())) return undefined;
-    const program = JSON.parse(readFileSync(join(crate, "target", `${crateName(name)}.json`), "utf8")) as { abi?: unknown; bytecode?: unknown };
+    const files = crateFiles(name);
+    for (const [file, shipped] of files) if (!readFileSync(join(crate, file)).equals(shipped())) return undefined;
+    const sources = files.map(([file]) => file).filter(file => file !== "Nargo.toml").map(file => file.slice(4)).sort();
+    if (readdirSync(join(crate, "src")).sort().join("\n") !== sources.join("\n")) return undefined;
+    const program = JSON.parse(readFileSync(join(crate, "target", `${crateName(name)}.json`), "utf8")) as
+      { noir_version?: unknown; abi?: unknown; bytecode?: unknown };
     if (typeof program.bytecode !== "string" || bytecodeIdentity(program.bytecode) !== EXHAUSTION_SET_MANIFEST.circuits[name].bytecode ||
-        program.abi === null || typeof program.abi !== "object") return undefined;
+        program.noir_version !== EXHAUSTION_SET_MANIFEST.compiler.split(" ")[1] || program.abi === null || typeof program.abi !== "object") return undefined;
     return program as unknown as CompiledProgram;
   } catch { return undefined; }
 }
@@ -65,10 +71,13 @@ function kept(crate: string, name: ExhaustionCircuit): CompiledProgram | undefin
 /** A TOML key as nargo reads a parameter or field name. */
 const KEY = /^[A-Za-z_][A-Za-z0-9_]*$/;
 /** `inputs` as a prover file for `nargo execute`: strings, booleans, safe integers, arrays and tables (structs), nested.
- * Anything else is a caller's error. */
+ * Anything else, or a string TOML cannot hold as JSON writes it (DEL, a lone surrogate), is a caller's error. */
 export function proverToml(inputs: CircuitInputs): string {
   const value = (v: unknown): string => {
-    if (typeof v === "string") return JSON.stringify(v);
+    if (typeof v === "string") {
+      if (/[\x7f\ud800-\udfff]/.test(v)) throw new TypeError("a circuit input string TOML cannot hold");
+      return JSON.stringify(v);
+    }
     if (typeof v === "boolean") return String(v);
     if (typeof v === "number" && Number.isSafeInteger(v)) return String(v);
     if (Array.isArray(v)) return `[${v.map(value).join(", ")}]`;
@@ -87,17 +96,23 @@ const run = promisify(execFile);
  * (a prover needs one witness ahead of its proof). A failed check refuses with the circuit's message for it. */
 export function nargoWitness(nargo: string, crates: Readonly<Record<ExhaustionCircuit, string>>): ExhaustionWitness {
   let queue: Promise<unknown> = Promise.resolve();
-  const execute = async (circuit: ExhaustionCircuit, inputs: CircuitInputs): Promise<Uint8Array> => {
+  // nargo's own logging stays off: its output is read only for a refusal.
+  const env = { ...process.env };
+  delete env.NOIR_LOG;
+  const execute = async (circuit: ExhaustionCircuit, toml: string): Promise<Uint8Array> => {
     const crate = crates[circuit], name = `witness-${randomUUID()}`;
     const prover = join(crate, `${name}.toml`), witness = join(crate, "target", `${name}.gz`);
     try {
-      writeFileSync(prover, proverToml(inputs));
+      writeFileSync(prover, toml);
       try {
-        await run(nargo, ["execute", "--program-dir", crate, "--prover-name", name, name], { maxBuffer: 1 << 26 });
+        await run(nargo, ["execute", "--program-dir", crate, "--prover-name", name, name], { maxBuffer: 1 << 26, env });
       } catch (error) {
-        const { stdout, stderr, message } = error as { stdout?: string; stderr?: string; message: string };
+        const { stdout, stderr, message, signal } = error as { stdout?: string; stderr?: string; message: string; signal?: string | null };
         const out = `${stderr ?? ""}${stdout ?? ""}`, failed = /Assertion failed: [^\n]*/.exec(out)?.[0];
-        throw new ExhaustionWitnessError(circuit, failed ?? `nargo failed: ${(out.trim() || message).split("\n")[0]!.slice(0, 500)}`);
+        if (failed !== undefined) throw new ExhaustionWitnessError(circuit, failed);
+        if (signal) throw new ExhaustionWitnessError(circuit, `nargo was stopped by ${signal}`);
+        const first = /^error: [^\n]*/m.exec(out)?.[0] ?? (out.trim() || message).split("\n")[0]!;
+        throw new ExhaustionWitnessError(circuit, `nargo failed: ${first.slice(0, 500)}`);
       }
       return new Uint8Array(readFileSync(witness));
     } finally {
@@ -106,7 +121,10 @@ export function nargoWitness(nargo: string, crates: Readonly<Record<ExhaustionCi
     }
   };
   return (circuit, inputs) => {
-    const next = queue.then(() => execute(circuit, inputs));
+    // The inputs are read at the call, so a refusal comes at once and a later change to them reaches no witness.
+    let toml: string;
+    try { toml = proverToml(inputs); } catch (error) { return Promise.reject(error); }
+    const next = queue.then(() => execute(circuit, toml));
     queue = next.catch(() => {});
     return next;
   };
