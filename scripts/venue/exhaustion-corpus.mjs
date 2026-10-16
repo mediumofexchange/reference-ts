@@ -29,7 +29,7 @@ import { autolykosPowValid, parseErgoHeader } from "../../dist/ergo-headers.js";
 import { sectionMatchesRoot, shapedOutputs } from "../../dist/ergo-profile.js";
 import { scanTransaction } from "../../dist/ergo-scan.js";
 import { EMPTY_SUBTREES, entryChain, MAP_DEPTH, mapLeaf, mapNode, SubjectMap, subjectKey } from "../../dist/ergo-exhaustion.js";
-import { foldStateInputs, isPeriodEnd, periodLeaves, startState, stateEnd, stateHash, transactionLeaf } from "../../dist/ergo-exhaustion-prover.js";
+import { foldStateInputs, isPeriodEnd, periodLeaves, startState, stateEnd, transactionLeaf } from "../../dist/ergo-exhaustion-prover.js";
 import { EXHAUSTION_PROOF_BYTES, EXHAUSTION_SET_MANIFEST, exhaustionKeys } from "../../dist/ergo-exhaustion-set.js";
 import { crateName, exhaustionPrograms, proverToml } from "../../dist/ergo-exhaustion-programs.js";
 import { fieldToHex, limbsOf } from "../../dist/pool/field.js";
@@ -325,9 +325,10 @@ async function execute(day, execute, log) {
     const label = `${blocks[0].height}–${blocks.at(-1).height}`;
     const refuse = (what, why) => { result.refusals.push({ period: label, what, why }); log(`REFUSED ${label} ${what}: ${why}`); };
     if (!isPeriodEnd(run.end) || run.end.u.root !== map.root || !same(stateEnd(run.end).id, blocks.at(-1).id)) refuse("period", "the leaves do not end at its last block with the map's root");
-    // Placeholder proofs check no fold's previous fold, so the join between folds is checked here: a period starts in
-    // the state its previous period ended in.
-    if (previousEnd !== undefined && stateHash(run.start) !== stateHash(previousEnd)) refuse("period", "does not start where the previous period ended");
+    // Placeholder proofs check no fold's previous fold, so the join between folds is checked here: a period starts at the
+    // header and map root its previous period ended at (its chains start at zero, §4.3).
+    if (previousEnd !== undefined && (!same(stateEnd(run.start).id, stateEnd(previousEnd).id) || stateEnd(run.start).height !== stateEnd(previousEnd).height ||
+        run.start.u.root !== previousEnd.u.root)) refuse("period", "does not start where the previous period ended");
     previousEnd = run.end;
     // Leaves; each joins the next by its state hashes. A day's first leaf is also executed under an end state off by one,
     // which its circuit must refuse by name: a control that the executions judge at all.
