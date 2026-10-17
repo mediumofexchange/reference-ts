@@ -122,17 +122,54 @@ describe("replay storage", () => {
   it("leaves out a witnessed output once its kept nullifier is visible, imports included, and keeps its mark's bytes", () => {
     const store = new ReplayStore(), a = store.open(new Uint8Array(32).fill(1), new Uint8Array(32), undefined, genesis);
     const unspent = (ns: number, p: bigint) => [...store.unspentWitnessed(ns, p)].map(output => [output.cm, output.mark.nf, output.mark.note]);
+    const rows = (ns: number, p: bigint) => [...store.witnessed(ns, p)].map(output => output.cm);
     store.append(a, append([1n, 2n, 3n], [], cm => cm !== 2n));
-    store.append(a, append([4n], [mark(1n).nf], () => true));
     expect(unspent(a, 1n)).toEqual([[1n, mark(1n).nf, fieldToBytes(1n)], [3n, mark(3n).nf, fieldToBytes(3n)]]);
+    store.append(a, append([4n], [mark(1n).nf], () => true));
     expect(unspent(a, 2n).map(([cm]) => cm)).toEqual([3n, 4n]);
-    // A successor spending a predecessor's witnessed output leaves it out there, and not in the predecessor.
+    // The spent note's row is gone (Next 4 (ck)), so a read below the tip, where it was unspent, is refused as a path is.
+    expect(rows(a, 2n)).toEqual([3n, 4n]);
+    expect(() => unspent(a, 1n)).toThrow(/moved past the read position/);
+    // A successor spending a predecessor's witnessed output leaves it out there; the predecessor keeps its row.
     const b = store.open(new Uint8Array(32).fill(2), new Uint8Array(32).fill(2),
       { segments: new Map([[Buffer.from(new Uint8Array(32).fill(1)).toString("hex"), { ns: a, upto: 2n }]]), totals: new Map() }, genesis);
     expect(unspent(b, 0n).map(([cm]) => cm)).toEqual([3n, 4n]);
     store.append(b, append([5n], [mark(3n).nf], () => true));
     expect(unspent(b, 1n).map(([cm]) => cm)).toEqual([4n, 5n]);
     expect(unspent(a, 2n).map(([cm]) => cm)).toEqual([3n, 4n]);
+    expect(rows(b, 1n)).toEqual([3n, 4n, 5n]);
+    // A predecessor moved past the position imported answers while it has spent nothing since; once it spends, it may
+    // have left out a note unspent there, and the successor's read is refused.
+    store.append(a, append([6n], []));
+    expect(unspent(b, 1n).map(([cm]) => cm)).toEqual([4n, 5n]);
+    store.append(a, append([7n], [mark(4n).nf]));
+    expect(() => unspent(b, 1n)).toThrow(/moved past the read position/);
+  });
+
+  it("keeps NoteTree's paths for unspent witnesses as spends drop rows at block edges, across rewrite pages", () => {
+    const store = new ReplayStore(), ns = store.open(new Uint8Array(32), new Uint8Array(32), undefined, genesis);
+    const tree = new NoteTree(), held = new Map<bigint, bigint>(), edges = new Set([0n, 1n, 1023n, 1024n, 2047n, 2048n, 4095n]);
+    let leaves = 0n, spentRows = 0;
+    // Every output witnessed, so blocks of 2^11 and 2^12 leaves rewrite more than one page of rows; every third one spent
+    // two records on, spends landing on and beside the leaves that complete blocks.
+    const due: { cm: bigint; at: number }[] = [];
+    for (let i = 0; leaves < 4200n; i++) {
+      const outputs = Array.from({ length: 1 + (i % 8) }, next), spends: bigint[] = [];
+      while (due.length > 0 && due[0]!.at <= i) { const { cm } = due.shift()!; spends.push(mark(cm).nf); held.delete(cm); spentRows++; }
+      outputs.forEach((cm, j) => { const leaf = leaves + BigInt(j); held.set(cm, leaf); if (leaf % 3n === 0n || edges.has(leaf)) due.push({ cm, at: i + 2 }); });
+      const tip = store.append(ns, append(outputs, spends, () => true));
+      tree.appendAll(outputs); leaves += BigInt(outputs.length);
+      if (i % 151 !== 0 && leaves < 4200n) continue;
+      expect([...store.unspentWitnessed(ns, tip.position)].map(o => o.cm)).toEqual([...held.keys()]);
+      expect([...store.witnessed(ns, tip.position)].map(o => o.cm)).toEqual([...held.keys()]);
+      // Paths beside the spent edges and a sample across the tree on the way; every held path at the end, where the
+      // rewrite of the first 2^11 leaves crossed a page.
+      for (const leaf of held.values()) {
+        if (leaves >= 4200n || edges.has(leaf - 1n) || edges.has(leaf + 1n) || leaf % 61n === 2n) expect(store.witness(ns, tip.position, leaf)!.path).toEqual(tree.path(leaf));
+      }
+    }
+    expect(spentRows).toBeGreaterThan(1300);
+    expect(held.size).toBeGreaterThan(2048);
   });
 
   it("lives in a host's database: writes join the host's transaction, and an imported frontier is copied in once", () => {
@@ -247,6 +284,32 @@ describe("replay storage", () => {
       // The digest holds, so the file is reused as it was left.
       store = new ReplayStore(path, { digest });
       expect(store.tip(kept[0]!)).toEqual(tip);
+    } finally { store.close(); rmSync(dir, { recursive: true, force: true }); }
+  });
+
+  it.skipIf(BROWSER_HOST)("discards a kept file of the layout before spent witnesses were dropped, though its digest holds, and keeps the one read again (Next 4 (ck))", () => {
+    const dir = mkdtempSync(join(tmpdir(), "moe-layout-")), path = join(dir, "replay.sqlite"), digest = join(dir, "replay.sha256");
+    const context = new Uint8Array(32).fill(7), write = (store: ReplayStore): number => {
+      const { walk } = store.openWalk(context), ns = store.open(new Uint8Array(32).fill(1), new Uint8Array(32).fill(2), undefined, genesis);
+      store.append(ns, append([1n, 2n], [], () => true)); store.append(ns, append([3n], [mark(1n).nf]));
+      store.closeWalk(walk);
+      return ns;
+    };
+    let store = new ReplayStore(path, { digest });
+    try {
+      const ns = write(store);
+      store.close();
+      // Layout 12 kept a spent note's witness: its file, vouched for by its own digest, is read again rather than reused.
+      const old = new DatabaseSync(path);
+      try { old.exec("PRAGMA user_version = 12"); } finally { old.close(); }
+      writeFileSync(digest, keptFileDigest(path)!);
+      store = new ReplayStore(path, { digest });
+      expect(store.hasNamespace(ns)).toBe(false);
+      const again = write(store), tip = store.tip(again);
+      store.close();
+      store = new ReplayStore(path, { digest });
+      expect(store.tip(again)).toEqual(tip);
+      expect([...store.witnessed(again, tip.position)].map(o => o.cm)).toEqual([2n]);
     } finally { store.close(); rmSync(dir, { recursive: true, force: true }); }
   });
 

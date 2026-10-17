@@ -182,6 +182,7 @@ const SCHEMA = `
     PRIMARY KEY(ns, id)) WITHOUT ROWID;
   CREATE TABLE witness (ns INTEGER, leaf INTEGER, cm BLOB NOT NULL, nf BLOB NOT NULL, note BLOB NOT NULL, siblings BLOB NOT NULL,
     PRIMARY KEY(ns, leaf)) WITHOUT ROWID;
+  CREATE INDEX witness_nf ON witness(ns, nf);
   CREATE TABLE kept_context (id INTEGER PRIMARY KEY CHECK (id = 1), key BLOB NOT NULL);
   CREATE TABLE verdict (key BLOB PRIMARY KEY, operator BLOB NOT NULL, seq BLOB NOT NULL, root BLOB NOT NULL, signature BLOB NOT NULL,
     idx BLOB NOT NULL, class TEXT NOT NULL, detail TEXT, segment BLOB NOT NULL, snapshot BLOB NOT NULL, ns INTEGER, position INTEGER,
@@ -230,8 +231,11 @@ const ANSWER_TABLES = ["answer", "answer_held", "answer_replacement", "answer_pu
  * incomplete right block as the empty subtree, which an earlier build would return as its path. 7: a kept walk.
  * 8: a witness row holds its output's mark. 9: a mark keeps its nullifier's tag. 10: a write-ahead log and page digest.
  * 11: a namespace's construction, and a demand's nullifiers where its construction names them (lit-v1). 12: a namespace's
- * demands in position order (lit-v1 §10's rebuild reads them). */
-const SCHEMA_VERSION = 12;
+ * demands in position order (lit-v1 §10's rebuild reads them). 13: a note tree's namespace keeps its unspent notes'
+ * witnesses only (Next 4 (ck)). */
+const SCHEMA_VERSION = 13;
+/** Witness rows one completed block's rewrite reads at a time. */
+const WITNESS_PAGE = 1024;
 /** Replayed records between keep points inside one read, by default. */
 const KEEP_EVERY = 10_000;
 /** Milliseconds of a read between keep points, whatever it replayed: a read stopped sooner than it replays `every`
@@ -693,6 +697,8 @@ export class ReplayStore {
     if (typeof source !== "string") {
       if (kept !== undefined) throw new TypeError("a hosted store is not a kept file");
       this.#db = source; this.#hosted = true;
+      // A host's database made before layout 13 lacks `witness_nf`: an operator's journal witnesses no output, so its
+      // drop by nullifier finds no row either way, and a handle beside the serving one never changes the schema.
       if (this.#db.prepare("SELECT 1 FROM sqlite_schema WHERE type = 'table' AND name = 'namespace'").get() === undefined) this.#db.exec(SCHEMA);
     } else {
       const path = source;
@@ -809,7 +815,9 @@ export class ReplayStore {
       importedNullifiers: "SELECT nf FROM nullifier WHERE ns = ? AND position <= ?",
       spentGet: "SELECT key, bit, l, r, hash FROM spent WHERE ns = ? AND id = ?",
       spentPut: "INSERT OR REPLACE INTO spent VALUES (?, ?, ?, ?, ?, ?, ?)",
-      witnessesIn: "SELECT leaf, siblings FROM witness WHERE ns = ? AND leaf >= ? AND leaf < ?",
+      witnessesIn: "SELECT leaf, siblings FROM witness WHERE ns = ? AND leaf >= ? AND leaf < ? ORDER BY leaf LIMIT ?",
+      dropWitness: "DELETE FROM witness WHERE ns = ? AND nf = ?",
+      spentPast: "SELECT 1 FROM nullifier WHERE ns = ? AND position > ? LIMIT 1",
       witness: "SELECT siblings FROM witness WHERE ns = ? AND leaf = ?",
       putWitness: "INSERT INTO witness VALUES (?, ?, ?, ?, ?, ?)",
       moveWitness: "UPDATE witness SET siblings = ? WHERE ns = ? AND leaf = ?",
@@ -1304,11 +1312,30 @@ export class ReplayStore {
   *outputs(ns: number, p: bigint): Generator<StoredOutput> {
     for (const row of this.#q.outputs!.iterate({ ns, p })) yield this.#output(row as Record<string, unknown>);
   }
-  /** The visible outputs the replay kept a witness for whose kept nullifier is not visibly spent, in scan order. */
+  /** The visible outputs the replay kept a witness for whose kept nullifier is not visibly spent, in scan order. A
+   * note tree's namespace drops a witness once its own replay spends it, so a namespace (or an import) whose replay
+   * spent past the position read may have dropped a note unspent there: that read is refused, as `witness` refuses one
+   * below the tip. */
   *unspentWitnessed(ns: number, p: bigint): Generator<WitnessedOutput> {
+    if (this.construction(ns).tree) {
+      this.#notSpentPast(ns, p);
+      for (const entry of this.imports(ns).values()) this.#notSpentPast(entry.ns, entry.upto);
+    }
     yield* this.#witnessed("unspentWitnessed", ns, p);
   }
-  /** Every visible output the replay kept a witness for, spent or not, in scan order (lit-v1 §8's highest index). */
+  #notSpentPast(ns: number, position: bigint): void {
+    if (this.#q.spentPast!.get(ns, position) !== undefined) this.#pastRead();
+  }
+  /** Refuses a read of witnesses below `ns`'s tip: a kept file's is kept state to discard and read again (§14). */
+  #atTip(ns: number, position: bigint): void {
+    if (this.tip(ns).position !== position) this.#pastRead();
+  }
+  #pastRead(): never {
+    if (this.#kept !== undefined) throw new KeptStateMismatch("a kept witness is past the read position");
+    throw new Error("the witnessed namespace has moved past the read position");
+  }
+  /** Every visible output the replay kept a witness for in scan order, spent or not where its construction keeps no note
+   * tree (lit-v1 §8's highest index); a note tree's namespace keeps no row of a note it spent. */
   *witnessed(ns: number, p: bigint): Generator<WitnessedOutput> {
     yield* this.#witnessed("witnessed", ns, p);
   }
@@ -1342,9 +1369,8 @@ export class ReplayStore {
    * tip: a kept file whose namespace an earlier read moved past `position` cannot answer, so it is discarded
    * and the read replays (§14); within one read no path is read below a tip. */
   witness(ns: number, position: bigint, leaf: bigint): WitnessPath | undefined {
+    this.#atTip(ns, position);
     const tip = this.tip(ns);
-    if (tip.position !== position && this.#kept !== undefined) throw new KeptStateMismatch("a kept witness is past the read position");
-    if (tip.position !== position) throw new Error("the witnessed namespace has moved past the read position");
     const row = this.#q.witness!.get(ns, leaf) as { siblings: Uint8Array } | undefined;
     if (row === undefined) return undefined;
     const siblings = decodeSiblings(bytes(row.siblings)), right = Array.from({ length: NOTE_TREE_DEPTH }, (_, h) => ((leaf >> BigInt(h)) & 1n) === 1n);
@@ -1860,28 +1886,36 @@ export class ReplayStore {
         // once the block beside it completes; `witness` takes a still-filling right block from the frontier.
         // Only the witnesses beside a block completed here are rewritten, each at most once per height over its
         // life (31 times), so the work per record does not grow with the outputs ever witnessed on average; a
-        // record completing a block of height h rewrites the witnesses among the 2^h leaves left of it.
+        // record completing a block of height h rewrites the unspent witnesses among the 2^h leaves left of it, a
+        // page at a time, so its memory is one page's whatever the block's size (Next 4 (ck)).
         for (const w of born) {
           const output = record.outputs[Number(w.leaf - first)]!;
           this.#q.putWitness!.run(ns, w.leaf, fieldToBytes(output.cm), fieldToBytes(output.witness!.nf), output.witness!.note, encodeSiblings(w.siblings));
         }
-        const moved = new Map<bigint, bigint[]>();
         for (const [key, value] of completed) {
           const [h, block] = key.split(":").map(BigInt) as [bigint, bigint];
           if (h >= BigInt(NOTE_TREE_DEPTH) || (block & 1n) === 0n) continue;
-          for (const w of this.#q.witnessesIn!.iterate(ns, (block - 1n) << h, block << h)) {
-            const r = w as { leaf: bigint; siblings: Uint8Array }, leaf = BigInt(r.leaf);
-            const siblings = moved.get(leaf) ?? decodeSiblings(bytes(r.siblings));
-            siblings[Number(h)] = value;
-            moved.set(leaf, siblings);
+          const sibling = fieldToBytes(value), end = block << h;
+          for (let from = (block - 1n) << h; ;) {
+            const page = this.#q.witnessesIn!.all(ns, from, end, WITNESS_PAGE) as { leaf: bigint; siblings: Uint8Array }[];
+            for (const r of page) {
+              const siblings = bytes(r.siblings);
+              siblings.set(sibling, 32 * Number(h));
+              this.#q.moveWitness!.run(siblings, ns, r.leaf);
+            }
+            if (page.length < WITNESS_PAGE) break;
+            from = BigInt(page.at(-1)!.leaf) + 1n;
           }
         }
-        for (const [leaf, siblings] of moved) this.#q.moveWitness!.run(encodeSiblings(siblings), ns, leaf);
       }
       const spent = this.#spent(ns);
       for (const { nf, tag } of record.nullifiers) {
         spent.insert(keyBytes(nf));
         this.#q.insertNullifier!.run(keyBytes(nf), ns, position, keyBytes(tag));
+        // A spent note's witness is never read again here (`unspentWitnessed` and `witness` read at the tip), so its
+        // row goes: a namespace keeps the witnesses of its unspent notes only. An imported namespace's row stays, as
+        // its own replay holds it; a construction without a note tree keeps its marks, whose spends lit-v1 §8 reads.
+        if (tree) this.#q.dropWitness!.run(ns, keyBytes(nf));
       }
       spent.save();
       const spentRoot = spent.root();
