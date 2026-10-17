@@ -8,8 +8,11 @@
 //   --proofs  the pinned backend, key derivation, a genuine proof of each kind, a tampered proof, a spend proved and
 //             verified, and a restore's capsule scan (proofs.mjs), with times and memory. CI's real-proof group
 //             `browser` runs it. On Linux the browser's processes' peak resident memory is sampled from outside too.
+//   --rates   the holder's JavaScript workloads (rates.mjs, slice 46): proof-free replay of a journal's package, succinct
+//             reading's digests and the Ergo header store's checks, each timed per statement or header.
 // DevTools' CPU throttling reaches pages, not workers ("only supported for pages", Chrome 154), and every check runs
-// in workers, so no throttled run stands in for a slower device: phone rates need a phone.
+// in workers; throttle.mjs (slice 46) runs these checks with the browser in a CPU-quota and memory-capped group
+// instead, a simulated slower core, not a phone.
 //   --files   the library's suites that keep database files (files.mjs: kept replay files, retained evidence, the
 //             wallet's files) with the worker's file pool mounted (files.ts); then a crash: a worker keeping a replay
 //             file is ended mid-walk, and a new worker must reopen the file through §14's digest check at its last
@@ -26,6 +29,7 @@
 //             cross-origin isolation needs). The address printed carries the run's token, which every post must.
 //   --parameters <dir> the proving parameters (default scratch/private-payment-crs, as prepare-crs.mjs keeps them).
 //   --report <file>    where the result is written as JSON (default scratch/browser-<check>.json).
+//   --minutes <n>      how long the check may run before it fails (default 25; a throttled run needs more).
 import { spawn, spawnSync } from "node:child_process";
 import { randomBytes } from "node:crypto";
 import { closeSync, existsSync, mkdtempSync, openSync, readdirSync, readFileSync, readSync, rmSync, writeFileSync } from "node:fs";
@@ -50,16 +54,18 @@ worker.onmessage = async event => {
 </script>`;
 
 function parse(argv) {
-  const options = { check: "suites", serve: false, port: 0, browser: process.env.MOE_BROWSER, parameters: join(root, "scratch/private-payment-crs"), report: undefined };
+  const options = { check: "suites", serve: false, port: 0, browser: process.env.MOE_BROWSER, parameters: join(root, "scratch/private-payment-crs"), report: undefined, minutes: 25 };
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i];
-    if (arg === "--suites" || arg === "--proofs" || arg === "--files" || arg === "--wallet") options.check = arg.slice(2);
+    if (["--suites", "--proofs", "--files", "--wallet", "--rates"].includes(arg)) options.check = arg.slice(2);
     else if (arg === "--serve") options.serve = true;
     else if (arg === "--port" && i + 1 < argv.length) options.port = Number(argv[++i]);
+    else if (arg === "--minutes" && i + 1 < argv.length) options.minutes = Number(argv[++i]);
     else if (["--browser", "--parameters", "--report"].includes(arg) && i + 1 < argv.length) options[arg.slice(2)] = resolve(argv[++i]);
     else throw new Error(`browser check: unknown or incomplete option ${arg}`);
   }
   if (!Number.isSafeInteger(options.port) || options.port < 0 || options.port > 65535) throw new Error("browser check: --port takes a port number");
+  if (!Number.isSafeInteger(options.minutes) || options.minutes < 1) throw new Error("browser check: --minutes takes a whole number of minutes");
   options.report ??= join(root, `scratch/browser-${options.check}.json`);
   return options;
 }
@@ -338,10 +344,10 @@ async function main() {
       const command = request => pageCommand(connection, sessionId, request);
       const { drill } = await import("./wallet-drill.mjs");
       const drilled = drill({ command, route: routed => routes.add(routed), log, parameters: options.parameters, root });
-      outcome = await within(Promise.race([drilled.catch(error => ({ error: error.stack ?? String(error) })), crashed]), 25).finally(() => clearInterval(sampler));
+      outcome = await within(Promise.race([drilled.catch(error => ({ error: error.stack ?? String(error) })), crashed]), options.minutes).finally(() => clearInterval(sampler));
     } else {
       await connection.send("Page.navigate", { url: address("/", entry) }, sessionId);
-      outcome = await within(Promise.race([resultOf(entry), crashed]), 25).finally(() => clearInterval(sampler));
+      outcome = await within(Promise.race([resultOf(entry), crashed]), options.minutes).finally(() => clearInterval(sampler));
     }
     let isolation, crashes;
     if (entry === "files") {
@@ -415,6 +421,12 @@ function judge(report, log) {
     if (c.spendVerifies !== true || c.spendProofBytes !== 14656) failures.push(`the proved spend: ${c.spendProofBytes} bytes, verifies ${c.spendVerifies}`);
     if (c.capsulesFound !== 1000) failures.push(`the capsule scan found ${c.capsulesFound} of 1000`);
     log({ phases: report.phases, checks: { ...c, genuine: undefined } });
+  }
+  if (report.check === "rates" && !report.error) {
+    const c = report.checks, s = report.sizes;
+    if (c.replayPosition !== String(s.spends + 1) || c.verifierCallsPerRead !== s.spends + 1) failures.push(`the replay: ${JSON.stringify(c)}`);
+    if (c.headersAdded !== s.headers) failures.push(`the header store added ${c.headersAdded} of ${s.headers}`);
+    log({ phases: report.phases, checks: c });
   }
   for (const failure of failures) console.error(`browser check: FAILED ${failure}`);
   const memory = report.browserRssBytes === undefined ? "" : `peak browser RSS ${Math.round(report.browserRssBytes.peak / 2 ** 20)} MiB, `;
