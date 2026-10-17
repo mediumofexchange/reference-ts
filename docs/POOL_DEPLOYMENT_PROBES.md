@@ -1167,6 +1167,7 @@ Findings:
     the reader's. By SQLite's format, each row of about 1.2 KB spills onto an overflow page of its own (an estimate).
   - Levers (WORK.md Next 4 (ck)): drop a tree namespace's witness row once its nullifier is spent, which bounds the rows by
     the holdings; and rewrite a block's witnesses in bounded batches, which bounds the step even at the largest holdings.
+    Both are taken ([slice 44](#a-wallets-spent-witnesses-dropped-slice-44)).
 - **The operator's memory and storage hold, and its ordinary admission stays flat.** `serve` held 340–430 MB, peaked at
   521 MB, and kept 21.7 KB a statement (21.7 GB at 10⁶, against about 20 GB declared). Its median admission rose from
   100 to 168 ms over the run, and its CPU a statement from 102 to 159 ms.
@@ -1191,6 +1192,29 @@ Findings:
   - one backing and segment, synthetic blocks, one holder by construction extreme up to its cap;
   - one run on one host below the declared hardware, in use for a third of the bands;
   - memory is the process's peak, which garbage collection timing moves by tens of MB.
+
+### A wallet's spent witnesses dropped (slice 44)
+
+A note tree's namespace now drops its own witness row when its replay inserts that row's nullifier, and a record
+completing a block rewrites the remaining rows 1,024 at a time, patching the one sibling in place
+([decision](../decisions/2026-10.md#2026-10-17--drop-a-spent-notes-witness-and-rewrite-a-completed-blocks-witnesses-a-page-at-a-time-slice-44-next-4-ck)).
+The [witness probe](https://github.com/mediumofexchange/reference-ts/tree/9cc291c/scripts/pool/v3/design-point-1e6), unchanged, on the
+runtime at `e3c314e` (the append and keep point as merged), against the 10⁶ run's
+([results at 403c76d](https://github.com/mediumofexchange/reference-ts/tree/403c76d/scripts/pool/v3/spent-witnesses)):
+
+| Leaves | Append, before → after | Keep point, before → after | Resident after the keep point, before → after |
+|---:|---:|---:|---:|
+| 2¹⁷ | 2.6 s → 9 ms | 2.1 s → 0.7 s | 244 → 168 MB |
+| 2¹⁸ | 5.2 s → 9 ms | 4.0 s → 0.5 s | 290 → 237 MB |
+| 2¹⁹ | 10.3 s → 11 ms | 7.0 s → 0.5 s | 366 → 238 MB |
+| 2²⁰ | 20.2 s → 12 ms | 15.0 s → 0.7 s | 534 → 247 MB |
+
+The probe's peak over the whole run of 2²⁰ leaves was 249 MB, against 534 MB, and it reached it by 2·10⁵ leaves; the run
+took 1,599 s beside the unit suite, against 1,356 s alone. In this probe every witnessed note is spent two records
+later, so the rows left are a handful. A wallet's rows are now its unspent notes', so a rewrite's memory is one page and
+its work is bounded by the holdings, not by every note the wallet ever held.
+
+*Pending:* a seed-restored wallet's first sync at 10⁶ on the retained run, with this build (WORK.md).
 
 ## The trail's succinct relation (slice 27)
 
