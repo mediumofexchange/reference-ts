@@ -697,6 +697,8 @@ export class ReplayStore {
     if (typeof source !== "string") {
       if (kept !== undefined) throw new TypeError("a hosted store is not a kept file");
       this.#db = source; this.#hosted = true;
+      // A host's database made before layout 13 lacks `witness_nf`: an operator's journal witnesses no output, so its
+      // drop by nullifier finds no row either way, and a handle beside the serving one never changes the schema.
       if (this.#db.prepare("SELECT 1 FROM sqlite_schema WHERE type = 'table' AND name = 'namespace'").get() === undefined) this.#db.exec(SCHEMA);
     } else {
       const path = source;
@@ -815,6 +817,7 @@ export class ReplayStore {
       spentPut: "INSERT OR REPLACE INTO spent VALUES (?, ?, ?, ?, ?, ?, ?)",
       witnessesIn: "SELECT leaf, siblings FROM witness WHERE ns = ? AND leaf >= ? AND leaf < ? ORDER BY leaf LIMIT ?",
       dropWitness: "DELETE FROM witness WHERE ns = ? AND nf = ?",
+      spentPast: "SELECT 1 FROM nullifier WHERE ns = ? AND position > ? LIMIT 1",
       witness: "SELECT siblings FROM witness WHERE ns = ? AND leaf = ?",
       putWitness: "INSERT INTO witness VALUES (?, ?, ?, ?, ?, ?)",
       moveWitness: "UPDATE witness SET siblings = ? WHERE ns = ? AND leaf = ?",
@@ -1310,22 +1313,29 @@ export class ReplayStore {
     for (const row of this.#q.outputs!.iterate({ ns, p })) yield this.#output(row as Record<string, unknown>);
   }
   /** The visible outputs the replay kept a witness for whose kept nullifier is not visibly spent, in scan order. A
-   * note tree's namespace drops a witness once its own replay spends it, so it answers only at its tip, and an imported
-   * one only at the position imported, as `witness` does: a namespace moved past it would leave out a note unspent there. */
+   * note tree's namespace drops a witness once its own replay spends it, so a namespace (or an import) whose replay
+   * spent past the position read may have dropped a note unspent there: that read is refused, as `witness` refuses one
+   * below the tip. */
   *unspentWitnessed(ns: number, p: bigint): Generator<WitnessedOutput> {
     if (this.construction(ns).tree) {
-      this.#atTip(ns, p);
-      for (const entry of this.imports(ns).values()) this.#atTip(entry.ns, entry.upto);
+      this.#notSpentPast(ns, p);
+      for (const entry of this.imports(ns).values()) this.#notSpentPast(entry.ns, entry.upto);
     }
     yield* this.#witnessed("unspentWitnessed", ns, p);
   }
+  #notSpentPast(ns: number, position: bigint): void {
+    if (this.#q.spentPast!.get(ns, position) !== undefined) this.#pastRead();
+  }
   /** Refuses a read of witnesses below `ns`'s tip: a kept file's is kept state to discard and read again (§14). */
   #atTip(ns: number, position: bigint): void {
-    if (this.tip(ns).position === position) return;
+    if (this.tip(ns).position !== position) this.#pastRead();
+  }
+  #pastRead(): never {
     if (this.#kept !== undefined) throw new KeptStateMismatch("a kept witness is past the read position");
     throw new Error("the witnessed namespace has moved past the read position");
   }
-  /** Every visible output the replay kept a witness for, spent or not, in scan order (lit-v1 §8's highest index). */
+  /** Every visible output the replay kept a witness for in scan order, spent or not where its construction keeps no note
+   * tree (lit-v1 §8's highest index); a note tree's namespace keeps no row of a note it spent. */
   *witnessed(ns: number, p: bigint): Generator<WitnessedOutput> {
     yield* this.#witnessed("witnessed", ns, p);
   }

@@ -138,8 +138,11 @@ describe("replay storage", () => {
     expect(unspent(b, 1n).map(([cm]) => cm)).toEqual([4n, 5n]);
     expect(unspent(a, 2n).map(([cm]) => cm)).toEqual([3n, 4n]);
     expect(rows(b, 1n)).toEqual([3n, 4n, 5n]);
-    // A predecessor moved past the position imported would leave out a note unspent there: the successor's read is refused.
-    store.append(a, append([6n], [mark(4n).nf]));
+    // A predecessor moved past the position imported answers while it has spent nothing since; once it spends, it may
+    // have left out a note unspent there, and the successor's read is refused.
+    store.append(a, append([6n], []));
+    expect(unspent(b, 1n).map(([cm]) => cm)).toEqual([4n, 5n]);
+    store.append(a, append([7n], [mark(4n).nf]));
     expect(() => unspent(b, 1n)).toThrow(/moved past the read position/);
   });
 
@@ -159,9 +162,10 @@ describe("replay storage", () => {
       if (i % 151 !== 0 && leaves < 4200n) continue;
       expect([...store.unspentWitnessed(ns, tip.position)].map(o => o.cm)).toEqual([...held.keys()]);
       expect([...store.witnessed(ns, tip.position)].map(o => o.cm)).toEqual([...held.keys()]);
-      // Paths beside the spent edges, and a sample across the tree.
+      // Paths beside the spent edges and a sample across the tree on the way; every held path at the end, where the
+      // rewrite of the first 2^11 leaves crossed a page.
       for (const leaf of held.values()) {
-        if (edges.has(leaf - 1n) || edges.has(leaf + 1n) || leaf % 61n === 2n) expect(store.witness(ns, tip.position, leaf)!.path).toEqual(tree.path(leaf));
+        if (leaves >= 4200n || edges.has(leaf - 1n) || edges.has(leaf + 1n) || leaf % 61n === 2n) expect(store.witness(ns, tip.position, leaf)!.path).toEqual(tree.path(leaf));
       }
     }
     expect(spentRows).toBeGreaterThan(1300);
