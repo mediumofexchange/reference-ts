@@ -246,7 +246,7 @@ try {
     else assert.equal(Number(view.json.read.venue.succinctIndices), 0, JSON.stringify(view.json.read.venue));
   });
 
-  await check("the succinct holder pays a succinct shop, which fulfills over the tail's fetched proof", async () => {
+  await check("the succinct holder pays a succinct shop, which fulfills over the tail's fetched proof, and reads natively once it drops the set", async () => {
     // The replica serves on without proving, so the payment is the tail no cover reaches: its proof is fetched.
     provedLines = replica.lines.filter(line => line.status === "proved");
     // The folds it proved, and each period's proving as the pool logged it: each proof's witness and proof seconds, then
@@ -281,10 +281,16 @@ try {
     assert.equal(after.available, "11");
     assert.equal(after.read.judgment, "succinct");
     assert.equal(Number(after.read.venue.succinctIndices) >= 1, native, JSON.stringify(after.read.venue));
+    // A wallet whose directory drops the set (succinct-read §2 rule 7) reads its trails' proofs and its venue's
+    // sections natively from then on: the same holdings, and no succinct judgment.
+    writeFileSync(join(HS, "exhaustion.json"), `${JSON.stringify({ dropped: [after.read.set] })}\n`);
+    const dropped = await ok(wallet("sync", HS, backing));
+    assert.deepEqual([dropped.available, holdings(dropped)], [after.available, holdings(after)]);
+    assert.equal(dropped.read, undefined, JSON.stringify(dropped.read));
   });
 
   let taken = [];
-  await check("a second replica that proves nothing takes the first's fold; a succinct reader of it alone reads the supply a complete reader does", async () => {
+  await check("a second replica that proves nothing takes the first's fold; a succinct reader of it alone reads the supply a complete reader does, and reads it natively once it drops the set", async () => {
     const complete = await ok(["reader", "supply", "--dir", RC, backing]);
     // The complete reader becomes a replica keeping the first one: it takes the fold the first proved, checked against
     // its own view's map, and serves it.
@@ -309,6 +315,13 @@ try {
       assert.equal(read.json.read.judgment, "succinct");
       assert.equal(Number(read.json.read.venue.succinctIndices) >= 1, native, JSON.stringify(read.json.read.venue));
       assert.equal(read.noir, false);
+      // A set the directory dropped (succinct-read §2 rule 7) serves no read: the next reads its trail's proofs and its
+      // venue's sections natively, to the same supply, and its output names no succinct judgment.
+      writeFileSync(join(RS, "exhaustion.json"), `${JSON.stringify({ dropped: [read.json.read.set] })}\n`);
+      const dropped = await moe(["reader", "supply", "--dir", RS, backing]);
+      assert.equal(dropped.status, 0, dropped.stderr);
+      assert.deepEqual(same(dropped.json), same(complete));
+      assert.equal(dropped.json.read, undefined, JSON.stringify(dropped.json.read));
     } finally { await second.stop(); }
   });
 

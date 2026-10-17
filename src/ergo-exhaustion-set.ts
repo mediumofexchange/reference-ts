@@ -18,11 +18,11 @@ import type { Barretenberg } from "@aztec/bb.js";
 import { sha256 } from "@noble/hashes/sha2.js";
 import { bytesToHex } from "@noble/hashes/utils.js";
 import { copyBytes, EncodingError } from "./bytes.js";
-import type { ExhaustionSet } from "./ergo-exhaustion.js";
+import { FoldVerificationError, type ExhaustionSet } from "./ergo-exhaustion.js";
 import type { LeafSizes } from "./ergo-exhaustion-prover.js";
 import { fieldToHex, hexToField } from "./pool/field.js";
 import { EXHAUSTION_PARAMETERS } from "./pool/parameters.js";
-import { keyedVerifier, type CompiledProgram, type KeyedVerifier, type VerifierOptions } from "./pool/proof-verifier.js";
+import { keyedVerifier, ProofVerificationThrew, type CompiledProgram, type KeyedVerifier, type VerifierOptions } from "./pool/proof-verifier.js";
 
 /** The exhaustion circuits (§4.3): the three leaves, the node, the first and the next fold. */
 export const EXHAUSTION_CIRCUITS = Object.freeze(["leaf-t", "leaf-m", "leaf-u", "node", "fold-first", "fold-next"] as const);
@@ -45,7 +45,7 @@ export interface ExhaustionCircuits { readonly sizes: LeafSizes; readonly circui
 /**
  * The six circuits' identities, held here and never read from a supplier (§6): per circuit, SHA-256 of its `main.nr`
  * (`exhaustion-circuits/<name>.nr`) and its `CircuitIdentity`, under the compiler and backend named, at the leaves'
- * sizes, from `EXHAUSTION_PARAMETERS`; `modules` are the shared sources each compiles with.
+ * sizes, from `EXHAUSTION_PARAMETERS`; `modules` are the shared sources, `reads` those each circuit compiles with.
  * `scripts/venue/exhaustion-set.mjs` builds the circuits again and asserts every entry and both shipped files.
  */
 export const EXHAUSTION_SET_MANIFEST = Object.freeze({
@@ -57,10 +57,20 @@ export const EXHAUSTION_SET_MANIFEST = Object.freeze({
   parameters: EXHAUSTION_PARAMETERS,
   // The exhaustion module, Blake2b and the vendored sponge, pool-v3's helper.
   modules: Object.freeze({
-    "blake2b.nr": "2c021e29c19bd09b735354d8ac80effb8772f014c0d6e2c4a60472929d7c5100",
-    "exhaustion.nr": "d245fd0162c9a998ece823a40e94973a01dd0a75684b9e9ddd5aeef99efc81d3",
+    "blake2b.nr": "e2d2e406d54625dd3793abe0cdc0fd471f070b6b0a04327b734e31b67d673bd6",
+    "exhaustion.nr": "2cacd3dcc12f3f15e855f07eb5654a101a4c7e2122af1c28bad453ebe504888a",
     "poseidon2.nr": "44f3a3d1abe7d5fa2da5c0339e52018195d55f295c320e530d355f9cc62159d8",
   }),
+  // The modules each circuit's `main.nr` declares, which its compiler reads and its crate holds beside it: §6's
+  // sources besides `main.nr`. The node and the folds hash nothing with Blake2b.
+  reads: Object.freeze({
+    "leaf-t": Object.freeze(["blake2b.nr", "exhaustion.nr", "poseidon2.nr"]),
+    "leaf-m": Object.freeze(["blake2b.nr", "exhaustion.nr", "poseidon2.nr"]),
+    "leaf-u": Object.freeze(["blake2b.nr", "exhaustion.nr", "poseidon2.nr"]),
+    "node": Object.freeze(["exhaustion.nr", "poseidon2.nr"]),
+    "fold-first": Object.freeze(["exhaustion.nr", "poseidon2.nr"]),
+    "fold-next": Object.freeze(["exhaustion.nr", "poseidon2.nr"]),
+  }) as Readonly<Record<ExhaustionCircuit, readonly ("blake2b.nr" | "exhaustion.nr" | "poseidon2.nr")[]>>,
   circuits: Object.freeze({
     "leaf-t": Object.freeze({
       source: "080ffd2a7f66f17e891eb29fd4b585e5fd1443882bd34036ec0b96a019068838",
@@ -139,8 +149,16 @@ export function exhaustionSetOver(identity: Uint8Array, folds: { readonly first:
   return Object.freeze({
     get identity() { return copyBytes(own); }, test: true, start: Object.freeze({ id: copyBytes(start.id), height: start.height }),
     foldKeyHash: folds.next.keyHash,
-    verifyFold: async (first: boolean, inputs: readonly bigint[], proof: Uint8Array) =>
-      proof instanceof Uint8Array && proof.length === EXHAUSTION_PROOF_BYTES && await (await opened()).verify(first ? 1 : 2, inputs, proof),
+    verifyFold: async (first: boolean, inputs: readonly bigint[], proof: Uint8Array) => {
+      if (!(proof instanceof Uint8Array) || proof.length !== EXHAUSTION_PROOF_BYTES) return false;
+      // A verifier or instance that does not start, or a closed set, throws as itself: the reader's own fault. Only the
+      // backend's throw on the bytes themselves (`ProofVerificationThrew`; the instance is retired) is the supplier's.
+      const verifier = await opened();
+      try { return await verifier.verify(first ? 1 : 2, inputs, proof); } catch (cause) {
+        if (cause instanceof ProofVerificationThrew) throw new FoldVerificationError(`the fold's verification threw: ${cause.message}`, { cause });
+        throw cause;
+      }
+    },
     close: async () => {
       closed = true;
       const made = verifier;

@@ -22,7 +22,7 @@ import { ERGO_SYNTHETIC_REFERENCE, ERGO_TESTNET_REFERENCE, ergoProfileIdentity, 
   type ErgoReferenceContext } from "../ergo-profile.js";
 import { ErgoPublisher, ergoNodePublisher, payToPublicKeyTree, readPlainBox, rowOutbox, verifyErgoProof, type ErgoPublisherPersistence,
   type ErgoPublishingSupplier } from "../ergo-publisher.js";
-import { foldPublicInputs, type ExhaustionSet, type ExhaustionSupplier, type Fold } from "../ergo-exhaustion.js";
+import { foldPublicInputs, FoldVerificationError, type ExhaustionSet, type ExhaustionSupplier, type Fold } from "../ergo-exhaustion.js";
 import { ExhaustionServer, ExhaustionServerError, type ServedBlock } from "../ergo-exhaustion-server.js";
 import { decodeFold, encodeFold } from "../ergo-exhaustion-wire.js";
 import { ErgoVenueJournal } from "../ergo-store.js";
@@ -31,7 +31,7 @@ import { ReplayStore } from "../pool/v3/replay-store.js";
 import { exhaustionClient, V3ServiceClientError } from "../pool/v3/service-client.js";
 import type { ExhaustionSource } from "../pool/v3/service-http.js";
 import { ergoNodeSupplier, nodeText, parseNodeJson, type ErgoSupplier } from "../ergo-supplier.js";
-import { shippedExhaustionSet, type SetStart } from "../succinct-set.js";
+import { shippedExhaustionSet, testSetIdentity, type SetStart } from "../succinct-set.js";
 import { MempoolNode } from "../ergo-synthetic.js";
 import type { RecordKind } from "../record-range.js";
 import type { VenueReference } from "../pool/v3/guard.js";
@@ -279,6 +279,16 @@ function droppedSets(directory: Directory): string[] {
   } catch { /* refused below */ }
   throw new CommandError("INVALID", `${directory.file("exhaustion.json")} is not { dropped }: correct or remove it`);
 }
+/** Whether the directory dropped the set `identity` names (`exhaustion.json`). */
+export function setDropped(directory: Directory, identity: Uint8Array): boolean {
+  return droppedSets(directory).includes(bytesToHex(identity));
+}
+/** Whether the directory reads trails succinctly (succinct-read §3): a succinct directory, under the set its venue
+ * names, unless it dropped that set. A reader holding §2 rule 7's evidence stops using the set for every read, its
+ * trails' covers as its venue's folds, and reads natively. */
+export function readsTrailsSuccinctly(directory: Directory, file: VenueFile): boolean {
+  return directory.succinct && !setDropped(directory, testSetIdentity(venueStart(file)));
+}
 /** A succinct view whose set disagreed: the set is dropped for the directory, and the view's file and every answer kept
  * under it (the reader's `replay.db`, a wallet's `wallet.db.replay`) are discarded (§6), so the next view reads natively. */
 function dropSet(directory: Directory, set: Uint8Array): void {
@@ -305,7 +315,7 @@ export function openView(directory: Directory, options: { readonly exhaustion?: 
     const open = () => new ErgoVenue(file.profile, readContext(directory), {}, undefined, journal, set === undefined ? undefined : { set });
     let venue = open();
     // A view holding indices read under a dropped set (one restored from before the drop) is dropped again.
-    const dropped = set !== undefined && droppedSets(directory).includes(bytesToHex(set.identity));
+    const dropped = set !== undefined && setDropped(directory, set.identity);
     if (venue.disagreed() || (dropped && venue.succinctSummary()!.succinctIndices > 0n)) {
       journal.close();
       dropSet(directory, set!.identity);
@@ -313,7 +323,7 @@ export function openView(directory: Directory, options: { readonly exhaustion?: 
       venue = open();
     }
     // A dropped set is asked of no replica: the view reads every index natively.
-    const asked = set !== undefined && !droppedSets(directory).includes(bytesToHex(set.identity));
+    const asked = set !== undefined && !setDropped(directory, set.identity);
     const sources = suppliers(directory);
     const sync = () => {
       if (set !== undefined) for (const subject of keptSubjects(directory, file)) venue.follow(subject);
@@ -550,7 +560,11 @@ export function exhaustionOver(directory: Pick<Directory, "path" | "file">, view
         if (target === server) { server = make(); kept = null; unverified = 0; }
         return false;
       }
-      if (refused instanceof ExhaustionServerError || refused instanceof EncodingError) { silence(name, (refused as Error).message); continue; }
+      // A verification that threw on the fold's bytes (`FoldVerificationError`) is the peer's, as a refusal is.
+      if (refused instanceof ExhaustionServerError || refused instanceof EncodingError || refused instanceof FoldVerificationError) {
+        silence(name, (refused as Error).message);
+        continue;
+      }
       // A verification that could not run is this replica's until it recurs: the next offer is tried, and a peer whose
       // fold fails to verify so KEPT_TRIES times is passed over.
       const tries = (unverifiable.get(name) ?? 0) + 1;

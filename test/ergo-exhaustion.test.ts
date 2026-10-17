@@ -332,6 +332,13 @@ describe("a succinct range (succinct-read §4.4)", () => {
     // Another key's entries cannot stand in, even where the chain would be recomputed from them.
     const other = map.entries(subjectKey(u));
     expect(await check({ entries: other })).toEqual({ refused: "entries" });
+    // A list padded past the path's count is refused before any entry is read or hashed: padding costs the reader
+    // nothing, however long.
+    let read = 0;
+    const padding = { get subject(): Uint8Array { read++; return s; }, height: A + 1n, position: 0n, output: 0n };
+    expect(await check({ entries: [...entries, ...Array.from({ length: 10_000 }, () => padding)] })).toEqual({ refused: "entries" });
+    expect(await check({ entries: [padding, ...entries] })).toEqual({ refused: "entries" });
+    expect(read).toBe(0);
   });
 
   it("refuses a withheld transaction, one at another position or without its path, and a missing section above the fold", async () => {

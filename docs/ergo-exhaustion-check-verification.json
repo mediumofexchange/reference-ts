@@ -2,22 +2,22 @@
   "specification": "succinct-read 282c925",
   "small": {
     "sources": {
-      "scripts/venue/exhaustion-build.mjs": "d5f0db4801d3f9606d438dc9b18006b7d9f2855a659304a1a4032f701b557c77",
+      "scripts/venue/exhaustion-build.mjs": "29a72fb659778681662a3b3be21b9117c341c61cff5b87d94485f456ecf5e33f",
       "scripts/venue/exhaustion-sources.mjs": "83f704dd827ef3117358c9668d8f4f3cc5dff68e3999227a086a74ab7610d1fe",
       "scripts/venue/exhaustion-periods.mjs": "87cafae65f94d8bb2aa9df3887dd2074cfa325a0a22b4fd90ed51a5dee7b227b",
       "scripts/venue/exhaustion-check.mjs": "ea3817ce16fddbd6168e08765fd114dc83ce5316c1c62a7d4ac098d702bf600f",
-      "src/exhaustion-circuits/exhaustion.nr": "d245fd0162c9a998ece823a40e94973a01dd0a75684b9e9ddd5aeef99efc81d3",
-      "src/exhaustion-circuits/blake2b.nr": "2c021e29c19bd09b735354d8ac80effb8772f014c0d6e2c4a60472929d7c5100",
+      "src/exhaustion-circuits/exhaustion.nr": "2cacd3dcc12f3f15e855f07eb5654a101a4c7e2122af1c28bad453ebe504888a",
+      "src/exhaustion-circuits/blake2b.nr": "e2d2e406d54625dd3793abe0cdc0fd471f070b6b0a04327b734e31b67d673bd6",
       "src/pool/circuits/vendor/poseidon2.nr": "44f3a3d1abe7d5fa2da5c0339e52018195d55f295c320e530d355f9cc62159d8",
       "src/ergo-exhaustion-prover.ts": "5f743571d6b40242781a2d65dd7aad22867c6d4eb05ebc28a8afb11d08d41cf4",
-      "src/ergo-exhaustion.ts": "943ed44ba9ef458c7c058104401e1a4838971695a258d4cb8097e1a0e6b191de",
+      "src/ergo-exhaustion.ts": "bbaa827319f08b7d05b9636c102f82797dd8256e26c12388c58b11d582c9da21",
       "src/ergo-scan.ts": "73352b1f5412cc13ac8bede4387007196f6beace1462a7db0d016969673417e7",
       "src/ergo-synthetic.ts": "659d27646efef374f7224c536206cbe6ad0783a7fb8aa4015440033444d314e8",
       "src/ergo-profile.ts": "3ba1e1306fb4328d5394466630900d9a33b776ee8fae2df63446d57297b3a022",
       "src/pool/poseidon2.ts": "c33b48e98263bdf99efc9650b81f57d90136017be2c843963ef38043bb09f308",
-      "src/pool/proof-verifier.ts": "50690c04097a1c873666b28423582a51e4775908e55e2dca6e52d036c74f1339",
-      "src/ergo-exhaustion-set.ts": "411601fcda2df033ee7f50453b318dc146868831482c242ba08b10f476dff53d",
-      "src/ergo-exhaustion-programs.ts": "19441518fe53b6e4ad89a28448b614953e21d569102b480416aece1bc5f005af",
+      "src/pool/proof-verifier.ts": "b792465e60b91f46036351d2cdb43003483a6e2bc557997cb69669e570bddcc0",
+      "src/ergo-exhaustion-set.ts": "e5f9f534cc44d3ac94d3a3f817ffa461bca2bddf836caedc9766228de4bcf707",
+      "src/ergo-exhaustion-programs.ts": "e63cd087676b1f1e4f7d15a4f1173b1d0ae170a0f60a124becfff887848f60ba",
       "src/exhaustion-circuits/leaf-t.nr": "080ffd2a7f66f17e891eb29fd4b585e5fd1443882bd34036ec0b96a019068838",
       "src/exhaustion-circuits/leaf-m.nr": "5ce613a765de530bec1e6608d34a9d98c03dbfa2d3a0d9cb46b31139c763b601",
       "src/exhaustion-circuits/leaf-u.nr": "d791eccb0c32df940cb8054dab0217a75533ae4fe4c1a1b2373d6982c07f1357",
@@ -507,7 +507,6 @@
         "expected": "child key"
       }
     ],
-    "nargoEqualsWasm": true,
     "sizes": {
       "t": 6,
       "m": 12,
@@ -518,7 +517,7 @@
       "entries": 260
     },
     "result": "pass",
-    "revision": "28872a82bd83e34be0f0db8337df4b78aa98fb86"
+    "revision": "07ee6c2a99c2c2f8f1ca689c500892d154bd3d0a"
   },
   "shipped": {
     "sources": {

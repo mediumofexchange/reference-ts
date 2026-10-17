@@ -8,7 +8,7 @@
 // scratch/exhaustion/<CT>-<CM>-<E>), the node and folds generated from the leaves' key hashes, and prints a summary.
 // Keys need the leading G1 points in CRS_PATH (default scratch/exhaustion-crs, prepared by exhaustion-crs.mjs).
 import { execFileSync, spawnSync } from "node:child_process";
-import { copyFileSync, existsSync, mkdirSync, readFileSync, realpathSync, writeFileSync } from "node:fs";
+import { copyFileSync, existsSync, mkdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { createHash } from "node:crypto";
 import path from "node:path";
 import { compile_program, createFileManager } from "@noir-lang/noir_wasm";
@@ -29,16 +29,19 @@ if (process.platform === "win32") {
   }
 }
 
-/** Compile `main` with the shared modules into `directory/name`; returns the program (warnings refused). The pinned
+/** Compile `main` with the shared modules it declares into `directory/name`, whose `src` then holds exactly the files
+ * the compiler reads (succinct-read §6's sources); returns the program (warnings refused). The pinned
  * compiler is noir_wasm; at the leaves' full size it exceeds WebAssembly's memory, so NARGO may name the native nargo
  * of the same version, whose bytecode equals noir_wasm's (exhaustion-check.mjs compares them at small sizes). */
 export async function compile(directory, name, main) {
   const project = path.join(directory, name);
+  rmSync(path.join(project, "src"), { recursive: true, force: true });
   mkdirSync(path.join(project, "src"), { recursive: true });
   writeFileSync(path.join(project, "Nargo.toml"), `[package]\nname = "moe_succinct_exhaustion_${name.replaceAll("-", "_")}"\ntype = "bin"\nauthors = []\n[dependencies]\n`);
   writeFileSync(path.join(project, "src/main.nr"), main);
-  for (const file of ["exhaustion.nr", "blake2b.nr"]) copyFileSync(path.join(shared, file), path.join(project, "src", file));
-  copyFileSync(sponge, path.join(project, "src/poseidon2.nr"));
+  for (const [, module] of main.matchAll(/^mod (\w+);$/gm)) {
+    copyFileSync(module === "poseidon2" ? sponge : path.join(shared, `${module}.nr`), path.join(project, "src", `${module}.nr`));
+  }
   let program;
   if (process.env.NARGO) {
     const version = execFileSync(process.env.NARGO, ["--version"], { encoding: "utf8" });

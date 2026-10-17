@@ -1,6 +1,8 @@
 // Blake2b-256 (RFC 7693) compression over u64 words, with hinted additions and rotations: each sum of
 // two or three words is its low 64 bits plus a constrained carry, and each rotation splits its word at
-// the rotation point into two range-checked parts.
+// the rotation point into two range-checked parts. A sum's bound below 2^64 is the pinned backend's: every
+// sum is next an operand of a 64-bit XOR, the compiler then emits no range check of its own, and bb 5.2.0's
+// logic constraint rebuilds each operand from 32-bit lookup chunks (docs/SUCCINCT_ADOPTION.md).
 global IV: [u64; 8] = [
     0x6a09e667f3bcc908, 0xbb67ae8584caa73b, 0x3c6ef372fe94f82b, 0xa54ff53a5f1d36f1,
     0x510e527fade682d1, 0x9b05688c2b3e6c1f, 0x1f83d9abfb41bd6b, 0x5be0cd19137e2179,
@@ -23,10 +25,10 @@ unconstrained fn low64(s: Field) -> (u64, Field) {
     let x = s as u128;
     ((x % 18446744073709551616) as u64, (x / 18446744073709551616) as Field)
 }
-// a + b (+ c) mod 2^64: the low word is range-checked by its type, the carry is 0, 1 or 2.
+// a + b (+ c) mod 2^64: the low word is below 2^64 as the XOR it next enters bounds it, the carry is 0, 1 or 2.
 fn add3(a: u64, b: u64, c: u64) -> u64 {
     let s = a as Field + b as Field + c as Field;
-    // Safety: r is range-checked as a u64 and the carry is constrained to {0, 1, 2}, so r = s mod 2^64.
+    // Safety: r is below 2^64 (the XOR it next enters) and the carry is constrained to {0, 1, 2}, so r = s mod 2^64.
     let (r, q) = unsafe { low64(s) };
     assert(q * (q - 1) * (q - 2) == 0);
     assert(r as Field + q * P64 == s);
@@ -34,7 +36,7 @@ fn add3(a: u64, b: u64, c: u64) -> u64 {
 }
 fn add2(a: u64, b: u64) -> u64 {
     let s = a as Field + b as Field;
-    // Safety: r is range-checked as a u64 and the carry is a bit, so r = s mod 2^64.
+    // Safety: r is below 2^64 (the XOR it next enters) and the carry is a bit, so r = s mod 2^64.
     let (r, q) = unsafe { low64(s) };
     assert(q * (q - 1) == 0);
     assert(r as Field + q * P64 == s);

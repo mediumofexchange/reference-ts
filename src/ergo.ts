@@ -55,8 +55,8 @@ import {
 import type { ErgoPublication, ErgoPublisher, ErgoRecordRequest } from "./ergo-publisher.js";
 import type { ErgoSupplier } from "./ergo-supplier.js";
 import {
-  checkFold, inclusionRoot, readSubject, subjectKey, type ExhaustionSet, type ExhaustionSupplier, type FetchedTransaction, type FoldInputs, type IndexedObject,
-  type KeyAnswer, type KeptTuple, type ReaderChain,
+  checkFold, disagrees, inclusionRoot, ownFold, readSubject, subjectKey, type CheckedKey, type ExhaustionSet, type ExhaustionSupplier, type FetchedTransaction,
+  type Fold, type FoldInputs, type IndexedObject, type KeyAnswer, type KeptTuple, type ReaderChain,
 } from "./ergo-exhaustion.js";
 import {
   ErgoVenueJournal, FAILURE, objectKey, type ErgoIncludedRow, type ErgoKeptRow, type ErgoSectionRow, type ErgoSuccinctCommit, type ErgoSuccinctSpan,
@@ -467,8 +467,8 @@ export class ErgoVenue implements RecordVenue, RecordPublisher {
    * the previous one.
    *
    * A succinct view reads, before sections, the indices above the clock
-   * through a fold's end from `exhaustion`'s first supplier that serves them
-   * (`readSuccinct`), and sections natively above it.
+   * through a fold's end from the `exhaustion` supplier with the highest
+   * fold that serves them (`readSuccinct`), and sections natively above it.
    *
    * Rejects with VenueError on a reorganization past the depth (the venue's
    * failure, after which every read refuses), on a transaction that shows the
@@ -618,12 +618,13 @@ export class ErgoVenue implements RecordVenue, RecordPublisher {
   }
 
   /**
-   * A succinct view's pass (succinct-read §4.4 over the subjects it follows). The first exhaustion supplier whose fold
-   * checks under §4.3, ends within what this sync may witness (`bound`) and answers every path, entry list and
-   * transaction it is asked gives the indices above the clock through the fold's end, each row holding the followed
-   * subjects' objects alone, and each subject newly followed its objects at the indices already read succinctly. A
-   * supplier that fails or answers what does not check is passed over, and where none serves the sync reads
-   * sections natively (§4.6). A subject followed before any index was read succinctly needs no earlier read.
+   * A succinct view's pass (succinct-read §4.4 over the subjects it follows). Of the exhaustion suppliers' folds that
+   * end within what this sync may witness (`bound`), highest end first, the first that checks under §4.3 from a
+   * supplier answering every path, entry list and transaction it is asked gives the indices above the clock through
+   * the fold's end, each row holding the followed subjects' objects alone, and each subject newly followed its objects
+   * at the indices already read succinctly. A supplier that fails or answers what does not check is passed over, and
+   * where none serves the sync reads sections natively (§4.6). A subject followed before any index was read
+   * succinctly needs no earlier read.
    */
   private async readSuccinct(sources: readonly { readonly supplier: ExhaustionSupplier; readonly name: string }[], clock: bigint, bound: bigint):
       Promise<SuccinctPass> {
@@ -643,17 +644,30 @@ export class ErgoVenue implements RecordVenue, RecordPublisher {
       at: height => { const header = this.store.bestAt(height); return header === undefined ? undefined : { id: header.id, transactionsRoot: header.transactionsRoot }; },
       tipHeight: this.store.tip().height,
     };
-    for (const { supplier, name } of sources) {
-      const answer = await supplied(() => supplier.fold(anchorHeight + 1n + bound), this.policy.supplierTimeoutMs);
+    // Every supplier's fold at once, each read once into owned values (`ownFold`). The cheap rules come first: a fold
+    // past what this sync may witness (a supplier's fork bounds the clock below the reader's depth) waits, and one that
+    // neither moves the clock nor backfills a newcomer serves nothing. Then the highest end first, of equal ends the
+    // suppliers' order: a supplier with an older fold costs no verification and holds the view to no lower end (§4.6).
+    const offers = await Promise.all(sources.map(async ({ supplier, name }) =>
+      ({ supplier, name, answer: await supplied(() => supplier.fold(anchorHeight + 1n + bound), this.policy.supplierTimeoutMs) })));
+    const candidates: { readonly supplier: ExhaustionSupplier; readonly name: string; readonly fold: Fold; readonly top: bigint }[] = [];
+    for (const { supplier, name, answer } of offers) {
       if (!answer.ok) { refused.push({ name, reason: answer.failure }); continue; }
       if (answer.value === undefined) { refused.push({ name, reason: "no fold" }); continue; }
-      const checked = await checkFold(state.set, answer.value, chain, this.profile.depth);
-      if ("refused" in checked) { refused.push({ name, reason: checked.refused }); continue; }
-      const top = checked.inputs.endHeight - anchorHeight - 1n;
-      // A fold past what this sync may witness (a supplier's fork bounds the clock below the reader's depth) waits.
+      const fold = ownFold(answer.value);
+      if (fold === undefined) { refused.push({ name, reason: "fold-proof" }); continue; }
+      const top = fold.inputs.endHeight - anchorHeight - 1n;
       if (top > bound) { refused.push({ name, reason: "fold past the clock's bound" }); continue; }
-      const forward = top > clock, backfill = newcomers.length > 0 && top >= spanTop;
-      if (!forward && !backfill) { refused.push({ name, reason: "fold at or below the clock" }); continue; }
+      if (top <= clock && !(newcomers.length > 0 && top >= spanTop)) { refused.push({ name, reason: "fold at or below the clock" }); continue; }
+      candidates.push({ supplier, name, fold, top });
+    }
+    candidates.sort((a, b) => a.top === b.top ? 0 : a.top > b.top ? -1 : 1);
+    for (const { supplier, name, fold, top } of candidates) {
+      // A verification that threw on the fold's bytes is refused (`fold-unverified`, §2 rule 3) and the next supplier's
+      // fold is tried; a set that cannot verify here throws as the view's own failure.
+      const checked = await checkFold(state.set, fold, chain, this.profile.depth);
+      if ("refused" in checked) { refused.push({ name, reason: checked.refused }); continue; }
+      const backfill = newcomers.length > 0 && top >= spanTop;
       const read = await this.readFold(supplier, checked.inputs, chain, clock, top, backfill ? newcomers : [], promoted);
       if ("refused" in read) {
         if (read.refused === "disagreement") return none(true);
@@ -703,7 +717,7 @@ export class ErgoVenue implements RecordVenue, RecordPublisher {
     }
     for (const subject of newcomers) reads.push({ subject, from: 0n });
     const spans = state.spans, skip = (index: bigint): boolean => index <= clock && !spanHolds(spans, index);
-    const objects: IndexedObject[] = [], included = new Map<string, ErgoIncludedRow>(), kept = new Map<bigint, KeptTuple>();
+    const objects: IndexedObject[] = [], included = new Map<string, ErgoIncludedRow>(), kept = new Map<bigint, KeptTuple>(), checked: CheckedKey[] = [];
     for (const { subject, from, kept: tuple } of reads) {
       const key = subjectKey(subject), answer = await keyAnswer(key, tuple?.count ?? 0n);
       if (answer === undefined) return { refused: "path" };
@@ -713,7 +727,11 @@ export class ErgoVenue implements RecordVenue, RecordPublisher {
       for (const object of read.objects) objects.push(object);
       for (const t of read.transactions) included.set(`${t.index}:${t.position}`, t);
       kept.set(key, read.kept);
+      checked.push(read.checked);
     }
+    // §2 rule 7 across the pass: each fetched transaction against every key read, not only the one it was fetched for.
+    const placed = [...included.values()].map(t => ({ height: anchorHeight + 1n + t.index, position: t.position, unsigned: t.unsigned }));
+    if (disagrees(placed, checked)) return { refused: "disagreement" };
     const size = objects.reduce((total, object) => total + retainedSize(object), 0);
     if (this.retained + size > this.policy.retainedBytes) return { refused: "retained budget" };
     this.retained += size;

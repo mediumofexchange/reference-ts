@@ -25,16 +25,16 @@ import type { CompiledProgram } from "./pool/proof-verifier.js";
 /** The shipped sources, beside this module, and the vendored sponge they share. */
 const SOURCES = fileURLToPath(new URL("./exhaustion-circuits/", import.meta.url));
 const SPONGE = fileURLToPath(new URL("./pool/circuits/vendor/poseidon2.nr", import.meta.url));
-/** The shared modules every circuit's crate holds beside its `main.nr`, by where each is read from. */
-const SHARED_SOURCES: readonly (readonly [string, string])[] = Object.freeze([["exhaustion.nr", join(SOURCES, "exhaustion.nr")],
-  ["blake2b.nr", join(SOURCES, "blake2b.nr")], ["poseidon2.nr", SPONGE]]);
+/** Where each shared module is read from. */
+const SHARED_SOURCES: Readonly<Record<string, string>> = Object.freeze({ "exhaustion.nr": join(SOURCES, "exhaustion.nr"),
+  "blake2b.nr": join(SOURCES, "blake2b.nr"), "poseidon2.nr": SPONGE });
 /** A circuit's crate name, as the build names it. */
 export const crateName = (name: ExhaustionCircuit): string => `moe_succinct_exhaustion_${name.replaceAll("-", "_")}`;
 const manifestOf = (name: ExhaustionCircuit): string => `[package]\nname = "${crateName(name)}"\ntype = "bin"\nauthors = []\n[dependencies]\n`;
-/** A crate's files, each with the shipped bytes it must hold. */
+/** A crate's files, each with the shipped bytes it must hold: its `main.nr` and the modules it reads, no other. */
 const crateFiles = (name: ExhaustionCircuit): readonly (readonly [string, () => Buffer])[] => [
   ["Nargo.toml", () => Buffer.from(manifestOf(name))], [join("src", "main.nr"), () => readFileSync(join(SOURCES, `${name}.nr`))],
-  ...SHARED_SOURCES.map(([file, from]) => [join("src", file), () => readFileSync(from)] as const)];
+  ...EXHAUSTION_SET_MANIFEST.reads[name].map(file => [join("src", file), () => readFileSync(SHARED_SOURCES[file]!)] as const)];
 
 /** The compiler is not the pinned one, or it failed or warned: a prover's setup fault. */
 export class ExhaustionCompileError extends Error {

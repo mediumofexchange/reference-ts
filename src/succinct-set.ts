@@ -60,7 +60,8 @@ export const SUCCINCT_SET_MANIFEST: SetManifest = Object.freeze({
       sources: Object.freeze({ "main.nr": CHECK_SET_MANIFEST.circuits[name].source, ...CHECK_SET_MANIFEST.modules }),
       bytecode: CHECK_SET_MANIFEST.circuits[name].bytecode, vk: CHECK_SET_MANIFEST.circuits[name].vk, keyHash: CHECK_SET_MANIFEST.circuits[name].keyHash })]),
     ...EXHAUSTION_CIRCUITS.map(name => [exhaustionName[name], Object.freeze({
-      sources: Object.freeze({ "main.nr": EXHAUSTION_SET_MANIFEST.circuits[name].source, ...EXHAUSTION_SET_MANIFEST.modules }),
+      sources: Object.freeze({ "main.nr": EXHAUSTION_SET_MANIFEST.circuits[name].source,
+        ...Object.fromEntries(EXHAUSTION_SET_MANIFEST.reads[name].map(module => [module, EXHAUSTION_SET_MANIFEST.modules[module]])) }),
       bytecode: EXHAUSTION_SET_MANIFEST.circuits[name].bytecode, vk: EXHAUSTION_SET_MANIFEST.circuits[name].vk,
       keyHash: EXHAUSTION_SET_MANIFEST.circuits[name].keyHash })]),
   ]) as Record<SuccinctCircuit, SetCircuit>),

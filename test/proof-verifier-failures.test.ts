@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { isMalformedProofFailure, mixedPairingObject } from "../src/pool/proof-verifier.js";
+import { isMalformedProofFailure, mixedPairingObject, ProofVerificationThrew } from "../src/pool/proof-verifier.js";
 
 // The pinned backend's own messages (scripts/pool/v3/check.mjs raises each on a real proof).
 const MALFORMED = [
@@ -27,6 +27,12 @@ describe("the verifier's classification of backend failures", () => {
       { message: MALFORMED[3] },
       undefined,
     ]) expect(isMalformedProofFailure(failure)).toBe(false);
+  });
+
+  it("names a throw on the bytes the backend does not call malformed, keeping its message and the failure as its cause", () => {
+    const failure = new Error("unreachable"), named = new ProofVerificationThrew(failure);
+    expect([named.name, named.message, named.cause]).toEqual(["ProofVerificationThrew", "unreachable", failure]);
+    expect(new ProofVerificationThrew("thrown text").message).toBe("thrown text");
   });
 });
 
