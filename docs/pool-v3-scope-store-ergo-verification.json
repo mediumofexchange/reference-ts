@@ -21,43 +21,43 @@
       "name": "A issue x 10",
       "kind": 1,
       "bytes": 14656,
-      "elapsedMs": 1196
+      "elapsedMs": 1085
     },
     {
       "name": "A issue y 20",
       "kind": 1,
       "bytes": 14656,
-      "elapsedMs": 926
+      "elapsedMs": 865
     },
     {
       "name": "B x spend",
       "kind": 2,
       "bytes": 14656,
-      "elapsedMs": 2771
+      "elapsedMs": 2654
     },
     {
       "name": "A y spend",
       "kind": 2,
       "bytes": 14656,
-      "elapsedMs": 2851
+      "elapsedMs": 2643
     },
     {
       "name": "A issue y 5 to the wallet before rejoin",
       "kind": 1,
       "bytes": 14656,
-      "elapsedMs": 910
+      "elapsedMs": 851
     },
     {
       "name": "A joined mixed spend",
       "kind": 2,
       "bytes": 14656,
-      "elapsedMs": 2760
+      "elapsedMs": 2636
     },
     {
       "name": "wallet y spend in joined scope",
       "kind": 2,
       "bytes": 14656,
-      "elapsedMs": 2752
+      "elapsedMs": 2631
     }
   ],
   "transactions": [
@@ -110,8 +110,8 @@
       "issued": "10",
       "burned": "0",
       "position": "2",
-      "spentRoot": "25f0be86de6101b1b49c05c2e11931fd4dce54faa5565a359a9e33b6a6a53d29",
-      "history": "96d51f34ab9cfeeaad0baddda999e5335050bc2eb7d62259abff45e2a128ef34",
+      "spentRoot": "21767418b99f9f911fafff9f048bf0097328d3fc3a5cc2cf4228c82b3003e9e5",
+      "history": "fe919a55441b4014da060b27cd2b03552f9a99c3a3deeee42ffce178e6871dc0",
       "canonical": {
         "operator": "5c9c6df261c9cb840475776aaefcd944b405328fab28f9b3a95ef40490d3de84",
         "sequence": "8",
@@ -166,8 +166,8 @@
       "issued": "25",
       "burned": "0",
       "position": "2",
-      "spentRoot": "25f0be86de6101b1b49c05c2e11931fd4dce54faa5565a359a9e33b6a6a53d29",
-      "history": "96d51f34ab9cfeeaad0baddda999e5335050bc2eb7d62259abff45e2a128ef34",
+      "spentRoot": "21767418b99f9f911fafff9f048bf0097328d3fc3a5cc2cf4228c82b3003e9e5",
+      "history": "fe919a55441b4014da060b27cd2b03552f9a99c3a3deeee42ffce178e6871dc0",
       "canonical": {
         "operator": "5c9c6df261c9cb840475776aaefcd944b405328fab28f9b3a95ef40490d3de84",
         "sequence": "8",
@@ -225,11 +225,11 @@
       ]
     }
   },
-  "elapsedMs": 32103,
+  "elapsedMs": 30511,
   "sourceSha256Lf": {
     "dist/bytes.js": "1415f876403601605321063b5a4aa66abde3ae0219b0f7cc54953779a18bd729",
     "dist/contexts.js": "a960e4f823d81ecc94d18835f26708a6e98e2abf12eea678c5c93d86b02a6e2f",
-    "dist/ergo-exhaustion.js": "d364ac713fef43c9868e7e7c54c8bc242f5836e571f6925cd07abfdc18abb8cd",
+    "dist/ergo-exhaustion.js": "43dce18fc0478c6ab241dd4a213cd0ab10664b0477b5840c9be38a42f8782865",
     "dist/ergo-headers.js": "02fb05fc182a67d5bdc9e67448276c4595eb5bdeb7da9efacb96f9b94c4996a3",
     "dist/ergo-profile.js": "0357bb92dfac59a99aff23a326b57de04262732647a420c437605c0b02f3fb7f",
     "dist/ergo-publisher.js": "7b7108a19ac26a3bc1bf5981eeb1facae7ebd32852d00ac2a99fce542582c843",
@@ -237,7 +237,7 @@
     "dist/ergo-store.js": "0d2a4f7ccf552d6416b7624278c1d745ac3b23bb5044cfafa0f422040a6c4c09",
     "dist/ergo-supplier.js": "2af08996d58ab18a949fd867b5a81be17574ee5a6d1ba7f2dd5a2819fc449419",
     "dist/ergo-synthetic.js": "5d796dfff95091c0ce4d9630950c4c038c91a864a3b042583e506f6b972e3704",
-    "dist/ergo.js": "ca7fcf4ce6afd9c6c49ca69c2a8725ea6e6f681f704475ce3c350fc9de117bc6",
+    "dist/ergo.js": "badb7c13d5fea169a745a742494c4fec294c958c3cd905c1ae7bddb2aaa79013",
     "dist/file-identity.js": "9cb5770d572d96f8ebdca8226b8e59ffed6c03771ce6dfb74316ca0ffdbb2651",
     "dist/keys.js": "9075b1091976522893cf4613e326423a46d726c4ee4adfa6710691641f9f240c",
     "dist/pool/evidence-chain.js": "b834161495e0517e6772ec8b68f540265b0e4b768ed730c08c8300b49f57b27f",
@@ -248,7 +248,7 @@
     "dist/pool/parameter-files.js": "cdd71461a6287bfeb39a377f86439ce41462eefbd4a958b44434ac096f8613f5",
     "dist/pool/parameters.js": "8bcff89f3233a2273024588d9082e9bf121ca01fb1a22931e366d281eeb88b7f",
     "dist/pool/poseidon2.js": "3504aa8cd7cca6b82f0625e7ce103ac17867521df9391963dea0d71f82233ed4",
-    "dist/pool/proof-verifier.js": "f9711285caeea0b7da2984ad78d1ec1ac4b3e8937ecb9ef8f8fa0e87fe7004d6",
+    "dist/pool/proof-verifier.js": "3383e7ed0a79753f3cd6c60812af44c2e64b684653456e0948f5feffa1f457b5",
     "dist/pool/schedule.js": "47136b811c6f4cb3aea5edb82bfe7f051a76583c943bfc0a892714ca6718c967",
     "dist/pool/scope.js": "de29da23e0b75149e1bc5b83568781b0821a26362ba8daec2da283f51a80bcf9",
     "dist/pool/v3/authorization-evidence.js": "f25b522fd4062602befea7c4f75400059bf62a5a4f345849d15fd262ac07ea3e",
@@ -314,7 +314,7 @@
     "scripts/pool/v3/scope-store-check.mjs": "728b896bcff6b3a86c0632e5e771611c4f2d4882a0a65212fc5769cda5ca5bca",
     "src/bytes.ts": "e22afb403ee5c994857e32c0c08ac7bd361e3691405baaf28758d82cdf9555b3",
     "src/contexts.ts": "b6cdffda9910803c72afa6dcedc0e69acbf8397420e9cf2af1c0c13c15a3a1bb",
-    "src/ergo-exhaustion.ts": "943ed44ba9ef458c7c058104401e1a4838971695a258d4cb8097e1a0e6b191de",
+    "src/ergo-exhaustion.ts": "bbaa827319f08b7d05b9636c102f82797dd8256e26c12388c58b11d582c9da21",
     "src/ergo-headers.ts": "dfadfef3a6c1f66b4c1bcb796727b174b32a474668f619f6f4100c456dae2cc5",
     "src/ergo-profile.ts": "3ba1e1306fb4328d5394466630900d9a33b776ee8fae2df63446d57297b3a022",
     "src/ergo-publisher.ts": "b5c832bc35c7801677cd3c9e485cfbab8ca13e7853548c765dce4530aeb2f558",
@@ -322,7 +322,7 @@
     "src/ergo-store.ts": "961f4da2d538959db0b1cfbceab4a579ae3aad9f531ae27eeb4db907f8ff576a",
     "src/ergo-supplier.ts": "91c27f0b87f6aea8329dbc1d4ba40c236a0cf49fe8b0055b2f5886fa025661d4",
     "src/ergo-synthetic.ts": "659d27646efef374f7224c536206cbe6ad0783a7fb8aa4015440033444d314e8",
-    "src/ergo.ts": "afbf0e4cf3218a727a8d232b14e7a8145dc821d7b15137593582f5c7c4d65f56",
+    "src/ergo.ts": "1809e880bde01e6a3bbe7fea16d40da295060eedd2489e42f9f3bb32948bfaf9",
     "src/file-identity.ts": "1d2f4ef3f7df3924b3621df547f29ff747daa286b286de46a3bb75172974d5c4",
     "src/keys.ts": "0b063bfb4030dbae01abe88c7c59cad9324d47800f1025d55c2742d8060a5dd2",
     "src/pool/circuits/vendor/poseidon2.nr": "44f3a3d1abe7d5fa2da5c0339e52018195d55f295c320e530d355f9cc62159d8",
@@ -334,7 +334,7 @@
     "src/pool/parameter-files.ts": "bc5f843d1c773f2de31974b0c5007279426fbbf570d80c0568ec37141399fdd4",
     "src/pool/parameters.ts": "2824970cab95bab2aabd0e5994ef1523dcbbf305bf2c5f190ef52d8d715736ee",
     "src/pool/poseidon2.ts": "c33b48e98263bdf99efc9650b81f57d90136017be2c843963ef38043bb09f308",
-    "src/pool/proof-verifier.ts": "50690c04097a1c873666b28423582a51e4775908e55e2dca6e52d036c74f1339",
+    "src/pool/proof-verifier.ts": "b792465e60b91f46036351d2cdb43003483a6e2bc557997cb69669e570bddcc0",
     "src/pool/schedule.ts": "4c4936504b7e1445548df649bbbc1a120196ff155a7954a138ffab29b578834a",
     "src/pool/scope.ts": "fe8a66c268bd6a96ba62a1cdbcefd26e0c634de2f5fac44bb4c72722436391c0",
     "src/pool/v3/authorization-evidence.ts": "34e821be1bb700f3ca107e7390f08854f856ebd1e44e1afdd856f4dd5f63ca60",
