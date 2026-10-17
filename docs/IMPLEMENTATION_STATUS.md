@@ -148,7 +148,9 @@ with it ([48 mainnet blocks](VENUE_ALTERNATIVES.md#the-prover-pool-over-mainnet-
 `exhaustion-corpus.mjs` executes every leaf, node and fold of three named mainnet days (header versions 2–4) through the
 shipped full-size programs, holding the scan to the framer, and scans every version-4 block for (cd)
 ([report](ergo-exhaustion-corpus-verification.json);
-[slice 43](../decisions/2026-10.md#2026-10-16--execute-the-shipped-exhaustion-circuits-over-named-mainnet-days-hold-their-scan-to-the-framer-and-scan-every-version-4-block-for-cd-slice-43-next-12)).
+[slice 43](../decisions/2026-10.md#2026-10-16--execute-the-shipped-exhaustion-circuits-over-named-mainnet-days-hold-their-scan-to-the-framer-and-scan-every-version-4-block-for-cd-slice-43-next-12)),
+and three testnet days that carry the reference publisher's records through the map-update leaf
+([report](ergo-exhaustion-testnet-corpus-verification.json); [slice 45](../decisions/2026-10.md#2026-10-17--put-the-references-own-publications-through-the-shipped-exhaustion-circuits-on-three-testnet-days-pin-every-corpus-days-chain-and-name-the-adoptions-start-last-slice-45-succinct-read-6)).
 The Ergo view reads the venue succinctly where its owner asks
 (`ErgoVenue`'s `succinct` option): headers natively, the subjects it follows below an exhaustion supplier's fold, sections
 natively above; a replica serves its map (`reader serve`, `ExhaustionServer`, `GET /exhaustion`) and a `--read succinct`

@@ -1,0 +1,224 @@
+{
+  "specification": "succinct-read §6 (agreement corpus); venue-ergo §§3–6",
+  "host": "Intel(R) Core(TM) i7-5500U CPU @ 2.40GHz",
+  "revision": "91ac28941f78d70682a1994aa0ca53e87191091e",
+  "run": {
+    "days": [
+      "testnet-scope",
+      "testnet-commands-1",
+      "testnet-commands-2"
+    ],
+    "workers": 4,
+    "limit": null,
+    "whole": false
+  },
+  "sources": {
+    "scripts/venue/exhaustion-corpus.mjs": "edab71ef3bc733a93ac3d7ed4ac7ab98c009409dc4ba930046d521ce7fd61379",
+    "scripts/venue/exhaustion-periods.mjs": "87cafae65f94d8bb2aa9df3887dd2074cfa325a0a22b4fd90ed51a5dee7b227b",
+    "src/ergo-scan.ts": "73352b1f5412cc13ac8bede4387007196f6beace1462a7db0d016969673417e7",
+    "src/ergo-profile.ts": "3ba1e1306fb4328d5394466630900d9a33b776ee8fae2df63446d57297b3a022",
+    "src/ergo-headers.ts": "dfadfef3a6c1f66b4c1bcb796727b174b32a474668f619f6f4100c456dae2cc5",
+    "src/ergo-exhaustion.ts": "bbaa827319f08b7d05b9636c102f82797dd8256e26c12388c58b11d582c9da21",
+    "src/ergo-exhaustion-prover.ts": "5f743571d6b40242781a2d65dd7aad22867c6d4eb05ebc28a8afb11d08d41cf4",
+    "src/ergo-exhaustion-set.ts": "e5f9f534cc44d3ac94d3a3f817ffa461bca2bddf836caedc9766228de4bcf707",
+    "src/ergo-exhaustion-programs.ts": "e63cd087676b1f1e4f7d15a4f1173b1d0ae170a0f60a124becfff887848f60ba",
+    "src/ergo-supplier.ts": "91c27f0b87f6aea8329dbc1d4ba40c236a0cf49fe8b0055b2f5886fa025661d4",
+    "src/ergo-synthetic.ts": "659d27646efef374f7224c536206cbe6ad0783a7fb8aa4015440033444d314e8",
+    "src/pool/poseidon2.ts": "c33b48e98263bdf99efc9650b81f57d90136017be2c843963ef38043bb09f308",
+    "src/pool/field.ts": "bea76598133a80199b39fc8b93943b35dcd92148a8d89837a7fca13f276cf8a0",
+    "src/bytes.ts": "e22afb403ee5c994857e32c0c08ac7bd361e3691405baaf28758d82cdf9555b3",
+    "src/record-range.ts": "d1dee26da4bb12364650470bffdbd322292a51167cab4db1bdf525e4f7159dac",
+    "src/contexts.ts": "b6cdffda9910803c72afa6dcedc0e69acbf8397420e9cf2af1c0c13c15a3a1bb",
+    "src/exhaustion-circuits/exhaustion.nr": "2cacd3dcc12f3f15e855f07eb5654a101a4c7e2122af1c28bad453ebe504888a",
+    "src/exhaustion-circuits/blake2b.nr": "e2d2e406d54625dd3793abe0cdc0fd471f070b6b0a04327b734e31b67d673bd6",
+    "src/exhaustion-circuits/leaf-t.nr": "080ffd2a7f66f17e891eb29fd4b585e5fd1443882bd34036ec0b96a019068838",
+    "src/exhaustion-circuits/leaf-m.nr": "5ce613a765de530bec1e6608d34a9d98c03dbfa2d3a0d9cb46b31139c763b601",
+    "src/exhaustion-circuits/leaf-u.nr": "d791eccb0c32df940cb8054dab0217a75533ae4fe4c1a1b2373d6982c07f1357",
+    "src/exhaustion-circuits/node.nr": "3c77eb2066ebcf45d7d50352bfb3612dcf977af837c17e5292303f5a9a6eceb4",
+    "src/exhaustion-circuits/fold-first.nr": "8aa15e90053fdc073a848d383123e697f867beb28b90829839411df325680dca",
+    "src/exhaustion-circuits/fold-next.nr": "b3d6b16a1044d3ff161c269b71fc3ab0ad28148452d507eb1cc634f13624b043",
+    "src/pool/circuits/vendor/poseidon2.nr": "44f3a3d1abe7d5fa2da5c0339e52018195d55f295c320e530d355f9cc62159d8"
+  },
+  "circuits": {
+    "compiler": "nargo 1.0.0-beta.26+40d6574f851d926f93e0c3a271bac3e6e82ac905",
+    "sizes": {
+      "t": 167,
+      "m": 380,
+      "u": 746
+    },
+    "bytecode": {
+      "leaf-t": "82cd725db1094c67497372691c666dd08e5f007b2783343b9a2417c58e64e42c",
+      "leaf-m": "9fae587c658321b9d420e27a619781681f42ebb6bc5f84fb30effe9ea6ca81c7",
+      "leaf-u": "6a7b8d6fe23a3e7dbf0b9b63ab21c87ef007bde9e652ad964789aae427263823",
+      "node": "1df15219c293298eea602ed29021859a3d13625112f27effe8312f6144ab01e8",
+      "fold-first": "539398acab4641d1ee228a3f5d8f8e62b01e98a49d89974b6bbed64cdb178ebf",
+      "fold-next": "f054df2a0b832b27f42054464d179fc91e63ff8eeee11d9b69f2d08ceafb9367"
+    }
+  },
+  "days": [
+    {
+      "name": "testnet-scope",
+      "network": "testnet",
+      "node": "http://127.0.0.1:9052",
+      "covers": "the live two-backing scope drill's venue (anchor 574,970, slice 8)",
+      "first": 574971,
+      "last": 575690,
+      "recorded": "7fecdd002c67645e134d799665f8fa1ee50dd92539fa15e312bd541af95915fd",
+      "start": "c20575d503ba816ce83c29ee918cd37710cb88ad407714b3462fcb556ee063e7",
+      "end": "9aa72db2d8a54277e001b6ce219a5342a1f912826f1a7dca4d13c761a9814c15",
+      "blocks": 720,
+      "unsignedBytes": 271929,
+      "unsupplied": [],
+      "agreement": {
+        "transactions": 851,
+        "grammatical": 66,
+        "framerEntries": 12,
+        "ungrammatical": 785,
+        "scanEntriesOutside": 0,
+        "disagreements": [],
+        "versions": {
+          "4": 720
+        },
+        "mapRoot": "0x0ad60540570f1572fd8f639e3ba2a99b6bfca8f272e595759eb28370d389115f",
+        "framerRoot": "0x0ad60540570f1572fd8f639e3ba2a99b6bfca8f272e595759eb28370d389115f",
+        "rootsEqual": true
+      },
+      "execution": {
+        "periods": 12,
+        "leaves": {
+          "t": 23,
+          "m": 14,
+          "u": 2
+        },
+        "nodes": 27,
+        "folds": 12,
+        "controls": [
+          {
+            "leaf": "t",
+            "refusal": "Assertion failed: end state"
+          },
+          {
+            "leaf": "m",
+            "refusal": "Assertion failed: end state"
+          },
+          {
+            "leaf": "u",
+            "refusal": "Assertion failed: end state"
+          }
+        ],
+        "refusals": [],
+        "minutes": 8
+      }
+    },
+    {
+      "name": "testnet-commands-1",
+      "network": "testnet",
+      "node": "http://127.0.0.1:9052",
+      "covers": "the first live command drill's venue (anchor 583,356, M10d)",
+      "first": 583357,
+      "last": 584076,
+      "recorded": "0f4df9dfe19ef80d139338c6d6697cc2f15820db6876e51bd6915c0c8ef716b1",
+      "start": "3bdec1406fd83a7b407c35e221f95d1b765e85624c1e6d14160b2578be14331e",
+      "end": "c58987649a67fb8e463fdbf0264badb87c17601876499a72f80b9b6a529fd74e",
+      "blocks": 720,
+      "unsignedBytes": 309070,
+      "unsupplied": [],
+      "agreement": {
+        "transactions": 878,
+        "grammatical": 82,
+        "framerEntries": 25,
+        "ungrammatical": 796,
+        "scanEntriesOutside": 0,
+        "disagreements": [],
+        "versions": {
+          "4": 720
+        },
+        "mapRoot": "0x1e8df4855459bf02dee295de75447c9b5f7000ce9771e13e9ad87c628196d476",
+        "framerRoot": "0x1e8df4855459bf02dee295de75447c9b5f7000ce9771e13e9ad87c628196d476",
+        "rootsEqual": true
+      },
+      "execution": {
+        "periods": 12,
+        "leaves": {
+          "t": 24,
+          "m": 16,
+          "u": 3
+        },
+        "nodes": 31,
+        "folds": 12,
+        "controls": [
+          {
+            "leaf": "t",
+            "refusal": "Assertion failed: end state"
+          },
+          {
+            "leaf": "m",
+            "refusal": "Assertion failed: end state"
+          },
+          {
+            "leaf": "u",
+            "refusal": "Assertion failed: end state"
+          }
+        ],
+        "refusals": [],
+        "minutes": 8.2
+      }
+    },
+    {
+      "name": "testnet-commands-2",
+      "network": "testnet",
+      "node": "http://127.0.0.1:9052",
+      "covers": "the live command drill's venue at 05337cf (anchor 596,570)",
+      "first": 596571,
+      "last": 597290,
+      "recorded": "39ae52854502027c2990da1325fa94ac8a97977394450bc8e347bb51172f0063",
+      "start": "9e513e93f67f453fcdaf8a3cda5c3ad258ed5ccd458591d132599f868ac71b8f",
+      "end": "4e98f4fa2772c2b9e1dd1bd5d701a49de35457cea42347122eb63d42cf9836b7",
+      "blocks": 720,
+      "unsignedBytes": 361956,
+      "unsupplied": [],
+      "agreement": {
+        "transactions": 1148,
+        "grammatical": 216,
+        "framerEntries": 27,
+        "ungrammatical": 932,
+        "scanEntriesOutside": 0,
+        "disagreements": [],
+        "versions": {
+          "4": 720
+        },
+        "mapRoot": "0x2e24a3cea1ac3d40e5fb5a4f8f41a3b4b39eb21f50bcf62e2cc896f0f3f9628f",
+        "framerRoot": "0x2e24a3cea1ac3d40e5fb5a4f8f41a3b4b39eb21f50bcf62e2cc896f0f3f9628f",
+        "rootsEqual": true
+      },
+      "execution": {
+        "periods": 12,
+        "leaves": {
+          "t": 25,
+          "m": 23,
+          "u": 4
+        },
+        "nodes": 40,
+        "folds": 12,
+        "controls": [
+          {
+            "leaf": "t",
+            "refusal": "Assertion failed: end state"
+          },
+          {
+            "leaf": "m",
+            "refusal": "Assertion failed: end state"
+          },
+          {
+            "leaf": "u",
+            "refusal": "Assertion failed: end state"
+          }
+        ],
+        "refusals": [],
+        "minutes": 9.3
+      }
+    }
+  ],
+  "programsUnchanged": true,
+  "result": "pass (partial: a limit or named days)"
+}
