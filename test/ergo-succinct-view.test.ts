@@ -3,7 +3,7 @@ import { join, resolve, sep } from "node:path";
 import { sha256 } from "@noble/hashes/sha2.js";
 import { afterEach, beforeAll, describe, expect, it } from "vitest";
 import { ErgoVenue, syncCaughtUp } from "../src/ergo.js";
-import { subjectKey, testExhaustionSet, type ExhaustionSupplier, type Fold } from "../src/ergo-exhaustion.js";
+import { FoldVerificationError, subjectKey, testExhaustionSet, type ExhaustionSupplier, type Fold } from "../src/ergo-exhaustion.js";
 import { ExhaustionServer, type ServedBlock } from "../src/ergo-exhaustion-server.js";
 import { ergoProfileIdentity, transactionsRoot, type ErgoTransactionView } from "../src/ergo-profile.js";
 import type { ErgoVenueJournal as Journal } from "../src/ergo-store.js";
@@ -155,6 +155,7 @@ describe("a succinct Ergo view (succinct-read §4)", () => {
       [hostile("withheld", { transaction: async () => undefined }), "transaction"],
       [hostile("swapped", { transaction: async (h, p) => x.transaction(h, p === 0n ? 1n : 0n) }), "transaction"],
       [hostile("getter", { key: async () => ({ get path(): never { throw new Error("getter"); }, entries: [] }) }), "path"],
+      [hostile("fold getter", { fold: async () => ({ get first(): never { throw new Error("getter"); } }) as unknown as Fold }), "fold-proof"],
     ];
     for (const [supplier, reason] of cases) {
       const native = node(30), { venue } = opened();
@@ -225,18 +226,22 @@ describe("a succinct Ergo view (succinct-read §4)", () => {
     expect(report.succinct).toMatchObject({ supplier: "current", foldIndex: 29n, indicesRead: 30 });
     expect(sectionsAsked(supplier)).toBe(3);
     expect(expectSame(venue, await complete(36), [s])).toBeGreaterThan(10);
-    // A fold whose verification throws (a backend that does not start, or a failure it does not name) establishes
-    // nothing (§2 rule 3): that supplier is passed over and the next fold serves; the view does not fail.
-    const throwing = Object.freeze({ identity: set.identity, test: true, start: set.start, foldKeyHash: set.foldKeyHash,
-      verifyFold: (first: boolean, inputs: readonly bigint[], proof: Uint8Array) => {
-        if (inputs[5] === A + 30n) throw new Error("backend down");
+    // A fold whose verification throws on its bytes (a failure the backend does not name) establishes nothing (§2
+    // rule 3): that supplier is passed over and the next fold serves; the view does not fail.
+    const throwing = (failure: (message: string) => Error) => Object.freeze({ identity: set.identity, test: true, start: set.start,
+      foldKeyHash: set.foldKeyHash, verifyFold: (first: boolean, inputs: readonly bigint[], proof: Uint8Array) => {
+        if (inputs[5] === A + 30n) throw failure("unnamed");
         return set.verifyFold(first, inputs, proof);
       } });
-    const second = new ErgoVenue(profile, chain.context, {}, undefined, undefined, { set: throwing });
+    const second = new ErgoVenue(profile, chain.context, {}, undefined, undefined, { set: throwing(m => new FoldVerificationError(m)) });
     second.follow(s);
     const passed = await second.sync([node(36)], [current, named("older", await server(20))]);
-    expect(passed.succinct).toMatchObject({ supplier: "older", foldIndex: 19n, refused: [{ name: "current", reason: "fold not verified: backend down" }] });
+    expect(passed.succinct).toMatchObject({ supplier: "older", foldIndex: 19n, refused: [{ name: "current", reason: "fold-unverified" }] });
     expect(expectSame(second, await complete(36), [s])).toBeGreaterThan(10);
+    // Any other throw is the reader's own (a backend that does not start, a closed set): it stays visible, failing the sync.
+    const third = new ErgoVenue(profile, chain.context, {}, undefined, undefined, { set: throwing(m => new Error(`the backend did not start: ${m}`)) });
+    third.follow(s);
+    await expect(third.sync([node(36)], [current])).rejects.toThrow("the backend did not start");
   });
 
   it("hands out copies of its folds: a caller changing one changes nothing it serves", async () => {
@@ -296,6 +301,12 @@ describe("a succinct Ergo view (succinct-read §4)", () => {
     expect(decodeIncluded(encodeIncluded(tx))).toEqual({ unsigned: tx.unsigned, steps: tx.steps });
     expect(() => decodeFold(Uint8Array.of(2, ...encodeFold(fold).subarray(1)))).toThrow(EncodingError);
     expect(() => decodeKeyAnswer(Buffer.concat([encodeKeyAnswer(key), Uint8Array.of(0)]))).toThrow("trailing bytes");
+    // Asked after the first `from`, an answer with other than the path's count less `from` entries is refused before
+    // any entry is decoded: padding costs a reader no decoding.
+    expect(decodeKeyAnswer(encodeKeyAnswer(key), 0n)).toEqual(key);
+    expect(decodeKeyAnswer(encodeKeyAnswer({ ...key, entries: key.entries.slice(2) }), 2n).entries).toEqual(key.entries.slice(2));
+    expect(() => decodeKeyAnswer(encodeKeyAnswer({ ...key, entries: [...key.entries, key.entries[0]!] }), 0n)).toThrow("not the path's count");
+    expect(() => decodeKeyAnswer(encodeKeyAnswer(key), 1n)).toThrow("not the path's count");
     const listener = createV3EvidenceService({ serve: async () => { throw new Error("no evidence"); }, proof: () => undefined, cover: () => undefined },
       { set: set.identity, supplier: x });
     await new Promise<void>(done => listener.listen(0, "127.0.0.1", done));

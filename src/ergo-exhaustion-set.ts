@@ -18,7 +18,7 @@ import type { Barretenberg } from "@aztec/bb.js";
 import { sha256 } from "@noble/hashes/sha2.js";
 import { bytesToHex } from "@noble/hashes/utils.js";
 import { copyBytes, EncodingError } from "./bytes.js";
-import type { ExhaustionSet } from "./ergo-exhaustion.js";
+import { FoldVerificationError, type ExhaustionSet } from "./ergo-exhaustion.js";
 import type { LeafSizes } from "./ergo-exhaustion-prover.js";
 import { fieldToHex, hexToField } from "./pool/field.js";
 import { EXHAUSTION_PARAMETERS } from "./pool/parameters.js";
@@ -149,8 +149,15 @@ export function exhaustionSetOver(identity: Uint8Array, folds: { readonly first:
   return Object.freeze({
     get identity() { return copyBytes(own); }, test: true, start: Object.freeze({ id: copyBytes(start.id), height: start.height }),
     foldKeyHash: folds.next.keyHash,
-    verifyFold: async (first: boolean, inputs: readonly bigint[], proof: Uint8Array) =>
-      proof instanceof Uint8Array && proof.length === EXHAUSTION_PROOF_BYTES && await (await opened()).verify(first ? 1 : 2, inputs, proof),
+    verifyFold: async (first: boolean, inputs: readonly bigint[], proof: Uint8Array) => {
+      if (!(proof instanceof Uint8Array) || proof.length !== EXHAUSTION_PROOF_BYTES) return false;
+      // A verifier that does not start, or a closed set, throws as itself: the reader's own fault.
+      const verifier = await opened();
+      try { return await verifier.verify(first ? 1 : 2, inputs, proof); } catch (cause) {
+        // The instance that threw is retired (`keyedVerifier`); what threw is the supplier's bytes.
+        throw new FoldVerificationError(`the fold's verification threw: ${cause instanceof Error ? cause.message : String(cause)}`, { cause });
+      }
+    },
     close: async () => {
       closed = true;
       const made = verifier;

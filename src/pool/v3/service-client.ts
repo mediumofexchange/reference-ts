@@ -414,7 +414,7 @@ export function exhaustionClient(baseUrl: string, set: Uint8Array): ExhaustionSu
     name: url,
     fold: (maxHeight: bigint): Promise<Fold | undefined> => fetched(`fold?max=${height(maxHeight)}`, MAX_FOLD_PROOF_BYTES + 256, decodeFold),
     key: (endHeight: bigint, key: bigint, from: bigint): Promise<KeyAnswer | undefined> =>
-      fetched(`key/${height(endHeight)}/${u32(key)}?from=${height(from)}`, MAX_KEY_ANSWER_BYTES, decodeKeyAnswer),
+      fetched(`key/${height(endHeight)}/${u32(key)}?from=${height(from)}`, MAX_KEY_ANSWER_BYTES, bytes => decodeKeyAnswer(bytes, from)),
     transaction: (at: bigint, position: bigint): Promise<IncludedTransaction | undefined> =>
       fetched(`transaction/${height(at)}/${u32(position)}`, MAX_TRANSACTION_BYTES + 4 + 1 + 33 * 32, decodeIncluded),
   };

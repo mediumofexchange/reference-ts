@@ -45,11 +45,14 @@ export function encodeKeyAnswer(answer: KeyAnswer): Uint8Array {
   }
   return w.finish();
 }
-export function decodeKeyAnswer(bytes: Uint8Array): KeyAnswer {
+/** A key answer; with `from`, the entries asked after (§4.4 step 2), one whose entries are not exactly the path's count
+ * less `from` is refused before any entry is decoded. */
+export function decodeKeyAnswer(bytes: Uint8Array, from?: bigint): KeyAnswer {
   const r = new ByteReader(bytes), count = r.u64(), chain = bytesToField(r.raw(32)), siblings: bigint[] = [];
   for (let l = 0; l < MAP_DEPTH; l++) siblings.push(bytesToField(r.raw(32)));
   const n = r.u32();
   if (n > MAX_KEY_ENTRIES) throw new EncodingError("too many entries for one answer");
+  if (from !== undefined && BigInt(n) !== count - from) throw new EncodingError("an answer's entries are not the path's count after the first asked");
   const entries: MapEntry[] = [];
   for (let i = 0; i < n; i++) entries.push({ subject: r.raw(32), height: r.u64(), position: r.u64(), output: r.u64() });
   r.expectEnd();

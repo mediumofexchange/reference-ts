@@ -663,12 +663,9 @@ export class ErgoVenue implements RecordVenue, RecordPublisher {
     }
     candidates.sort((a, b) => a.top === b.top ? 0 : a.top > b.top ? -1 : 1);
     for (const { supplier, name, fold, top } of candidates) {
-      let checked: Awaited<ReturnType<typeof checkFold>>;
-      // A verification that does not run establishes nothing (§2 rule 3): the next supplier's fold is tried.
-      try { checked = await checkFold(state.set, fold, chain, this.profile.depth); } catch (error) {
-        refused.push({ name, reason: `fold not verified: ${describe(error)}` });
-        continue;
-      }
+      // A verification that threw on the fold's bytes is refused (`fold-unverified`, §2 rule 3) and the next supplier's
+      // fold is tried; a set that cannot verify here throws as the view's own failure.
+      const checked = await checkFold(state.set, fold, chain, this.profile.depth);
       if ("refused" in checked) { refused.push({ name, reason: checked.refused }); continue; }
       const backfill = newcomers.length > 0 && top >= spanTop;
       const read = await this.readFold(supplier, checked.inputs, chain, clock, top, backfill ? newcomers : [], promoted);
