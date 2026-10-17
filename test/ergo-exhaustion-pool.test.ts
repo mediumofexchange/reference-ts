@@ -4,18 +4,17 @@ import { join } from "node:path";
 import { sha256 } from "@noble/hashes/sha2.js";
 import { describe, expect, it } from "vitest";
 import { foldPublicInputs, type Fold, type FoldInputs } from "../src/ergo-exhaustion.js";
-import {
-  EXHAUSTION_CIRCUITS, EXHAUSTION_PROOF_BYTES, ExhaustionPool, ExhaustionProverError, type ExhaustionBackend, type ExhaustionCircuit,
-  proofDirectory, type ExhaustionCircuits, type ExhaustionProof, type ProofStore,
-} from "../src/ergo-exhaustion-pool.js";
+import { ExhaustionPool, ExhaustionProverError, proofDirectory, type ExhaustionBackend, type ExhaustionProof, type ProofStore }
+  from "../src/ergo-exhaustion-pool.js";
+import { EXHAUSTION_CIRCUITS, EXHAUSTION_PROOF_BYTES, type ExhaustionCircuit, type ExhaustionCircuits } from "../src/ergo-exhaustion-set.js";
 import { ExhaustionServer, type ServedBlock } from "../src/ergo-exhaustion-server.js";
 import { fieldToHex } from "../src/pool/field.js";
 import { Chain, plainOutput, recordOutput, transaction } from "../src/ergo-synthetic.js";
 
 // The prover pool (succinct-read §4.3) over a model of the circuits: each proof is a hash of its circuit and public
 // inputs, and the model checks what the circuits' recursion would: a node's children join and verify under the keys
-// they name, a fold's tree spans its states and a next fold continues its previous fold. Real proofs are
-// scripts/venue/exhaustion-pool.mjs's.
+// they name, a fold's tree spans its states and a next fold continues its previous fold. Real proofs are the succinct
+// drill's replica's and `exhaustion-check.mjs --shipped --prove`'s.
 const SIZES = { t: 2, m: 4, u: 1 };
 const KEY_HASH: Record<ExhaustionCircuit, bigint> = { "leaf-t": 11n, "leaf-m": 12n, "leaf-u": 13n, node: 14n, "fold-first": 15n, "fold-next": 16n };
 const array = (name: string, length: number) => ({ name, type: { kind: "array", length } });

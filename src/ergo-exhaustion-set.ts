@@ -157,12 +157,6 @@ export function exhaustionSetOver(identities: Readonly<Record<ExhaustionCircuit,
   });
 }
 
-/** A test set over built circuits (`exhaustionSetOver` with their identities and fold keys). */
-export function circuitExhaustionSet(circuits: ExhaustionCircuits, start: { readonly id: Uint8Array; readonly height: bigint },
-    api: Barretenberg): ExhaustionSet & { close(): Promise<void> } {
-  return exhaustionSetOver(circuitIdentities(circuits), { first: circuits.circuits["fold-first"], next: circuits.circuits["fold-next"] }, start, api);
-}
-
 /** The shipped set is missing, malformed or not the manifest's: an install fault, never a verdict. */
 export class ExhaustionSetError extends Error {
   constructor(readonly code: "MISSING" | "IDENTITY", message: string, options?: ErrorOptions) {

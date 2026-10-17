@@ -4,7 +4,7 @@ import { EncodingError } from "../src/bytes.js";
 import { foldPublicInputs, pathRoot, subjectKey, testExhaustionSet, type Fold } from "../src/ergo-exhaustion.js";
 import { ExhaustionServer, ExhaustionServerError, type ServedBlock } from "../src/ergo-exhaustion-server.js";
 import {
-  circuitExhaustionSet, circuitIdentities, EXHAUSTION_CIRCUITS, EXHAUSTION_KEY_BYTES, EXHAUSTION_SET_MANIFEST, exhaustionKeys, exhaustionSetIdentity,
+  circuitIdentities, EXHAUSTION_CIRCUITS, EXHAUSTION_KEY_BYTES, EXHAUSTION_SET_MANIFEST, exhaustionKeys, exhaustionSetIdentity,
   shippedExhaustionSet, type ExhaustionCircuits,
 } from "../src/ergo-exhaustion-set.js";
 import { fieldToHex } from "../src/pool/field.js";
@@ -152,6 +152,6 @@ describe("the shipped exhaustion set (slice 43)", () => {
     const ids = circuitIdentities(built);
     expect(ids["fold-next"].keyHash).toBe(EXHAUSTION_SET_MANIFEST.circuits["fold-next"].keyHash);
     expect(exhaustionSetIdentity(ids, start)).not.toEqual(shipped.identity);
-    expect(() => circuitExhaustionSet(built, { ...start, height: -1n }, null as never)).toThrow("invalid exhaustion start");
+    expect(() => shippedExhaustionSet({ ...start, height: -1n }, null as never)).toThrow("invalid exhaustion start");
   });
 });
