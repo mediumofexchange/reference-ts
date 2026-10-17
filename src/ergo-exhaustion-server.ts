@@ -9,7 +9,7 @@
 // restart, is taken by `adopt` once it verifies and the map over its blocks reproduces it.
 import { compareBytes, copyBytes, EncodingError } from "./bytes.js";
 import {
-  foldPublicInputs, sectionInclusionPath, SubjectMap, type ExhaustionSupplier, type Fold, type FoldInputs, type IncludedTransaction, type KeyAnswer, type MapUpdate,
+  foldPublicInputs, ownFold, sectionInclusionPath, SubjectMap, type ExhaustionSupplier, type Fold, type FoldInputs, type IncludedTransaction, type KeyAnswer, type MapUpdate,
 } from "./ergo-exhaustion.js";
 import type { ErgoTransactionView } from "./ergo-profile.js";
 
@@ -44,6 +44,9 @@ export interface ExhaustionServerOptions {
 export class ExhaustionServerError extends Error {
   constructor(readonly code: "FOLD" | "PENDING" | "BLOCKS" | "DISAGREEMENT", message: string) { super(message); this.name = "ExhaustionServerError"; }
 }
+
+/** A copy of a fold the server holds: a caller changing what it was handed changes no fold served later. */
+const copied = (fold: Fold | undefined): Fold | undefined => fold === undefined ? undefined : ownFold(fold);
 
 /** A block read once into owned bytes, or a refusal before anything is appended: a 32-byte id and root, a section of
  * transactions each with unsigned bytes and a witness id, and optionally the header's bytes. */
@@ -90,13 +93,16 @@ export class ExhaustionServer implements ExhaustionSupplier {
     this.#served = new SubjectMap(options.start.id, options.start.height);
   }
 
-  /** The latest fold, if any. */
-  get latest(): Fold | undefined { return this.#fold; }
+  /** The latest fold, if any (a copy, as every fold the server returns). */
+  get latest(): Fold | undefined { return copied(this.#fold); }
   /** The height the map is at: the start's, or the last block appended. */
   get height(): bigint { return this.#ahead.end.height; }
 
   /** A period appended whose fold is not proved yet (its proof failed), which the next `extend` proves first. */
-  get pending(): FoldInputs | undefined { return this.#pending?.inputs; }
+  get pending(): FoldInputs | undefined {
+    const inputs = this.#pending?.inputs;
+    return inputs === undefined ? undefined : Object.freeze({ ...inputs, startId: copyBytes(inputs.startId), endId: copyBytes(inputs.endId) });
+  }
 
   /** Append `blocks`, the next after the map's end in order, and seal a fold at the last: a period. A pending period is
    * proved first; with no blocks, only it is. Every block is checked before any is appended. */
@@ -116,7 +122,7 @@ export class ExhaustionServer implements ExhaustionSupplier {
     this.#usable();
     if (this.#pending !== undefined) await this.#seal();
     if (owned.length === 0) {
-      if (this.#fold !== undefined) return this.#fold;
+      if (this.#fold !== undefined) return copied(this.#fold)!;
       throw new EncodingError("a period holds at least one block");
     }
     if (this.#ahead.end.height + BigInt(owned.length) >= 1n << 32n) throw new EncodingError("exhaustion height out of range");
@@ -212,7 +218,7 @@ export class ExhaustionServer implements ExhaustionSupplier {
       throw new ExhaustionServerError("BLOCKS", this.#broken);
     }
     this.#fold = fold;
-    return fold;
+    return copied(fold)!;
   }
 
   /** A server whose map disagreed with a verified fold serves and extends nothing more. */
@@ -233,12 +239,12 @@ export class ExhaustionServer implements ExhaustionSupplier {
     for (const block of period.blocks) this.#served.appendBlock(block.id, block.section.map(t => t.unsigned));
     this.#fold = Object.freeze({ first, inputs, proof });
     this.#pending = undefined;
-    return this.#fold;
+    return copied(this.#fold)!;
   }
 
   async fold(maxHeight: bigint): Promise<Fold | undefined> {
     const fold = this.#broken === undefined ? this.#fold : undefined;
-    return fold !== undefined && fold.inputs.endHeight <= maxHeight ? fold : undefined;
+    return fold !== undefined && fold.inputs.endHeight <= maxHeight ? copied(fold) : undefined;
   }
 
   async key(endHeight: bigint, key: bigint, from: bigint): Promise<KeyAnswer | undefined> {

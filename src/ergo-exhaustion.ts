@@ -274,18 +274,25 @@ export interface ReaderChain {
  * the reader's header at that height, at least the depth below its tip. */
 export type FoldRefusal = "fold-proof" | "fold-key" | "fold-start" | "fold-end" | "fold-depth";
 
+/** A supplier's fold read once into owned values, or undefined for a malformed one: what is judged after is what is
+ * used, so a supplier's object cannot show one value to a check and another to a use. */
+export function ownFold(fold: Fold): Fold | undefined {
+  if (fold === null || typeof fold !== "object") return undefined;
+  const { first, inputs: given, proof } = fold;
+  if (typeof first !== "boolean" || !isBytes(proof)) return undefined;
+  const inputs = ownInputs(given);
+  return inputs === undefined ? undefined : Object.freeze({ first, inputs, proof: copyBytes(proof) });
+}
+
 /**
- * §4.3 rules 1–4 over the fold read once into owned values, which are what a read uses after it: a supplier's object
- * cannot show one value to a check and another to a use, before or during the verification. The cheap rules run
- * before the proof's verification.
+ * §4.3 rules 1–4 over the fold read once into owned values (`ownFold`), which are what a read uses after it, before or
+ * during the verification. The cheap rules run before the proof's verification.
  */
 export async function checkFold(set: ExhaustionSet, fold: Fold, chain: ReaderChain, depth: bigint):
     Promise<{ readonly refused: FoldRefusal } | { readonly inputs: FoldInputs }> {
-  if (fold === null || typeof fold !== "object") return { refused: "fold-proof" };
-  const { first, inputs: given, proof: givenProof } = fold;
-  if (typeof first !== "boolean" || !isBytes(givenProof)) return { refused: "fold-proof" };
-  const inputs = ownInputs(given), proof = copyBytes(givenProof);
-  if (inputs === undefined) return { refused: "fold-proof" };
+  const own = ownFold(fold);
+  if (own === undefined) return { refused: "fold-proof" };
+  const { first, inputs, proof } = own;
   if (inputs.foldKeyHash !== set.foldKeyHash) return { refused: "fold-key" };
   if (!same(inputs.startId, set.start.id) || inputs.startHeight !== set.start.height) return { refused: "fold-start" };
   const header = chain.at(inputs.endHeight);
@@ -362,7 +369,8 @@ export interface IndexedObject extends AttributedObject { readonly index: bigint
 /** A transaction a subject read fetched and attributed, as it was included: its place and unsigned bytes. */
 export interface FetchedTransaction { readonly index: bigint; readonly position: bigint; readonly unsigned: Uint8Array; readonly steps: readonly InclusionStep[] }
 export type SubjectRead =
-  | { readonly objects: readonly IndexedObject[]; readonly transactions: readonly FetchedTransaction[]; readonly kept: KeptTuple }
+  | { readonly objects: readonly IndexedObject[]; readonly transactions: readonly FetchedTransaction[]; readonly kept: KeptTuple;
+      readonly checked: CheckedKey }
   | { readonly refused: Exclude<SuccinctRangeRefusal, FoldRefusal | "start" | "section"> };
 
 /**
@@ -385,7 +393,7 @@ export async function readSubject(subject: Uint8Array, fromIndex: bigint, toInde
   if (!Array.isArray(siblings)) return { refused: "path" };
   const path: MapPath = { count: pathCount, chain: pathChain, siblings: Array.from(siblings) };
   if (pathRoot(key, path) !== inputs.mapRoot) return { refused: "path" };
-  let count = 0n, value = 0n;
+  let count = 0n, value = 0n, after = set.start.height;
   if (givenKept !== undefined) {
     if (givenKept === null || typeof givenKept !== "object") return { refused: "kept" };
     const { identity, key: keptKey, count: keptCount, chain: keptChain, endHeight, endId } = givenKept;
@@ -394,11 +402,14 @@ export async function readSubject(subject: Uint8Array, fromIndex: bigint, toInde
     const at = chain.at(endHeight);
     if (!same(identity, set.identity) || keptKey !== key || endHeight > E || at === undefined || !same(at.id, endId)) return { refused: "kept" };
     if (first <= endHeight) throw new RangeError("a kept tuple serves only heights above its end");
-    count = keptCount; value = keptChain;
+    count = keptCount; value = keptChain; after = endHeight;
   }
   const entries: MapEntry[] = [];
   if (!Array.isArray(givenEntries)) return { refused: "entries" };
-  for (const entry of Array.from(givenEntries)) {
+  const listed = Array.from(givenEntries);
+  // Exactly as many as the count grew, judged before any is hashed: a list padded past the path's count costs nothing.
+  if (pathCount < count || BigInt(listed.length) !== pathCount - count) return { refused: "entries" };
+  for (const entry of listed) {
     if (entry === null || typeof entry !== "object") return { refused: "entries" };
     const { subject: entrySubject, height, position, output } = entry;
     if (!isBytes(entrySubject, 32) || !below(height, U32) || !below(position, U32) || !below(output, U32)) return { refused: "entries" };
@@ -409,6 +420,7 @@ export async function readSubject(subject: Uint8Array, fromIndex: bigint, toInde
     entries.push(own);
   }
   if (count !== path.count || value !== path.chain) return { refused: "entries" };
+  const checked: CheckedKey = Object.freeze({ key, after, entries: Object.freeze(entries) });
   // Each transaction holding an entry for the subject in the window, fetched with its inclusion path.
   const top = last < E ? last : E, objects: IndexedObject[] = [], transactions: FetchedTransaction[] = [];
   const places = new Map<string, { height: bigint; position: bigint }>();
@@ -425,15 +437,7 @@ export async function readSubject(subject: Uint8Array, fromIndex: bigint, toInde
     const unsigned = copyBytes(givenBytes), steps = Array.from(givenSteps, step => isBytes(step) ? copyBytes(step) : step);
     const root = inclusionRoot(blake2b(unsigned, { dkLen: 32 }), Number(position), steps);
     if (root === undefined || !same(root, header.transactionsRoot)) return { refused: "transaction" };
-    // §2 rule 7: a transaction inside the grammar whose shaped outputs for this key, as the framer reads them (the
-    // native check, not the scan the circuits evaluate), are not the entries the map names at its place shows the set
-    // unsound.
-    const shaped = shapedOutputs(unsigned);
-    if (shaped !== undefined) {
-      const read = shaped.filter(e => subjectKey(e.subject) === key).map(e => `${e.output}:${bytesToHex(e.subject)}`);
-      const named = entries.filter(e => e.height === height && e.position === position).map(e => `${e.output}:${bytesToHex(e.subject)}`);
-      if (read.join() !== named.join()) return { refused: "disagreement" };
-    }
+    if (disagrees([{ height, position, unsigned }], [checked])) return { refused: "disagreement" };
     const index = height - A - 1n;
     transactions.push(Object.freeze({ index, position, unsigned, steps: Object.freeze(steps) }));
     for (const object of attributeTransaction(profile, unsigned, Number(position))) {
@@ -441,9 +445,38 @@ export async function readSubject(subject: Uint8Array, fromIndex: bigint, toInde
     }
   }
   return {
-    objects: Object.freeze(objects), transactions: Object.freeze(transactions),
+    objects: Object.freeze(objects), transactions: Object.freeze(transactions), checked,
     kept: Object.freeze({ identity: copyBytes(set.identity), key, count, chain: value, endHeight: E, endId: copyBytes(inputs.endId) }),
   };
+}
+
+/** A key's entries as a subject read checked them into the path's leaf at a fold (§4.4 step 2): every entry of the key
+ * at heights above `after` (a kept tuple's end, or the set's start) through the fold's end, in chain order. */
+export interface CheckedKey { readonly key: bigint; readonly after: bigint; readonly entries: readonly MapEntry[] }
+/** A transaction a read authenticated at its place on the reader's chain (§4.5), at or below the fold's end. */
+export interface PlacedTransaction { readonly height: bigint; readonly position: bigint; readonly unsigned: Uint8Array }
+
+/**
+ * §2 rule 7 over what reads at one fold hold: whether a transaction inside venue-ergo §5's grammar has, for a checked
+ * key whose entries cover its height, other shaped outputs than the entries naming its place. The outputs are the
+ * framer's (the native check, not the scan the circuits evaluate). Every transaction is held against every key, not
+ * only the one it was fetched for: a map that omits one key's output from a transaction fetched for another key is
+ * shown unsound by bytes the reader already holds.
+ */
+export function disagrees(transactions: readonly PlacedTransaction[], keys: readonly CheckedKey[]): boolean {
+  const named = (place: string, entries: readonly MapEntry[]): string =>
+    entries.filter(e => `${e.height}:${e.position}` === place).map(e => `${e.output}:${bytesToHex(e.subject)}`).join();
+  for (const { height, position, unsigned } of transactions) {
+    const shaped = shapedOutputs(unsigned);
+    if (shaped === undefined) continue;
+    const place = `${height}:${position}`;
+    for (const { key, after, entries } of keys) {
+      if (height <= after) continue;
+      const read = shaped.filter(e => subjectKey(e.subject) === key).map(e => `${e.output}:${bytesToHex(e.subject)}`).join();
+      if (read !== named(place, entries)) return true;
+    }
+  }
+  return false;
 }
 
 /**

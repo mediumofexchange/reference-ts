@@ -190,6 +190,64 @@ describe("a succinct Ergo view (succinct-read §4)", () => {
     expect(() => opened(path).venue.witnessedIndex()).toThrow("the exhaustion set disagreed");
   });
 
+  it("holds every transaction a pass fetched against every key it read, not only the key it was fetched for (§2 rule 7)", async () => {
+    // A chain of its own whose block 3 holds one transaction with an output for s and one for v, of another key; the
+    // unsound map lacks v's. The transaction is fetched for s, and it shows v's entries wrong.
+    const own = new Chain(), v = sha256(Uint8Array.of(0x76));
+    expect(subjectKey(v)).not.toBe(subjectKey(s));
+    const both = transaction([rec(1, s, 1), rec(1, v, 2)]), withoutV = transaction([rec(1, s, 1), plainOutput]);
+    const chainBlocks = own.extend(own.anchor, 12, i => i === 3 ? [transaction([plainOutput]), both] : [transaction([plainOutput])]);
+    const ownSet = testExhaustionSet("ergo-succinct-view.test rule 7", { id: own.anchor.id, height: own.anchor.height });
+    const make = () => new ExhaustionServer({ start: ownSet.start, foldKeyHash: ownSet.foldKeyHash, prove: (f, i) => ownSet.prove(f, i) });
+    const honest = make(), map = make();
+    await honest.extend(chainBlocks.slice(0, 8).map(served));
+    await map.extend(chainBlocks.slice(0, 8).map(b => b === chainBlocks[3] ? { ...served(b), section: [b.section[0]!, withoutV] } : served(b)));
+    const venue = new ErgoVenue(own.profile(DEPTH), own.context, {}, undefined, undefined, { set: ownSet });
+    venue.follow(s); venue.follow(v);
+    await expect(venue.sync([new BranchSupplier("node", chainBlocks[11]!, own)],
+      [{ name: "unsound", fold: h => map.fold(h), key: (e, k, f) => map.key(e, k, f), transaction: (h, p) => honest.transaction(h, p) }]))
+      .rejects.toThrow("the exhaustion set disagreed");
+    expect(venue.disagreed()).toBe(true);
+    // The honest map's fold passes the same check.
+    const fine = new ErgoVenue(own.profile(DEPTH), own.context, {}, undefined, undefined, { set: ownSet });
+    fine.follow(s); fine.follow(v);
+    expect((await fine.sync([new BranchSupplier("node", chainBlocks[11]!, own)], [honest])).succinct).toMatchObject({ foldIndex: 7n });
+  });
+
+  it("takes the highest fold first, and passes over a supplier whose fold's verification does not run", async () => {
+    // A supplier listed first with a genuine fold at index 0, answering its keys and transactions correctly, holds the
+    // view to that end no more: the fold at index 29 serves.
+    const named = (name: string, x: ExhaustionServer): ExhaustionSupplier =>
+      ({ name, fold: h => x.fold(h), key: (e, k, f) => x.key(e, k, f), transaction: (h, p) => x.transaction(h, p) });
+    const stale = named("stale", await server(1)), current = named("current", await server(30)), supplier = node(36), { venue } = opened();
+    venue.follow(s);
+    const report = await venue.sync([supplier], [stale, current]);
+    expect(report.succinct).toMatchObject({ supplier: "current", foldIndex: 29n, indicesRead: 30 });
+    expect(sectionsAsked(supplier)).toBe(3);
+    expect(expectSame(venue, await complete(36), [s])).toBeGreaterThan(10);
+    // A fold whose verification throws (a backend that does not start, or a failure it does not name) establishes
+    // nothing (§2 rule 3): that supplier is passed over and the next fold serves; the view does not fail.
+    const throwing = Object.freeze({ identity: set.identity, test: true, start: set.start, foldKeyHash: set.foldKeyHash,
+      verifyFold: (first: boolean, inputs: readonly bigint[], proof: Uint8Array) => {
+        if (inputs[5] === A + 30n) throw new Error("backend down");
+        return set.verifyFold(first, inputs, proof);
+      } });
+    const second = new ErgoVenue(profile, chain.context, {}, undefined, undefined, { set: throwing });
+    second.follow(s);
+    const passed = await second.sync([node(36)], [current, named("older", await server(20))]);
+    expect(passed.succinct).toMatchObject({ supplier: "older", foldIndex: 19n, refused: [{ name: "current", reason: "fold not verified: backend down" }] });
+    expect(expectSame(second, await complete(36), [s])).toBeGreaterThan(10);
+  });
+
+  it("hands out copies of its folds: a caller changing one changes nothing it serves", async () => {
+    const x = await server(10), before = encodeFold((await x.fold(1n << 40n))!);
+    (await x.fold(1n << 40n))!.proof.fill(0);
+    (await x.fold(1n << 40n))!.inputs.endId.fill(0);
+    x.latest!.proof.fill(0);
+    (await x.extend([])).inputs.startId.fill(0);
+    expect(encodeFold((await x.fold(1n << 40n))!)).toEqual(before);
+  });
+
   it("keeps what it read across reopening, under its set only, and audits its rows", async () => {
     const path = file(), x = await server(20, 30);
     let { venue } = opened(path);
