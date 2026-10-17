@@ -1,6 +1,6 @@
 # Succinct set adoption
 
-[Succinct reading](https://github.com/mediumofexchange/money-from-first-principles/blob/c90b230/succinct-read.md)
+[Succinct reading](https://github.com/mediumofexchange/money-from-first-principles/blob/68b7170/succinct-read.md)
 §6 lists what an adoption of a circuit set under `moe/succinct/v1` names. No set is adopted: the reference runs the
 trail check set (`src/pool/v3/check-set.ts`) and the exhaustion set (`src/ergo-exhaustion-set.ts`) as one test set
 (`src/succinct-set.ts`, §1). This page tracks each item §6 asks for and holds the one item that has no other home: the

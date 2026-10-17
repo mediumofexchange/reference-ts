@@ -663,14 +663,14 @@ position, which every backing of the scope shares.
 A succinct directory reads its venue succinctly too (succinct-read §4, [slice 43 decision](../decisions/2026-10.md#2026-10-15--read-the-venue-succinctly-in-a-succinct-directorys-view-its-backings-subjects-below-a-replicas-fold-and-sections-natively-above-it-slice-43-next-12)):
 its view, kept in `succinct-venue.db` (never the complete `venue.db`), checks every header as a complete view does, but
 below the latest fold its replicas serve it reads only the subjects it follows (each kept backing, its operator and
-its obligor) from the fold, each key's path and entries and the transactions holding them with inclusion paths, and
-reads sections natively above the fold, or wherever no replica serves one that checks. A read that asks of a subject
+its obligor) from the highest fold that checks, each key's path and entries and the transactions holding them with
+inclusion paths, and reads sections natively above the fold, or wherever no replica serves one that checks. A read that asks of a subject
 it does not follow (an operator a replacement names) follows it, syncs and reads again; a subject followed later is
 read from the venue's first index. A read's `read.venue` names the exhaustion set, the subjects followed and the
 indices read succinctly. The set is a test set whose folds anyone can make (succinct-read §1), so until one is adopted a
-replica could hide a record from a succinct view; a transaction that contradicts a fold's map (§2 rule 7) fails that
-command, and the next drops the set for the directory (`exhaustion.json`), discards the view and the answers kept under
-it, and reads natively from then on. A read that needs a subject no replica can serve yet refuses `UNAVAILABLE`.
+replica could hide a record from a succinct view; a transaction a read fetched that contradicts a fold's map for any
+key it read (§2 rule 7) fails that command, and the next drops the set for the directory (`exhaustion.json`), discards
+the view and the answers kept under it, and reads natively from then on, its trails' proofs as its venue's sections. A read that needs a subject no replica can serve yet refuses `UNAVAILABLE`.
 
 ### Transport
 
