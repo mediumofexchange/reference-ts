@@ -1,10 +1,11 @@
-// The exhaustion's agreement corpus (succinct-read §6): named Ergo mainnet days, each recorded from a public node and
-// judged three ways. Every header id, parent link and transactions root is recomputed from the bytes (nothing a node
-// says is trusted). Every transaction's entries are read by the scan (src/ergo-scan.ts, the tables the circuits
-// evaluate) and by the framer (venue-ergo §§5–6): inside the grammar they must be equal, and the day's map root from the
-// framer's entries (the scan's outside the grammar, §4.2) must be the SubjectMap's. With `--execute`, the day is cut
-// into the replica's periods of 64 blocks and every leaf, node and fold is executed by the pinned nargo over the
-// shipped full-size circuits (the programs an adoption names), with placeholder proofs: execution checks every
+// The exhaustion's agreement corpus (succinct-read §6): named Ergo days, mainnet ones recorded from a public node and
+// testnet ones, which carry the reference's publications, from an archive node, each judged three ways. Every header
+// id, parent link and transactions root is recomputed from the bytes and each day is pinned by its start and end ids
+// (nothing a node says is trusted). Every transaction's entries are read by the scan (src/ergo-scan.ts, the tables the
+// circuits evaluate) and by the framer (venue-ergo §§5–6): inside the grammar they must be equal, and the day's map
+// root from the framer's entries (the scan's outside the grammar, §4.2) must be the SubjectMap's. With `--execute`, the
+// day is cut into the replica's periods of 64 blocks and every leaf, node and fold is executed by the pinned nargo over
+// the shipped full-size circuits (the programs an adoption names), with placeholder proofs: execution checks every
 // constraint but the recursive verifications, which the proving checks cover. The crafted transactions of the
 // execution check run through the full-size transaction leaf as well.
 //
@@ -13,8 +14,9 @@
 //   node scripts/venue/exhaustion-corpus.mjs check [--execute <workers>] [--limit <blocks>] [--report <file>] [day ...]
 //   node scripts/venue/exhaustion-corpus.mjs scan <first height> <last height>
 //
-// Days are recorded in scratch/exhaustion-corpus/<day>.json (ERGO_NODE names the node; https://node.ergo.watch by
-// default); a stopped fetch resumes from the blocks it kept. Run after `npm run build`; `--execute` needs NARGO (the
+// Days are recorded in scratch/exhaustion-corpus/<day>.json (ERGO_NODE names the mainnet node, https://node.ergo.watch
+// by default; ERGO_TESTNET_NODE the testnet archive node, the own node at http://127.0.0.1:9052 by default); a stopped
+// fetch resumes from the blocks it kept. Run after `npm run build`; `--execute` needs NARGO (the
 // pinned nargo) and compiles the shipped circuits once into scratch/exhaustion-programs (about nine minutes).
 import { execFile, execFileSync } from "node:child_process";
 import { createHash, randomUUID } from "node:crypto";
@@ -37,12 +39,29 @@ import { fieldToHex, limbsOf } from "../../dist/pool/field.js";
 const root = path.resolve(import.meta.dirname, "../..");
 const store = path.join(root, "scratch/exhaustion-corpus");
 
-/** The named days: 720 consecutive blocks each (about a day of Ergo mainnet at two minutes a block), chosen for what
- * they cover. Every day lies above venue-ergo §3's lowest anchor (844,672), where a start header can be. */
+/** The named days: 720 consecutive blocks each (about a day of Ergo at two minutes a block), chosen for what they cover,
+ * each pinned by its start (the parent of its first block) and its last block's id, so a node can only make a day fail,
+ * never pass on another chain (a testnet day's headers carry little work: most of a quiet day is at difficulty 1).
+ * Every mainnet day lies above venue-ergo §3's lowest anchor (844,672), where a start header can be; these days are
+ * §6's corpus. Mainnet holds no output with the shape, so three testnet days add real entries beside it: each is the 720
+ * blocks after the anchor of a live drill's reference venue (ERGO_TESTNET_REFERENCE), so its start is the one
+ * `venueStart` (src/cli/venue.ts) gives that venue, and its entries are the reference publisher's records. A day
+ * with `entries` fails without them. */
 export const CORPUS = Object.freeze([
-  { name: "v2-to-v3", first: 889496, last: 890215, covers: "header version 2 to 3 (the first version-3 block is 889,856)" },
-  { name: "v3-to-v4", first: 1627800, last: 1628519, covers: "header version 3 to 4 (the first version-4 block is 1,628,160)" },
-  { name: "slice-43", first: 1893905, last: 1894624, covers: "a heavy version-4 day (13.3 MB unsigned), slice 43's" },
+  { name: "v2-to-v3", network: "mainnet", first: 889496, last: 890215, covers: "header version 2 to 3 (the first version-3 block is 889,856)",
+    start: "936a24c51a2fb70513f60dd2811c624f13d197f4f22576cef670d341004a2e98", end: "3c998f3593bdb6b35a5a7c3257f646e206a22584c893a3d41db0d9136479da53" },
+  { name: "v3-to-v4", network: "mainnet", first: 1627800, last: 1628519, covers: "header version 3 to 4 (the first version-4 block is 1,628,160)",
+    start: "adcb43d542e44bf5b84d42d9192d13115d682dbb33e029d6d02e7d5784d1206b", end: "f9bfe5c4c508301295a0bc93820e43dc4c22cf81e3516bb7a59e50d0a7636bdf" },
+  { name: "slice-43", network: "mainnet", first: 1893905, last: 1894624, covers: "a heavy version-4 day (13.3 MB unsigned), slice 43's",
+    start: "57f2fdb9399bb450b9fd8062dbc1531fe52579270302fa010792aa3dfc886a43", end: "28126b658dc707da6f5d17ba678806c91e2f3a1074825c1ab6ebf77c150b98b3" },
+  // The scope drill's report names its anchor's id (8ca96cd); the command drills' name only its height, so their starts
+  // are the own node's headers there, read when the days were recorded.
+  { name: "testnet-scope", network: "testnet", first: 574971, last: 575690, entries: true, covers: "the live two-backing scope drill's venue (anchor 574,970, slice 8)",
+    start: "c20575d503ba816ce83c29ee918cd37710cb88ad407714b3462fcb556ee063e7", end: "9aa72db2d8a54277e001b6ce219a5342a1f912826f1a7dca4d13c761a9814c15" },
+  { name: "testnet-commands-1", network: "testnet", first: 583357, last: 584076, entries: true, covers: "the first live command drill's venue (anchor 583,356, M10d)",
+    start: "3bdec1406fd83a7b407c35e221f95d1b765e85624c1e6d14160b2578be14331e", end: "c58987649a67fb8e463fdbf0264badb87c17601876499a72f80b9b6a529fd74e" },
+  { name: "testnet-commands-2", network: "testnet", first: 596571, last: 597290, entries: true, covers: "the live command drill's venue at 05337cf (anchor 596,570)",
+    start: "9e513e93f67f453fcdaf8a3cda5c3ad258ed5ccd458591d132599f868ac71b8f", end: "4e98f4fa2772c2b9e1dd1bd5d701a49de35457cea42347122eb63d42cf9836b7" },
 ]);
 /** The replica's period (src/cli/venue.ts' PERIOD_BLOCKS). */
 const PERIOD = 64;
@@ -60,6 +79,7 @@ const positional = argv.filter((a, i) => !a.startsWith("--") && !argv[i - 1]?.st
 /** The named days asked for (all where none is named); a name outside the corpus is refused. */
 const namedDays = () => {
   for (const name of positional) if (!CORPUS.some(d => d.name === name)) throw new Error(`${name} is not a corpus day`);
+  for (const d of CORPUS) if (!Object.hasOwn(nodes, d.network)) throw new Error(`${d.name}: no network ${d.network}`);
   return CORPUS.filter(d => positional.length === 0 || positional.includes(d.name));
 };
 /** A `.part` file's kept lines; a last line cut off mid-write is dropped (its block is fetched again). */
@@ -78,19 +98,22 @@ const same = (a, b) => Buffer.compare(Buffer.from(a), Buffer.from(b)) === 0;
 
 // ---- fetch -------------------------------------------------------------------------------------------------------
 
-const node = process.env.ERGO_NODE ?? "https://node.ergo.watch";
-async function text(p) {
+const nodes = { mainnet: process.env.ERGO_NODE ?? "https://node.ergo.watch", testnet: process.env.ERGO_TESTNET_NODE ?? "http://127.0.0.1:9052" };
+const node = nodes.mainnet;
+async function fetchText(p, base = node) {
   for (let i = 0; i < 7; i++) {
-    try { const r = await fetch(node + p, { signal: AbortSignal.timeout(60_000) }); if (r.ok) return await r.text(); } catch {}
+    try { const r = await fetch(base + p, { signal: AbortSignal.timeout(60_000) }); if (r.ok) return await r.text(); } catch {}
     await new Promise(resolve => setTimeout(resolve, 1000 * 2 ** i));
   }
   throw new Error(`the node did not answer ${p}`);
 }
 
-/** Records heights `first`–`last` and the parent of the first into `file`: each header's bytes and id, and its section
- * (unsigned bytes and witness ids). A transaction the node states with bytes that do not hash to its id (Next 4 (cd))
- * is recorded by id under `unsupplied`, and its block without a section. Kept blocks go to `file.part` as they come. */
-async function record(first, last, file) {
+/** Records heights `first`–`last` and the parent of the first into `file`, from the node `base`: each header's bytes
+ * and id, and its section (unsigned bytes and witness ids). A transaction the node states with bytes that do not hash
+ * to its id (Next 4 (cd)) is recorded by id under `unsupplied`, and its block without a section. Kept blocks go to
+ * `file.part` as they come. */
+async function record(first, last, file, base = node) {
+  const text = p => fetchText(p, base);
   const part = `${file}.part`, kept = new Map(partLines(part).map(b => [b.height, b]));
   const headers = new Map();
   for (let h = first - 1; h <= last; h += 100) {
@@ -127,7 +150,7 @@ async function record(first, last, file) {
   await Promise.all(Array.from({ length: 4 }, work));
   const blocks = Array.from({ length: last - first + 1 }, (_, i) => kept.get(first + i));
   const unsupplied = blocks.flatMap(b => (b.unsupplied ?? []).map(id => ({ height: b.height, id })));
-  writeFileSync(`${file}.tmp`, JSON.stringify({ node, parent: headers.get(first - 1), blocks, unsupplied }));
+  writeFileSync(`${file}.tmp`, JSON.stringify({ node: base, parent: headers.get(first - 1), blocks, unsupplied }));
   renameSync(`${file}.tmp`, file);
   rmSync(part, { force: true });
   const txs = blocks.reduce((n, b) => n + (b.txs?.length ?? 0), 0);
@@ -149,14 +172,14 @@ async function scan(first, last, file) {
       const h = todo.shift();
       if (!ids.has(h)) {
         const from = h - (h - first) % 100;
-        for (const s of parseNodeJson(await text(`/blocks/chainSlice?fromHeight=${from - 1}&toHeight=${Math.min(last, from + 99)}`))) {
+        for (const s of parseNodeJson(await fetchText(`/blocks/chainSlice?fromHeight=${from - 1}&toHeight=${Math.min(last, from + 99)}`))) {
           const header = supplyHeader(s);
           if (!header) throw new Error(`unsupplied header at ${s.get("height")}`);
           ids.set(Number(s.get("height")), header);
         }
       }
       const header = ids.get(h);
-      const { statements, supplied } = supplyBlock(await text(`/blocks/${hex(header.id)}/transactions`));
+      const { statements, supplied } = supplyBlock(await fetchText(`/blocks/${hex(header.id)}/transactions`));
       const line = { height: h, id: hex(header.id), parent: hex(header.bytes.subarray(1, 33)), version: header.bytes[0], txs: supplied.length };
       const missing = supplied.flatMap((t, i) => (t === undefined ? [String(statements[i].get?.("id") ?? `#${i}`)] : []));
       if (missing.length) line.unsupplied = missing;
@@ -214,7 +237,7 @@ function readDay(file) {
     blocks.push({ header, id, height: BigInt(b.height), version: header[0], transactions, unsupplied: b.unsupplied });
     parent = { id, height: BigInt(b.height) };
   }
-  return { start, blocks, digest: sha256(readFileSync(file)) };
+  return { start, blocks, node: data.node, digest: sha256(readFileSync(file)) };
 }
 
 /** The map's root over `entries` in order (§4.2), computed here apart from SubjectMap. */
@@ -315,7 +338,7 @@ const leafCircuit = { t: "leaf-t", m: "leaf-m", u: "leaf-u" };
 async function execute(day, execute, log) {
   const sizes = EXHAUSTION_SET_MANIFEST.sizes, nodeKey = keyOf("node");
   const map = new SubjectMap(day.start.id, day.start.height);
-  const result = { periods: 0, leaves: { t: 0, m: 0, u: 0 }, nodes: 0, folds: 0, refusals: [] };
+  const result = { periods: 0, leaves: { t: 0, m: 0, u: 0 }, nodes: 0, folds: 0, controls: [], refusals: [] };
   const started = Date.now(), limit = count("--limit") ?? day.blocks.length;
   const inFlight = new Set();
   let previous, previousEnd;
@@ -330,12 +353,14 @@ async function execute(day, execute, log) {
     if (previousEnd !== undefined && (!same(stateEnd(run.start).id, stateEnd(previousEnd).id) || stateEnd(run.start).height !== stateEnd(previousEnd).height ||
         run.start.u.root !== previousEnd.u.root)) refuse("period", "does not start where the previous period ended");
     previousEnd = run.end;
-    // Leaves; each joins the next by its state hashes. A day's first leaf is also executed under an end state off by one,
-    // which its circuit must refuse by name: a control that the executions judge at all.
-    if (at === 0) {
-      const [first] = run.leaves;
-      result.control = { leaf: first.kind, refusal: (await execute(leafCircuit[first.kind], { ...first.inputs, sout: String(first.sout + 1n) })) ?? null };
-      if (!/Assertion failed: .*end state/.test(result.control.refusal ?? "")) refuse("control", `a leaf with another end state: ${result.control.refusal ?? "executes"}`);
+    // Leaves; each joins the next by its state hashes. A day's first leaf of each kind is also executed under an end state
+    // off by one, which its circuit must refuse by name: a control that the executions judge at all, the map-update
+    // leaf's included where the day has entries.
+    for (const l of run.leaves) {
+      if (result.controls.some(c => c.leaf === l.kind)) continue;
+      const control = { leaf: l.kind, refusal: (await execute(leafCircuit[l.kind], { ...l.inputs, sout: String(l.sout + 1n) })) ?? null };
+      result.controls.push(control);
+      if (!/Assertion failed: .*end state/.test(control.refusal ?? "")) refuse(`control (${l.kind})`, `a leaf with another end state: ${control.refusal ?? "executes"}`);
     }
     const work = run.leaves.map((l, i) => {
       result.leaves[l.kind]++;
@@ -425,13 +450,13 @@ if (command === "scan") {
   else for (const day of namedDays()) {
     const file = path.join(store, `${day.name}.json`);
     if (existsSync(file)) { console.log(`${day.name}: kept`); continue; }
-    await record(day.first, day.last, file);
+    await record(day.first, day.last, file, nodes[day.network]);
   }
 } else if (command === "check") {
   const workers = count("--execute") ?? 0, limit = count("--limit"), days = namedDays();
   const whole = positional.length === 0 && limit === undefined;
   const report = {
-    specification: "succinct-read §6 (agreement corpus); venue-ergo §§3–6", node, host: cpus()[0]?.model,
+    specification: "succinct-read §6 (agreement corpus); venue-ergo §§3–6", host: cpus()[0]?.model,
     revision: execFileSync("git", ["-C", root, "rev-parse", "HEAD"], { encoding: "utf8" }).trim(),
     run: { days: days.map(d => d.name), workers, limit: limit ?? null, whole },
     sources: Object.fromEntries(files.map(f => [f, sha256(readFileSync(path.join(root, f)))])),
@@ -449,40 +474,45 @@ if (command === "scan") {
     exhaustionPrograms({ nargo: process.env.NARGO, directory, log });
     run = executor(process.env.NARGO, directory, workers);
   }
-  /** An execution that judged nothing, or whose control was not refused by name, fails like a refusal. */
-  const judged = (label, execution) => {
-    if (execution.periods === 0 || execution.control === undefined) fail(`${label}: nothing executed`);
+  /** An execution that judged nothing, whose controls were not refused by name, or that has entries but no map-update
+   * control, fails like a refusal. */
+  const judged = (label, execution, entries) => {
+    if (execution.periods === 0 || execution.controls.length === 0) fail(`${label}: nothing executed`);
+    if (entries > 0 && !execution.controls.some(c => c.leaf === "u")) fail(`${label}: entries without a map-update control`);
     if (execution.refusals.length) fail(`${label}: ${execution.refusals.length} refusals`);
   };
   for (const day of days) {
     const file = path.join(store, `${day.name}.json`);
     if (!existsSync(file)) throw new Error(`${day.name} is not recorded: run fetch first`);
     const read = readDay(file);
-    const entry = { name: day.name, covers: day.covers, first: day.first, last: day.last, recorded: read.digest,
+    const entry = { name: day.name, network: day.network, node: read.node, covers: day.covers, first: day.first, last: day.last, recorded: read.digest,
       start: hex(read.start.id), end: hex(read.blocks.at(-1).id), blocks: read.blocks.length,
       unsignedBytes: read.blocks.reduce((n, b) => n + (b.transactions ?? []).reduce((m, t) => m + t.unsigned.length, 0), 0),
       unsupplied: read.blocks.flatMap(b => (b.unsupplied ?? []).map(id => ({ height: Number(b.height), id }))) };
     if (read.blocks.length !== day.last - day.first + 1 || read.blocks[0].height !== BigInt(day.first)) throw new Error(`${day.name}: not the named heights`);
+    if (entry.start !== day.start || entry.end !== day.end) throw new Error(`${day.name}: not the pinned chain`);
     // A block whose section could not be copied (Next 4 (cd)) is a day not read: it fails whether or not it executes.
     if (entry.unsupplied.length) fail(`${day.name}: ${entry.unsupplied.length} transactions without their bytes`);
     entry.agreement = agreement(read);
     if (entry.agreement.disagreements.length || !entry.agreement.rootsEqual) fail(`${day.name}: the scan and the framer disagree`);
+    if (day.entries && entry.agreement.framerEntries === 0) fail(`${day.name}: no entries`);
     console.log(`${day.name}: ${entry.blocks} blocks, ${entry.agreement.transactions} transactions (${entry.agreement.grammatical} grammatical, ` +
       `${entry.agreement.framerEntries} framer entries; ${entry.agreement.ungrammatical} outside, ${entry.agreement.scanEntriesOutside} scan entries), ` +
       `versions ${JSON.stringify(entry.agreement.versions)}, ${entry.unsupplied.length} unsupplied`);
     if (workers && !entry.unsupplied.length) {
       entry.execution = await execute(read, run, line => log(`${day.name} ${line}`));
-      judged(day.name, entry.execution);
+      judged(day.name, entry.execution, entry.agreement.framerEntries + entry.agreement.scanEntriesOutside);
     }
     report.days.push(entry);
   }
   if (workers && positional.length === 0) {
-    // The mainnet days hold no output with the shape; the synthetic period does (both root rules, keys shared and not,
-    // kind-4 runs, an ungrammatical transaction's shaped output), so its map-update leaves run at full size too.
+    // The mainnet days hold no output with the shape and the testnet days only the reference publisher's, in light
+    // blocks; the synthetic period adds what neither has (both root rules, two subjects sharing a key, kind-4 runs, an
+    // ungrammatical transaction's shaped output), so its map-update leaves run at full size too.
     const synthetic = syntheticPeriod(9);
     report.synthetic = { agreement: agreement({ ...synthetic, blocks: synthetic.blocks.map(b => ({ ...b, version: b.header[0] })) }) };
     report.synthetic.execution = await execute(synthetic, run, line => log(`synthetic ${line}`));
-    judged("synthetic", report.synthetic.execution);
+    judged("synthetic", report.synthetic.execution, report.synthetic.agreement.framerEntries + report.synthetic.agreement.scanEntriesOutside);
     if (!report.synthetic.agreement.rootsEqual || report.synthetic.agreement.disagreements.length) fail("synthetic: the scan and the framer disagree");
     report.crafted = await crafted(run);
     if (report.crafted.refusals.length) fail(`crafted: ${JSON.stringify(report.crafted.refusals.slice(0, 5))}`);
