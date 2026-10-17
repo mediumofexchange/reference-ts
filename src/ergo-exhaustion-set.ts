@@ -22,7 +22,7 @@ import { FoldVerificationError, type ExhaustionSet } from "./ergo-exhaustion.js"
 import type { LeafSizes } from "./ergo-exhaustion-prover.js";
 import { fieldToHex, hexToField } from "./pool/field.js";
 import { EXHAUSTION_PARAMETERS } from "./pool/parameters.js";
-import { keyedVerifier, type CompiledProgram, type KeyedVerifier, type VerifierOptions } from "./pool/proof-verifier.js";
+import { keyedVerifier, ProofVerificationThrew, type CompiledProgram, type KeyedVerifier, type VerifierOptions } from "./pool/proof-verifier.js";
 
 /** The exhaustion circuits (§4.3): the three leaves, the node, the first and the next fold. */
 export const EXHAUSTION_CIRCUITS = Object.freeze(["leaf-t", "leaf-m", "leaf-u", "node", "fold-first", "fold-next"] as const);
@@ -151,11 +151,12 @@ export function exhaustionSetOver(identity: Uint8Array, folds: { readonly first:
     foldKeyHash: folds.next.keyHash,
     verifyFold: async (first: boolean, inputs: readonly bigint[], proof: Uint8Array) => {
       if (!(proof instanceof Uint8Array) || proof.length !== EXHAUSTION_PROOF_BYTES) return false;
-      // A verifier that does not start, or a closed set, throws as itself: the reader's own fault.
+      // A verifier or instance that does not start, or a closed set, throws as itself: the reader's own fault. Only the
+      // backend's throw on the bytes themselves (`ProofVerificationThrew`; the instance is retired) is the supplier's.
       const verifier = await opened();
       try { return await verifier.verify(first ? 1 : 2, inputs, proof); } catch (cause) {
-        // The instance that threw is retired (`keyedVerifier`); what threw is the supplier's bytes.
-        throw new FoldVerificationError(`the fold's verification threw: ${cause instanceof Error ? cause.message : String(cause)}`, { cause });
+        if (cause instanceof ProofVerificationThrew) throw new FoldVerificationError(`the fold's verification threw: ${cause.message}`, { cause });
+        throw cause;
       }
     },
     close: async () => {

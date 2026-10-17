@@ -314,6 +314,13 @@ export function mixedPairingObject(proof: Uint8Array): boolean {
   return zero(0) !== zero(128);
 }
 
+/** The backend threw while verifying a proof's bytes, with a failure it does not name as a malformed proof: what the
+ * bytes did, as distinct from an instance that did not start or a closed verifier, which throw as themselves. It keeps
+ * the backend's message, and the backend's error as its cause. */
+export class ProofVerificationThrew extends Error {
+  constructor(cause: unknown) { super(cause instanceof Error ? cause.message : String(cause), { cause }); this.name = "ProofVerificationThrew"; }
+}
+
 /** Whether a failure of the pinned backend's verification is one of its malformed-proof failures. */
 export function isMalformedProofFailure(error: unknown): boolean {
   if (!(error instanceof Error)) return false;
@@ -501,7 +508,7 @@ function lanesOver(loaded: { readonly generator: Uint8Array; readonly g2: Uint8A
         } catch (cause) {
           await retire(lane);
           if (isMalformedProofFailure(cause)) return false;
-          throw cause;
+          throw new ProofVerificationThrew(cause);
         }
       });
     },
