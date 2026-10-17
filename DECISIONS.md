@@ -36,6 +36,7 @@ as current instructions.
 
 ## Index
 
+- `2026-10-17` [Frame one set identity over the twelve circuits, their sources, toolchain, parameters and start, and name a start final when adopted (slice 43, succinct-read §6)](decisions/2026-10.md#2026-10-17--frame-one-set-identity-over-the-twelve-circuits-their-sources-toolchain-parameters-and-start-and-name-a-start-final-when-adopted-slice-43-succinct-read-6)
 - `2026-10-16` [Prove the exhaustion's recursive joins on the shipped set in the hostile-set check, and retire the proving and pool probes (simplify)](decisions/2026-10.md#2026-10-16--prove-the-exhaustions-recursive-joins-on-the-shipped-set-in-the-hostile-set-check-and-retire-the-proving-and-pool-probes-simplify)
 - `2026-10-16` [Argue that each exhaustion circuit computes its check, and execute the hostile set and every header version on the shipped programs (slice 43, succinct-read §6)](decisions/2026-10.md#2026-10-16--argue-that-each-exhaustion-circuit-computes-its-check-and-execute-the-hostile-set-and-every-header-version-on-the-shipped-programs-slice-43-succinct-read-6)
 - `2026-10-16` [Refuse a proof publishing exactly one pairing point at infinity, and hold bb's in-circuit limb, curve and key-hash constraints against a malicious prover (slice 43, succinct-read §§2, 6)](decisions/2026-10.md#2026-10-16--refuse-a-proof-publishing-exactly-one-pairing-point-at-infinity-and-hold-bbs-in-circuit-limb-curve-and-key-hash-constraints-against-a-malicious-prover-slice-43-succinct-read-2-6)
