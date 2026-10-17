@@ -24,7 +24,6 @@ import { ErgoPublisher, ergoNodePublisher, payToPublicKeyTree, readPlainBox, row
   type ErgoPublishingSupplier } from "../ergo-publisher.js";
 import { foldPublicInputs, type ExhaustionSet, type ExhaustionSupplier, type Fold } from "../ergo-exhaustion.js";
 import { ExhaustionServer, ExhaustionServerError, type ServedBlock } from "../ergo-exhaustion-server.js";
-import { shippedExhaustionSet } from "../ergo-exhaustion-set.js";
 import { decodeFold, encodeFold } from "../ergo-exhaustion-wire.js";
 import { ErgoVenueJournal } from "../ergo-store.js";
 import { EvidenceRefusal } from "../pool/v3/refusals.js";
@@ -32,6 +31,7 @@ import { ReplayStore } from "../pool/v3/replay-store.js";
 import { exhaustionClient, V3ServiceClientError } from "../pool/v3/service-client.js";
 import type { ExhaustionSource } from "../pool/v3/service-http.js";
 import { ergoNodeSupplier, nodeText, parseNodeJson, type ErgoSupplier } from "../ergo-supplier.js";
+import { shippedExhaustionSet, type SetStart } from "../succinct-set.js";
 import { MempoolNode } from "../ergo-synthetic.js";
 import type { RecordKind } from "../record-range.js";
 import type { VenueReference } from "../pool/v3/guard.js";
@@ -195,11 +195,16 @@ export async function createVenue(directory: Directory, options: { readonly synt
   return { venue, created: true };
 }
 
-/** The exhaustion set a succinct directory reads its venue under and a replica serves (succinct-read §4, slice 43): the
- * circuit set the package ships, a test set (no set is adopted, §6), from the venue's anchor, so every party computes it
- * from the venue file. Its folds verify on a verifier started from the directory's parameters at the first fold. */
+/** The start of the set a directory reads and serves under (succinct-read §6): the circuit set the package ships, a test
+ * set (no set is adopted), from the venue's anchor, so every party computes its identity from the venue file. */
+export function venueStart(file: VenueFile): SetStart {
+  return { id: file.profile.anchor, height: file.anchorHeight };
+}
+
+/** The exhaustion set a succinct directory reads its venue under and a replica serves (succinct-read §4, slice 43), from
+ * `venueStart`. Its folds verify on a verifier started from the directory's parameters at the first fold. */
 export function exhaustionSet(directory: Pick<Directory, "path">, file: VenueFile): ExhaustionSet & { close(): Promise<void> } {
-  return shippedExhaustionSet({ id: file.profile.anchor, height: file.anchorHeight }, () => directoryBackend(directory));
+  return shippedExhaustionSet(venueStart(file), () => directoryBackend(directory));
 }
 /** The file a directory keeps its view in: a succinct directory's (`--read succinct`) is a succinct view of its own
  * (succinct-read §4), never the complete `venue.db`, which neither form's view opens as the other. */

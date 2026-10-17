@@ -4,13 +4,14 @@
 // instance once the verifier is built; nothing here loads `@noir-lang`.
 import type { Barretenberg } from "@aztec/bb.js";
 import { openV3Verifier } from "../pool/v3/verifier.js";
-import { openTrailCheckSet, type TrailCheckSet } from "../pool/v3/check-set.js";
+import type { TrailCheckSet } from "../pool/v3/check-set.js";
 import { availableParallelism } from "node:os";
 import { nativeRefusal, ParameterError, startBackend, type ProofVerifier } from "../pool/proof-verifier.js";
 import { CHECK_SET_FILES, copyParameters, prepareCheckSetParameters, readCheckSetParameters, readParameters } from "../pool/parameter-files.js";
 import type { TrailProver } from "../pool/v3/aggregator.js";
 import type { FoldInputs } from "../ergo-exhaustion.js";
 import type { ServerPeriod } from "../ergo-exhaustion-server.js";
+import { shippedCheckSet, testSetIdentity, type SetStart } from "../succinct-set.js";
 import { CommandError, flag, integer, UsageError, type Arguments, type Directory } from "./common.js";
 
 /** `--verifiers n`: the verifier's instance count, default 2, at most 6 (about 85 MB each). */
@@ -46,9 +47,9 @@ export async function openVerifier(directory: Directory, instances: number): Pro
 /** The shipped trail check set a succinct directory reads covers under (succinct-read §§2, 6; slice 38): its pinned keys
  * on one verifier instance of its own over the directory's cached parameters, which verifying a cover reads no more of.
  * It is a test set until an adoption names one, and every read says so. */
-export async function openCheckSet(directory: Directory): Promise<TrailCheckSet> {
+export async function openCheckSet(directory: Directory, start: SetStart): Promise<TrailCheckSet> {
   const api = await directoryBackend(directory);
-  try { return openTrailCheckSet(api); } finally { await api.destroy(); }
+  try { return shippedCheckSet(api, start); } finally { await api.destroy(); }
 }
 
 /** `--prover native|wasm`: whether covers are proved on the native binary bb.js bundles or on WebAssembly (slice 42).
@@ -67,7 +68,7 @@ export function proverBackend(args: Arguments): boolean {
  * with `statements` first: on its own instance, native or WebAssembly, started from the check set's parameters (the
  * leading 2^21 points, 128 MiB), copied from `from` or fetched into the directory where missing, and read from there
  * again at each start. Loaded by dynamic import, so only a proving process loads `@noir-lang`. The caller closes it. */
-export async function openCoverProver(directory: Pick<Directory, "path">, statements: ProofVerifier, from: string | undefined,
+export async function openCoverProver(directory: Pick<Directory, "path">, start: SetStart, statements: ProofVerifier, from: string | undefined,
   native: boolean, log: (line: string) => void): Promise<{ readonly prover: TrailProver; close(): Promise<void> }> {
   try {
     if (from !== undefined) await copyParameters(from, directory.path, CHECK_SET_FILES);
@@ -78,7 +79,7 @@ export async function openCoverProver(directory: Pick<Directory, "path">, statem
   }
   const { openTrailProver } = await import("../pool/v3/aggregator.js");
   try {
-    const prover = await openTrailProver(() => readCheckSetParameters(directory.path), statements, { native, threads: availableParallelism() });
+    const prover = await openTrailProver(() => readCheckSetParameters(directory.path), statements, testSetIdentity(start), { native, threads: availableParallelism() });
     return { prover, close: () => prover.close() };
   } catch (error) {
     // A native binary that would not start (a parameter fault stays its own): by name, with the way round it.

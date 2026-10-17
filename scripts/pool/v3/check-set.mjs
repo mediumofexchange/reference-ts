@@ -11,7 +11,8 @@
 // and derives its key. The shipped set is two files: src/pool/v3/check-set.json, each circuit's key and key hash (what
 // a reader pins), and src/pool/v3/check-set-programs.json, each circuit's compiler version, ABI and bytecode (what a
 // prover runs). Without --write it fails where a source or shipped file differs; --out also writes what it generated
-// there. It prints each circuit's identities (SHA-256 of bytecode and key, and key hash) for check-set.ts to pin;
+// there. It prints each circuit's identities (SHA-256 of its main.nr, of its bytecode as the compiler emits it and of its
+// key, and its key hash) for check-set.ts to pin;
 // --stats adds gate counts.
 import { copyFileSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { createHash } from "node:crypto";
@@ -176,7 +177,7 @@ try {
     if (bytes.length !== 115 * 32) throw new Error(`${name}: a key of ${bytes.length} bytes`);
     keys[name] = { ...(kind === undefined ? {} : { kind }), vk: Buffer.from(bytes).toString("base64"), keyHash: hash };
     shippedPrograms[name] = compiled.value;
-    identities[name] = { bytecode: sha(gunzipSync(Buffer.from(compiled.value.bytecode, "base64"))), vk: sha(bytes), keyHash: hash };
+    identities[name] = { source: sha(main), bytecode: sha(Buffer.from(compiled.value.bytecode, "base64")), vk: sha(bytes), keyHash: hash };
     console.log(`${name}: compiled in ${compiled.seconds} s, key in ${derived.seconds} s${stats ? `, ${await gates(compiled.value.bytecode)} gates` : ""}`);
     return hash;
   };

@@ -1,18 +1,18 @@
 # Succinct set adoption
 
-[Succinct reading](https://github.com/mediumofexchange/money-from-first-principles/blob/3cfd3f0/succinct-read.md)
+[Succinct reading](https://github.com/mediumofexchange/money-from-first-principles/blob/c90b230/succinct-read.md)
 §6 lists what an adoption of a circuit set under `moe/succinct/v1` names. No set is adopted: the reference runs the
-trail check set (`src/pool/v3/check-set.ts`) and the exhaustion set (`src/ergo-exhaustion-set.ts`) as test sets
-(§1). This page tracks each item §6 asks for and holds the one item that has no other home: the argument that each
-circuit computes the check it replaces. Measurements stay in their reports and probe sections, linked here.
+trail check set (`src/pool/v3/check-set.ts`) and the exhaustion set (`src/ergo-exhaustion-set.ts`) as one test set
+(`src/succinct-set.ts`, §1). This page tracks each item §6 asks for and holds the one item that has no other home: the
+argument that each circuit computes the check it replaces. Measurements stay in their reports and probe sections, linked here.
 
 ## What an adoption names
 
 | §6 item | Status | Evidence |
 |---|---|---|
-| Each circuit's sources, bytecode, key and key hash, with compiler, backend and verifier target | Pinned for both test sets; the leading 2^21 Ignition points are pinned, those up to 2^22 (the exhaustion leaves) are not | `CHECK_SET_MANIFEST`, `EXHAUSTION_SET_MANIFEST`; `scripts/venue/exhaustion-set.mjs` |
-| The exhaustion's start header | Open: chosen at adoption, at or below the anchors of the venues it serves | |
-| The set identity and its frame | Open | |
+| Each circuit's sources, bytecode, key and key hash, with compiler, backend and verifier target | Pinned for the twelve, sources checked against the files; the leading 2^22 Ignition points (the exhaustion leaves) are the set's, the trail set's 2^21 their prefix | `SUCCINCT_SET_MANIFEST` (`src/succinct-set.ts`) over `CHECK_SET_MANIFEST` and `EXHAUSTION_SET_MANIFEST`; `scripts/pool/v3/check-set.mjs`, `scripts/venue/exhaustion-set.mjs` |
+| The exhaustion's start header | Rule fixed (§6: the anchor of each venue served or an ancestor, final under the greatest of their depths); its value is chosen at adoption, a recent final mainnet header while no mainnet backing exists | [2026-10-17](../decisions/2026-10.md#2026-10-17--frame-one-set-identity-over-the-twelve-circuits-their-sources-toolchain-parameters-and-start-and-name-a-start-final-when-adopted-slice-43-succinct-read-6) |
+| The set identity and its frame | Frame fixed (§6) and implemented; test sets take it under `moe/succinct/v1/test-set` from a venue's anchor; the adopted value waits for the start | `setBytes`, `testSetIdentity`; `test/succinct-set.test.ts` |
 | Trail leaves equal to pool-v3 §11.4's verifier on genuine and hostile proofs | Done for the test set | [slice 36](../decisions/2026-10.md#2026-10-13--prove-the-trail-check-sets-six-circuits-on-the-pinned-webassembly-backend-verify-covers-under-pinned-keys-and-take-native-proving-as-the-aggregators-lever-slice-36-next-12) |
 | The in-circuit verifier's limb-range, on-curve and key-hash constraints | Read from bb 5.2.0's source and exercised against a malicious prover | [2026-10-16](../decisions/2026-10.md#2026-10-16--refuse-a-proof-publishing-exactly-one-pairing-point-at-infinity-and-hold-bbs-in-circuit-limb-curve-and-key-hash-constraints-against-a-malicious-prover-slice-43-succinct-read-2-6) |
 | The deferred pairing of every recursive circuit, with §2 rule 2's refusal | Done | the same decision |

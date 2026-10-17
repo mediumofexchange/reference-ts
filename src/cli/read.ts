@@ -26,7 +26,7 @@ import { directoryVerifier, openCheckSet } from "./backend.js";
 import { CONSTRUCTION_NAMES, constructionNamed, DEFAULT_CONSTRUCTION, isConstructionName, nameOf, type ConstructionName } from "./construction.js";
 import { authenticate, explain, keepTerms, keptTerms, type KeptTerms } from "./terms.js";
 import { isListenerUrl, listenerFile } from "./serve.js";
-import { keepContext, openView, ownVenue, parseVenue, requireVenue, venueText, type View } from "./venue.js";
+import { keepContext, openView, ownVenue, parseVenue, requireVenue, venueStart, venueText, type View } from "./venue.js";
 
 /** `init` shared by every role: parameters (copied from `--parameters` or fetched) where the directory verifies proofs,
  * then the venue when given. A role that serves one construction (`construction`) takes `--construction <name>`,
@@ -447,7 +447,7 @@ async function frontier(directory: Directory, args: Arguments, kept: KeptTerms, 
     let evidence: EvidenceStore | undefined, store: ReplayStore | undefined, set: TrailCheckSet | undefined;
     try {
       // A succinct directory reads under the shipped check set, from the backing's sources (slice 38).
-      set = directory.succinct ? await openCheckSet(directory) : undefined;
+      set = directory.succinct ? await openCheckSet(directory, venueStart(view.file)) : undefined;
       const reading = set === undefined ? undefined : readingOf(directory, kept, view, set);
       evidence = openEvidence(directory, false, reading?.construction);
       const opened = { evidence, store: store = keptReplay(directory, at) };

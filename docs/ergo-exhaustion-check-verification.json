@@ -5,7 +5,7 @@
       "scripts/venue/exhaustion-build.mjs": "d5f0db4801d3f9606d438dc9b18006b7d9f2855a659304a1a4032f701b557c77",
       "scripts/venue/exhaustion-sources.mjs": "83f704dd827ef3117358c9668d8f4f3cc5dff68e3999227a086a74ab7610d1fe",
       "scripts/venue/exhaustion-periods.mjs": "87cafae65f94d8bb2aa9df3887dd2074cfa325a0a22b4fd90ed51a5dee7b227b",
-      "scripts/venue/exhaustion-check.mjs": "121f1be29010a856d6784da026718cf5e68f6bd77cbf5f0a91bd46aeac05620a",
+      "scripts/venue/exhaustion-check.mjs": "ea3817ce16fddbd6168e08765fd114dc83ce5316c1c62a7d4ac098d702bf600f",
       "src/exhaustion-circuits/exhaustion.nr": "d245fd0162c9a998ece823a40e94973a01dd0a75684b9e9ddd5aeef99efc81d3",
       "src/exhaustion-circuits/blake2b.nr": "2c021e29c19bd09b735354d8ac80effb8772f014c0d6e2c4a60472929d7c5100",
       "src/pool/circuits/vendor/poseidon2.nr": "44f3a3d1abe7d5fa2da5c0339e52018195d55f295c320e530d355f9cc62159d8",
@@ -16,7 +16,7 @@
       "src/ergo-profile.ts": "3ba1e1306fb4328d5394466630900d9a33b776ee8fae2df63446d57297b3a022",
       "src/pool/poseidon2.ts": "c33b48e98263bdf99efc9650b81f57d90136017be2c843963ef38043bb09f308",
       "src/pool/proof-verifier.ts": "50690c04097a1c873666b28423582a51e4775908e55e2dca6e52d036c74f1339",
-      "src/ergo-exhaustion-set.ts": "43134669b814340f031cb421c09540e43ca635e727d3fdb5aecf2fa3e9af26f0",
+      "src/ergo-exhaustion-set.ts": "411601fcda2df033ee7f50453b318dc146868831482c242ba08b10f476dff53d",
       "src/ergo-exhaustion-programs.ts": "19441518fe53b6e4ad89a28448b614953e21d569102b480416aece1bc5f005af",
       "src/exhaustion-circuits/leaf-t.nr": "080ffd2a7f66f17e891eb29fd4b585e5fd1443882bd34036ec0b96a019068838",
       "src/exhaustion-circuits/leaf-m.nr": "5ce613a765de530bec1e6608d34a9d98c03dbfa2d3a0d9cb46b31139c763b601",
@@ -518,14 +518,14 @@
       "entries": 260
     },
     "result": "pass",
-    "revision": "8bf9c457e355f7a15183e0de83e3311f73a04333"
+    "revision": "28872a82bd83e34be0f0db8337df4b78aa98fb86"
   },
   "shipped": {
     "sources": {
       "scripts/venue/exhaustion-build.mjs": "d5f0db4801d3f9606d438dc9b18006b7d9f2855a659304a1a4032f701b557c77",
       "scripts/venue/exhaustion-sources.mjs": "83f704dd827ef3117358c9668d8f4f3cc5dff68e3999227a086a74ab7610d1fe",
       "scripts/venue/exhaustion-periods.mjs": "87cafae65f94d8bb2aa9df3887dd2074cfa325a0a22b4fd90ed51a5dee7b227b",
-      "scripts/venue/exhaustion-check.mjs": "121f1be29010a856d6784da026718cf5e68f6bd77cbf5f0a91bd46aeac05620a",
+      "scripts/venue/exhaustion-check.mjs": "ea3817ce16fddbd6168e08765fd114dc83ce5316c1c62a7d4ac098d702bf600f",
       "src/exhaustion-circuits/exhaustion.nr": "d245fd0162c9a998ece823a40e94973a01dd0a75684b9e9ddd5aeef99efc81d3",
       "src/exhaustion-circuits/blake2b.nr": "2c021e29c19bd09b735354d8ac80effb8772f014c0d6e2c4a60472929d7c5100",
       "src/pool/circuits/vendor/poseidon2.nr": "44f3a3d1abe7d5fa2da5c0339e52018195d55f295c320e530d355f9cc62159d8",
@@ -536,7 +536,7 @@
       "src/ergo-profile.ts": "3ba1e1306fb4328d5394466630900d9a33b776ee8fae2df63446d57297b3a022",
       "src/pool/poseidon2.ts": "c33b48e98263bdf99efc9650b81f57d90136017be2c843963ef38043bb09f308",
       "src/pool/proof-verifier.ts": "50690c04097a1c873666b28423582a51e4775908e55e2dca6e52d036c74f1339",
-      "src/ergo-exhaustion-set.ts": "43134669b814340f031cb421c09540e43ca635e727d3fdb5aecf2fa3e9af26f0",
+      "src/ergo-exhaustion-set.ts": "411601fcda2df033ee7f50453b318dc146868831482c242ba08b10f476dff53d",
       "src/ergo-exhaustion-programs.ts": "19441518fe53b6e4ad89a28448b614953e21d569102b480416aece1bc5f005af",
       "src/exhaustion-circuits/leaf-t.nr": "080ffd2a7f66f17e891eb29fd4b585e5fd1443882bd34036ec0b96a019068838",
       "src/exhaustion-circuits/leaf-m.nr": "5ce613a765de530bec1e6608d34a9d98c03dbfa2d3a0d9cb46b31139c763b601",
@@ -1042,102 +1042,102 @@
         {
           "circuit": "leaf-t",
           "label": "period 0 leaf-t",
-          "seconds": 76.6
+          "seconds": 93.6
         },
         {
           "circuit": "leaf-u",
           "label": "period 0 leaf-u",
-          "seconds": 49.9
+          "seconds": 57.7
         },
         {
           "circuit": "leaf-m",
           "label": "period 0 leaf-m",
-          "seconds": 60.9
+          "seconds": 72
         },
         {
           "circuit": "node",
           "label": "period 0 node",
-          "seconds": 16
+          "seconds": 18.2
         },
         {
           "circuit": "node",
           "label": "period 0 node",
-          "seconds": 15.5
+          "seconds": 18.1
         },
         {
           "circuit": "fold-first",
           "label": "period 0 fold-first",
-          "seconds": 7.9
+          "seconds": 9
         },
         {
           "circuit": "leaf-t",
           "label": "period 1 leaf-t",
-          "seconds": 68.6
+          "seconds": 78.2
         },
         {
           "circuit": "leaf-u",
           "label": "period 1 leaf-u",
-          "seconds": 48
+          "seconds": 54.2
         },
         {
           "circuit": "leaf-m",
           "label": "period 1 leaf-m",
-          "seconds": 56.4
+          "seconds": 70.6
         },
         {
           "circuit": "node",
           "label": "period 1 node",
-          "seconds": 15.5
+          "seconds": 18.2
         },
         {
           "circuit": "node",
           "label": "period 1 node",
-          "seconds": 15.5
+          "seconds": 18.1
         },
         {
           "circuit": "fold-next",
           "label": "period 1 fold-next",
-          "seconds": 16.8
+          "seconds": 18.3
         },
         {
           "circuit": "node",
           "label": "hostile node",
-          "seconds": 15.7
+          "seconds": 18.1
         },
         {
           "circuit": "leaf-t",
           "label": "another node key leaf-t",
-          "seconds": 66.5
+          "seconds": 80
         },
         {
           "circuit": "leaf-m",
           "label": "another node key leaf-m",
-          "seconds": 58.1
+          "seconds": 66.8
         },
         {
           "circuit": "node",
           "label": "another node key node",
-          "seconds": 16.1
+          "seconds": 18.1
         },
         {
           "circuit": "fold-first",
           "label": "hostile fold-first",
-          "seconds": 8.3
+          "seconds": 9.4
         },
         {
           "circuit": "fold-next",
           "label": "hostile fold-next",
-          "seconds": 16.4
+          "seconds": 18.3
         },
         {
           "circuit": "fold-next",
           "label": "hostile fold-next",
-          "seconds": 15.6
+          "seconds": 18.2
         },
         {
           "circuit": "fold-next",
           "label": "hostile fold-next",
-          "seconds": 16.2
+          "seconds": 18
         }
       ],
       "checks": [
@@ -1229,6 +1229,6 @@
     },
     "programsUnchanged": true,
     "result": "pass",
-    "revision": "8bf9c457e355f7a15183e0de83e3311f73a04333"
+    "revision": "67c0e64ba0a0edb9871438c607a5116f6394aa13"
   }
 }

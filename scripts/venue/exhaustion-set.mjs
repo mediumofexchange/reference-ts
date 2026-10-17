@@ -10,6 +10,7 @@
 // Run after `npm run build`. A build directory already holding the circuits with keys (exhaustion-build.mjs --keys at
 // the same sizes) is read without building again: the build takes about ten minutes and 4 GB.
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { createHash } from "node:crypto";
 import path from "node:path";
 import { build, root } from "./exhaustion-build.mjs";
 import { EMPTY_SUBTREES } from "../../dist/ergo-exhaustion.js";
@@ -50,10 +51,12 @@ const keys = Object.fromEntries(EXHAUSTION_CIRCUITS.map(name => [name, {
 compare("src/exhaustion-set.json", `${JSON.stringify(keys, null, 2)}\n`);
 const sizes = circuits.sizes;
 if (sizes.t !== t || sizes.m !== m || sizes.u !== u) { console.error(`the build's sizes ${JSON.stringify(sizes)} are not the manifest's`); failed = true; }
-const identities = circuitIdentities(circuits);
+// Each circuit's identities with its generated main.nr's SHA-256, as the manifest pins them (succinct-read §6).
+const identities = Object.fromEntries(Object.entries(circuitIdentities(circuits)).map(([name, ids]) => [name, {
+  source: createHash("sha256").update(readFileSync(path.join(directory, name, "src", "main.nr"))).digest("hex"), ...ids }]));
 for (const name of EXHAUSTION_CIRCUITS) {
   const pinned = EXHAUSTION_SET_MANIFEST.circuits[name], built = identities[name];
-  if (pinned.bytecode !== built.bytecode || pinned.vk !== built.vk || pinned.keyHash !== built.keyHash) {
+  if (pinned.source !== built.source || pinned.bytecode !== built.bytecode || pinned.vk !== built.vk || pinned.keyHash !== built.keyHash) {
     console.error(`${name}: the manifest pins ${JSON.stringify(pinned)}, the build gives ${JSON.stringify(built)}`);
     failed = true;
   }
