@@ -1,0 +1,5814 @@
+{
+  "shape": {
+    "real": 8,
+    "perBlock": 14,
+    "serveInterval": 2,
+    "silence": 4096,
+    "depth": 2,
+    "step": 200,
+    "marks": [
+      100000,
+      1000000
+    ],
+    "band": 10000,
+    "holdingsCap": 25000,
+    "slowMs": 300,
+    "proofBytes": 14656
+  },
+  "starts": [
+    {
+      "at": "2026-10-09T04:18:39.772Z",
+      "step": "setup",
+      "host": {
+        "cores": 4,
+        "model": "Intel(R) Core(TM) i7-5500U CPU @ 2.40GHz",
+        "memoryGb": 16,
+        "node": "v24.21.0"
+      },
+      "serve": {
+        "startMs": 10870,
+        "statements": 0,
+        "node": {
+          "replayed": 0,
+          "startMs": 276
+        }
+      }
+    },
+    {
+      "at": "2026-10-13T16:42:36.785Z",
+      "step": "generate",
+      "host": {
+        "cores": 4,
+        "model": "Intel(R) Core(TM) i7-5500U CPU @ 2.40GHz",
+        "memoryGb": 16,
+        "node": "v24.21.0"
+      },
+      "serve": {
+        "startMs": 11897,
+        "statements": 472655,
+        "node": {
+          "replayed": 45060,
+          "startMs": 257011
+        }
+      }
+    },
+    {
+      "at": "2026-10-13T16:48:14.073Z",
+      "step": "generate",
+      "host": {
+        "cores": 4,
+        "model": "Intel(R) Core(TM) i7-5500U CPU @ 2.40GHz",
+        "memoryGb": 16,
+        "node": "v24.21.0"
+      },
+      "serve": {
+        "startMs": 12417,
+        "statements": 472655,
+        "node": {
+          "replayed": 45063,
+          "startMs": 286674
+        }
+      }
+    },
+    {
+      "at": "2026-10-13T16:54:21.387Z",
+      "step": "generate",
+      "host": {
+        "cores": 4,
+        "model": "Intel(R) Core(TM) i7-5500U CPU @ 2.40GHz",
+        "memoryGb": 16,
+        "node": "v24.21.0"
+      },
+      "serve": {
+        "startMs": 9955,
+        "statements": 472655,
+        "node": {
+          "replayed": 45066,
+          "startMs": 283439
+        }
+      }
+    },
+    {
+      "at": "2026-10-13T17:00:21.976Z",
+      "step": "generate",
+      "host": {
+        "cores": 4,
+        "model": "Intel(R) Core(TM) i7-5500U CPU @ 2.40GHz",
+        "memoryGb": 16,
+        "node": "v24.21.0"
+      },
+      "serve": {
+        "startMs": 12908,
+        "statements": 472655,
+        "node": {
+          "replayed": 45069,
+          "startMs": 289652
+        }
+      }
+    },
+    {
+      "at": "2026-10-13T17:06:31.999Z",
+      "step": "generate",
+      "host": {
+        "cores": 4,
+        "model": "Intel(R) Core(TM) i7-5500U CPU @ 2.40GHz",
+        "memoryGb": 16,
+        "node": "v24.21.0"
+      },
+      "serve": {
+        "startMs": 10786,
+        "statements": 472655,
+        "node": {
+          "replayed": 45072,
+          "startMs": 267936
+        }
+      }
+    },
+    {
+      "at": "2026-10-13T17:12:17.674Z",
+      "step": "generate",
+      "host": {
+        "cores": 4,
+        "model": "Intel(R) Core(TM) i7-5500U CPU @ 2.40GHz",
+        "memoryGb": 16,
+        "node": "v24.21.0"
+      },
+      "serve": {
+        "startMs": 10085,
+        "statements": 472655,
+        "node": {
+          "replayed": 45075,
+          "startMs": 256676
+        }
+      }
+    },
+    {
+      "at": "2026-10-13T17:17:51.193Z",
+      "step": "generate",
+      "host": {
+        "cores": 4,
+        "model": "Intel(R) Core(TM) i7-5500U CPU @ 2.40GHz",
+        "memoryGb": 16,
+        "node": "v24.21.0"
+      },
+      "serve": {
+        "startMs": 14775,
+        "statements": 472655,
+        "node": {
+          "replayed": 45078,
+          "startMs": 269290
+        }
+      }
+    },
+    {
+      "at": "2026-10-13T17:23:43.018Z",
+      "step": "generate",
+      "host": {
+        "cores": 4,
+        "model": "Intel(R) Core(TM) i7-5500U CPU @ 2.40GHz",
+        "memoryGb": 16,
+        "node": "v24.21.0"
+      },
+      "serve": {
+        "startMs": 10773,
+        "statements": 472655,
+        "node": {
+          "replayed": 45081,
+          "startMs": 317440
+        }
+      }
+    },
+    {
+      "at": "2026-10-13T17:30:19.007Z",
+      "step": "generate",
+      "host": {
+        "cores": 4,
+        "model": "Intel(R) Core(TM) i7-5500U CPU @ 2.40GHz",
+        "memoryGb": 16,
+        "node": "v24.21.0"
+      },
+      "serve": {
+        "startMs": 14575,
+        "statements": 472655,
+        "node": {
+          "replayed": 45084,
+          "startMs": 284836
+        }
+      }
+    },
+    {
+      "at": "2026-10-13T20:36:07.561Z",
+      "step": "generate",
+      "host": {
+        "cores": 4,
+        "model": "Intel(R) Core(TM) i7-5500U CPU @ 2.40GHz",
+        "memoryGb": 16,
+        "node": "v24.21.0"
+      },
+      "serve": {
+        "startMs": 11837,
+        "statements": 472655,
+        "node": {
+          "replayed": 45087,
+          "startMs": 261349
+        }
+      }
+    },
+    {
+      "at": "2026-10-15T08:15:37.282Z",
+      "step": "generate",
+      "host": {
+        "cores": 4,
+        "model": "Intel(R) Core(TM) i7-5500U CPU @ 2.40GHz",
+        "memoryGb": 16,
+        "node": "v24.21.0"
+      },
+      "serve": {
+        "startMs": 17028,
+        "statements": 837128,
+        "node": {
+          "replayed": 79801,
+          "startMs": 634399
+        }
+      }
+    },
+    {
+      "at": "2026-10-16T13:10:43.499Z",
+      "step": "generate",
+      "host": {
+        "cores": 4,
+        "model": "Intel(R) Core(TM) i7-5500U CPU @ 2.40GHz",
+        "memoryGb": 16,
+        "node": "v24.21.0"
+      },
+      "serve": {
+        "startMs": 22584,
+        "statements": 1000000,
+        "node": {
+          "replayed": 95329,
+          "startMs": 914521
+        }
+      }
+    }
+  ],
+  "bands": [
+    {
+      "from": 8,
+      "through": 10000,
+      "firstInBlockMs": {
+        "count": 714,
+        "mean": 171.2,
+        "p05": 89.4,
+        "median": 99.7,
+        "p95": 836.1,
+        "max": 1049.5
+      },
+      "otherMs": {
+        "count": 9278,
+        "mean": 122.1,
+        "p05": 90,
+        "median": 100.4,
+        "p95": 160.6,
+        "max": 1087
+      },
+      "slowMs": {
+        "count": 237,
+        "mean": 846.4,
+        "p05": 705.7,
+        "median": 847.9,
+        "p95": 984.3,
+        "max": 1087
+      },
+      "serve": {
+        "rssMb": 343,
+        "peakMb": 401,
+        "heapMb": 8,
+        "cpuMs": 1031874,
+        "sampledAt": 1791520863005
+      },
+      "serveCpuMsPerStatement": 102,
+      "hostBusy": 0.469,
+      "node": {
+        "at": 1791520840042,
+        "rssMb": 100,
+        "peakMb": 100,
+        "cpuMs": 14843,
+        "heapMb": 16,
+        "collected": false
+      },
+      "journalMb": 229.8,
+      "elapsedS": 1278,
+      "interrupted": 0,
+      "suspendedS": 0,
+      "at": "2026-10-09T04:41:05.590Z"
+    },
+    {
+      "from": 10000,
+      "through": 20000,
+      "firstInBlockMs": {
+        "count": 714,
+        "mean": 180.7,
+        "p05": 107.9,
+        "median": 127.5,
+        "p95": 290.5,
+        "max": 1290
+      },
+      "otherMs": {
+        "count": 9286,
+        "mean": 161,
+        "p05": 108.4,
+        "median": 129.1,
+        "p95": 225.8,
+        "max": 1494.6
+      },
+      "slowMs": {
+        "count": 278,
+        "mean": 979.5,
+        "p05": 311.8,
+        "median": 1044.2,
+        "p95": 1319.3,
+        "max": 1494.6
+      },
+      "serve": {
+        "rssMb": 367,
+        "peakMb": 403,
+        "heapMb": 8,
+        "cpuMs": 2151828,
+        "sampledAt": 1791522514767
+      },
+      "serveCpuMsPerStatement": 112,
+      "hostBusy": 0.459,
+      "node": {
+        "at": 1791522460216,
+        "rssMb": 138,
+        "peakMb": 138,
+        "cpuMs": 35093,
+        "heapMb": 47,
+        "collected": false
+      },
+      "journalMb": 448.1,
+      "elapsedS": 1651,
+      "interrupted": 0,
+      "suspendedS": 0,
+      "at": "2026-10-09T05:08:36.394Z"
+    },
+    {
+      "from": 20000,
+      "through": 30000,
+      "firstInBlockMs": {
+        "count": 714,
+        "mean": 183.1,
+        "p05": 109.4,
+        "median": 125.1,
+        "p95": 361.9,
+        "max": 1378.3
+      },
+      "otherMs": {
+        "count": 9286,
+        "mean": 163.8,
+        "p05": 112.8,
+        "median": 130,
+        "p95": 231.4,
+        "max": 1536.6
+      },
+      "slowMs": {
+        "count": 279,
+        "mean": 1004.5,
+        "p05": 311.7,
+        "median": 1081,
+        "p95": 1361,
+        "max": 1536.6
+      },
+      "serve": {
+        "rssMb": 362,
+        "peakMb": 413,
+        "heapMb": 77,
+        "cpuMs": 3297765,
+        "sampledAt": 1791524188120
+      },
+      "serveCpuMsPerStatement": 115,
+      "hostBusy": 0.381,
+      "node": {
+        "at": 1791524140421,
+        "rssMb": 204,
+        "peakMb": 204,
+        "cpuMs": 57968,
+        "heapMb": 56,
+        "collected": false
+      },
+      "journalMb": 664.8,
+      "elapsedS": 1680,
+      "interrupted": 0,
+      "suspendedS": 0,
+      "at": "2026-10-09T05:36:36.481Z"
+    },
+    {
+      "from": 30000,
+      "through": 40000,
+      "firstInBlockMs": {
+        "count": 715,
+        "mean": 151.4,
+        "p05": 111.7,
+        "median": 124.8,
+        "p95": 220.1,
+        "max": 1234.2
+      },
+      "otherMs": {
+        "count": 9285,
+        "mean": 165.4,
+        "p05": 115.3,
+        "median": 129.5,
+        "p95": 230.3,
+        "max": 1353.2
+      },
+      "slowMs": {
+        "count": 257,
+        "mean": 1070.8,
+        "p05": 319,
+        "median": 1109.2,
+        "p95": 1250.8,
+        "max": 1353.2
+      },
+      "serve": {
+        "rssMb": 363,
+        "peakMb": 424,
+        "heapMb": 56,
+        "cpuMs": 4437686,
+        "sampledAt": 1791525864080
+      },
+      "serveCpuMsPerStatement": 114,
+      "hostBusy": 0.442,
+      "node": {
+        "at": 1791525820638,
+        "rssMb": 212,
+        "peakMb": 212,
+        "cpuMs": 82906,
+        "heapMb": 22,
+        "collected": false
+      },
+      "journalMb": 881.8,
+      "elapsedS": 1670,
+      "interrupted": 0,
+      "suspendedS": 0,
+      "at": "2026-10-09T06:04:26.262Z"
+    },
+    {
+      "from": 40000,
+      "through": 50000,
+      "firstInBlockMs": {
+        "count": 714,
+        "mean": 163.8,
+        "p05": 115.5,
+        "median": 147.8,
+        "p95": 233.5,
+        "max": 1625.5
+      },
+      "otherMs": {
+        "count": 9286,
+        "mean": 197.2,
+        "p05": 118.9,
+        "median": 153.7,
+        "p95": 286.2,
+        "max": 4178.5
+      },
+      "slowMs": {
+        "count": 427,
+        "mean": 984.4,
+        "p05": 306.5,
+        "median": 1141.4,
+        "p95": 1747,
+        "max": 4178.5
+      },
+      "serve": {
+        "rssMb": 356,
+        "peakMb": 430,
+        "heapMb": 8,
+        "cpuMs": 5788702,
+        "sampledAt": 1791527840611
+      },
+      "serveCpuMsPerStatement": 135,
+      "hostBusy": 0.631,
+      "node": {
+        "at": 1791527800862,
+        "rssMb": 226,
+        "peakMb": 226,
+        "cpuMs": 114437,
+        "heapMb": 29,
+        "collected": false
+      },
+      "journalMb": 1098.7,
+      "elapsedS": 1977,
+      "interrupted": 0,
+      "suspendedS": 0,
+      "at": "2026-10-09T06:37:23.746Z"
+    },
+    {
+      "from": 50000,
+      "through": 60000,
+      "firstInBlockMs": {
+        "count": 714,
+        "mean": 146,
+        "p05": 114.5,
+        "median": 132.2,
+        "p95": 206.6,
+        "max": 1506.1
+      },
+      "otherMs": {
+        "count": 9286,
+        "mean": 181.9,
+        "p05": 117.7,
+        "median": 139.9,
+        "p95": 255.9,
+        "max": 3159.1
+      },
+      "slowMs": {
+        "count": 334,
+        "mean": 1045.4,
+        "p05": 308.5,
+        "median": 1171.3,
+        "p95": 1625.2,
+        "max": 3159.1
+      },
+      "serve": {
+        "rssMb": 412,
+        "peakMb": 430,
+        "heapMb": 8,
+        "cpuMs": 7013077,
+        "sampledAt": 1791529662357
+      },
+      "serveCpuMsPerStatement": 122,
+      "hostBusy": 0.531,
+      "node": {
+        "at": 1791529661074,
+        "rssMb": 207,
+        "peakMb": 242,
+        "cpuMs": 147859,
+        "heapMb": 33,
+        "collected": false
+      },
+      "journalMb": 1315.5,
+      "elapsedS": 1819,
+      "interrupted": 0,
+      "suspendedS": 0,
+      "at": "2026-10-09T07:07:43.116Z"
+    },
+    {
+      "from": 60000,
+      "through": 70000,
+      "firstInBlockMs": {
+        "count": 714,
+        "mean": 134.2,
+        "p05": 114.3,
+        "median": 125.1,
+        "p95": 201.1,
+        "max": 265
+      },
+      "otherMs": {
+        "count": 9286,
+        "mean": 169.4,
+        "p05": 116.9,
+        "median": 130.1,
+        "p95": 232.1,
+        "max": 1571.4
+      },
+      "slowMs": {
+        "count": 265,
+        "mean": 1116.4,
+        "p05": 325.8,
+        "median": 1182.1,
+        "p95": 1303.8,
+        "max": 1571.4
+      },
+      "serve": {
+        "rssMb": 404,
+        "peakMb": 430,
+        "heapMb": 8,
+        "cpuMs": 8128562,
+        "sampledAt": 1791531353958
+      },
+      "serveCpuMsPerStatement": 112,
+      "hostBusy": 0.4,
+      "node": {
+        "at": 1791531341317,
+        "rssMb": 236,
+        "peakMb": 242,
+        "cpuMs": 181000,
+        "heapMb": 65,
+        "collected": false
+      },
+      "journalMb": 1532.5,
+      "elapsedS": 1692,
+      "interrupted": 0,
+      "suspendedS": 0,
+      "at": "2026-10-09T07:35:55.079Z"
+    },
+    {
+      "from": 70000,
+      "through": 80000,
+      "firstInBlockMs": {
+        "count": 715,
+        "mean": 163.4,
+        "p05": 114.8,
+        "median": 134.9,
+        "p95": 225.6,
+        "max": 1731.8
+      },
+      "otherMs": {
+        "count": 9285,
+        "mean": 196.1,
+        "p05": 118.1,
+        "median": 140.5,
+        "p95": 283.9,
+        "max": 4883.6
+      },
+      "slowMs": {
+        "count": 442,
+        "mean": 1098.1,
+        "p05": 309.3,
+        "median": 1179.9,
+        "p95": 2094,
+        "max": 4883.6
+      },
+      "serve": {
+        "rssMb": 390,
+        "peakMb": 430,
+        "heapMb": 8,
+        "cpuMs": 9338437,
+        "sampledAt": 1791533315880
+      },
+      "serveCpuMsPerStatement": 121,
+      "hostBusy": 0.497,
+      "node": {
+        "at": 1791533261484,
+        "rssMb": 244,
+        "peakMb": 244,
+        "cpuMs": 217062,
+        "heapMb": 45,
+        "collected": false
+      },
+      "journalMb": 1748.7,
+      "elapsedS": 1964,
+      "interrupted": 0,
+      "suspendedS": 0,
+      "at": "2026-10-09T08:08:38.654Z"
+    },
+    {
+      "from": 80000,
+      "through": 90000,
+      "firstInBlockMs": {
+        "count": 714,
+        "mean": 228,
+        "p05": 129.5,
+        "median": 182.8,
+        "p95": 330,
+        "max": 2977.4
+      },
+      "otherMs": {
+        "count": 9286,
+        "mean": 285.2,
+        "p05": 132.3,
+        "median": 189.3,
+        "p95": 626.2,
+        "max": 8471.2
+      },
+      "slowMs": {
+        "count": 1011,
+        "mean": 1103.7,
+        "p05": 307.1,
+        "median": 587,
+        "p95": 3175.4,
+        "max": 8471.2
+      },
+      "serve": {
+        "rssMb": 349,
+        "peakMb": 430,
+        "heapMb": 55,
+        "cpuMs": 10815812,
+        "sampledAt": 1791536159203
+      },
+      "serveCpuMsPerStatement": 148,
+      "hostBusy": 0.683,
+      "node": {
+        "at": 1791536141479,
+        "rssMb": 251,
+        "peakMb": 251,
+        "cpuMs": 263812,
+        "heapMb": 49,
+        "collected": false
+      },
+      "journalMb": 1965.6,
+      "elapsedS": 2843,
+      "interrupted": 0,
+      "suspendedS": 0,
+      "at": "2026-10-09T08:56:01.293Z"
+    },
+    {
+      "from": 90000,
+      "through": 100000,
+      "firstInBlockMs": {
+        "count": 714,
+        "mean": 156.6,
+        "p05": 116.9,
+        "median": 140,
+        "p95": 229.5,
+        "max": 1282.9
+      },
+      "otherMs": {
+        "count": 9286,
+        "mean": 200.9,
+        "p05": 120.4,
+        "median": 149.2,
+        "p95": 297.3,
+        "max": 3301.6
+      },
+      "slowMs": {
+        "count": 467,
+        "mean": 999.2,
+        "p05": 307.3,
+        "median": 1199.5,
+        "p95": 2049.3,
+        "max": 3301.6
+      },
+      "serve": {
+        "rssMb": 380,
+        "peakMb": 430,
+        "heapMb": 40,
+        "cpuMs": 12126843,
+        "sampledAt": 1791538163149
+      },
+      "serveCpuMsPerStatement": 131,
+      "hostBusy": 0.588,
+      "node": {
+        "at": 1791538121606,
+        "rssMb": 263,
+        "peakMb": 263,
+        "cpuMs": 308468,
+        "heapMb": 76,
+        "collected": false
+      },
+      "journalMb": 2182.2,
+      "elapsedS": 2003,
+      "interrupted": 0,
+      "suspendedS": 0,
+      "at": "2026-10-09T09:29:24.410Z"
+    },
+    {
+      "from": 100000,
+      "through": 100200,
+      "firstInBlockMs": {
+        "count": 15,
+        "mean": 150.2,
+        "p05": 113.4,
+        "median": 131.7,
+        "p95": 277.3,
+        "max": 277.3
+      },
+      "otherMs": {
+        "count": 185,
+        "mean": 188,
+        "p05": 118.7,
+        "median": 138.1,
+        "p95": 305.3,
+        "max": 1651.8
+      },
+      "slowMs": {
+        "count": 10,
+        "mean": 833.8,
+        "p05": 305.3,
+        "median": 1057.6,
+        "p95": 1651.8,
+        "max": 1651.8
+      },
+      "serve": {
+        "rssMb": 416,
+        "peakMb": 430,
+        "heapMb": 90,
+        "cpuMs": 12523702,
+        "sampledAt": 1791544620305
+      },
+      "serveCpuMsPerStatement": 1984,
+      "hostBusy": 0.649,
+      "node": {
+        "at": 1791544602432,
+        "rssMb": 264,
+        "peakMb": 273,
+        "cpuMs": 388827,
+        "heapMb": 35,
+        "collected": false
+      },
+      "journalMb": 2186.9,
+      "elapsedS": 6461,
+      "interrupted": 0,
+      "suspendedS": 0,
+      "at": "2026-10-09T11:17:05.651Z"
+    },
+    {
+      "from": 100200,
+      "through": 110000,
+      "firstInBlockMs": {
+        "count": 701,
+        "mean": 158.2,
+        "p05": 95.1,
+        "median": 124.2,
+        "p95": 226.4,
+        "max": 1292.4
+      },
+      "otherMs": {
+        "count": 9098,
+        "mean": 160.6,
+        "p05": 94.7,
+        "median": 127.3,
+        "p95": 231.5,
+        "max": 1660.9
+      },
+      "slowMs": {
+        "count": 257,
+        "mean": 1101.5,
+        "p05": 328.5,
+        "median": 1171.8,
+        "p95": 1296.2,
+        "max": 1660.9
+      },
+      "serve": {
+        "rssMb": 348,
+        "peakMb": 410,
+        "heapMb": 31,
+        "cpuMs": 1121842,
+        "sampledAt": 1791546298179
+      },
+      "serveCpuMsPerStatement": -1163,
+      "hostBusy": 0.297,
+      "node": {
+        "at": 1791546282644,
+        "rssMb": 268,
+        "peakMb": 273,
+        "cpuMs": 435390,
+        "heapMb": 84,
+        "collected": false
+      },
+      "journalMb": 2398.9,
+      "elapsedS": 1675,
+      "interrupted": 0,
+      "suspendedS": 0,
+      "at": "2026-10-09T11:45:00.506Z"
+    },
+    {
+      "from": 110000,
+      "through": 120000,
+      "firstInBlockMs": {
+        "count": 714,
+        "mean": 140.5,
+        "p05": 115.3,
+        "median": 127.5,
+        "p95": 209.7,
+        "max": 1299.7
+      },
+      "otherMs": {
+        "count": 9286,
+        "mean": 173,
+        "p05": 117.8,
+        "median": 133.2,
+        "p95": 244.2,
+        "max": 1422.6
+      },
+      "slowMs": {
+        "count": 285,
+        "mean": 1072.7,
+        "p05": 319,
+        "median": 1196.6,
+        "p95": 1313.4,
+        "max": 1422.6
+      },
+      "serve": {
+        "rssMb": 390,
+        "peakMb": 414,
+        "heapMb": 75,
+        "cpuMs": 2307937,
+        "sampledAt": 1791548041996
+      },
+      "serveCpuMsPerStatement": 119,
+      "hostBusy": 0.262,
+      "node": {
+        "at": 1791548022951,
+        "rssMb": 294,
+        "peakMb": 299,
+        "cpuMs": 485140,
+        "heapMb": 95,
+        "collected": false
+      },
+      "journalMb": 2615.1,
+      "elapsedS": 1743,
+      "interrupted": 0,
+      "suspendedS": 0,
+      "at": "2026-10-09T12:14:03.450Z"
+    },
+    {
+      "from": 120000,
+      "through": 130000,
+      "firstInBlockMs": {
+        "count": 714,
+        "mean": 138.1,
+        "p05": 115.9,
+        "median": 128.9,
+        "p95": 206.3,
+        "max": 258
+      },
+      "otherMs": {
+        "count": 9286,
+        "mean": 175.1,
+        "p05": 118.8,
+        "median": 134.5,
+        "p95": 246.5,
+        "max": 1577.7
+      },
+      "slowMs": {
+        "count": 279,
+        "mean": 1108,
+        "p05": 314.1,
+        "median": 1220.5,
+        "p95": 1334.2,
+        "max": 1577.7
+      },
+      "serve": {
+        "rssMb": 393,
+        "peakMb": 419,
+        "heapMb": 8,
+        "cpuMs": 3515499,
+        "sampledAt": 1791549800629
+      },
+      "serveCpuMsPerStatement": 121,
+      "hostBusy": 0.268,
+      "node": {
+        "at": 1791549763173,
+        "rssMb": 283,
+        "peakMb": 300,
+        "cpuMs": 536796,
+        "heapMb": 55,
+        "collected": false
+      },
+      "journalMb": 2831.6,
+      "elapsedS": 1760,
+      "interrupted": 0,
+      "suspendedS": 0,
+      "at": "2026-10-09T12:43:23.069Z"
+    },
+    {
+      "from": 130000,
+      "through": 140000,
+      "firstInBlockMs": {
+        "count": 714,
+        "mean": 158.2,
+        "p05": 118.2,
+        "median": 143.8,
+        "p95": 235.5,
+        "max": 349.1
+      },
+      "otherMs": {
+        "count": 9286,
+        "mean": 198.3,
+        "p05": 120.9,
+        "median": 151,
+        "p95": 305.9,
+        "max": 2163.9
+      },
+      "slowMs": {
+        "count": 511,
+        "mean": 823.9,
+        "p05": 303.8,
+        "median": 399.5,
+        "p95": 1620,
+        "max": 2163.9
+      },
+      "serve": {
+        "rssMb": 388,
+        "peakMb": 425,
+        "heapMb": 87,
+        "cpuMs": 4991249,
+        "sampledAt": 1791551801569
+      },
+      "serveCpuMsPerStatement": 148,
+      "hostBusy": 0.28,
+      "node": {
+        "at": 1791551743389,
+        "rssMb": 290,
+        "peakMb": 300,
+        "cpuMs": 600030,
+        "heapMb": 76,
+        "collected": false
+      },
+      "journalMb": 3048.4,
+      "elapsedS": 1999,
+      "interrupted": 0,
+      "suspendedS": 0,
+      "at": "2026-10-09T13:16:41.598Z"
+    },
+    {
+      "from": 140000,
+      "through": 150000,
+      "firstInBlockMs": {
+        "count": 715,
+        "mean": 189.8,
+        "p05": 135.5,
+        "median": 184.7,
+        "p95": 281.4,
+        "max": 453.4
+      },
+      "otherMs": {
+        "count": 9285,
+        "mean": 233.4,
+        "p05": 140.3,
+        "median": 187.8,
+        "p95": 336.1,
+        "max": 1835.5
+      },
+      "slowMs": {
+        "count": 841,
+        "mean": 691,
+        "p05": 304.2,
+        "median": 344,
+        "p95": 1661.1,
+        "max": 1835.5
+      },
+      "serve": {
+        "rssMb": 382,
+        "peakMb": 428,
+        "heapMb": 8,
+        "cpuMs": 6852249,
+        "sampledAt": 1791554154840
+      },
+      "serveCpuMsPerStatement": 186,
+      "hostBusy": 0.282,
+      "node": {
+        "at": 1791554143678,
+        "rssMb": 294,
+        "peakMb": 300,
+        "cpuMs": 679703,
+        "heapMb": 50,
+        "collected": false
+      },
+      "journalMb": 3265.1,
+      "elapsedS": 2358,
+      "interrupted": 0,
+      "suspendedS": 0,
+      "at": "2026-10-09T13:55:59.409Z"
+    },
+    {
+      "from": 150000,
+      "through": 160000,
+      "firstInBlockMs": {
+        "count": 714,
+        "mean": 184.7,
+        "p05": 135.7,
+        "median": 179.2,
+        "p95": 255.6,
+        "max": 353.5
+      },
+      "otherMs": {
+        "count": 9286,
+        "mean": 232.9,
+        "p05": 140.5,
+        "median": 187.4,
+        "p95": 343,
+        "max": 1916.1
+      },
+      "slowMs": {
+        "count": 819,
+        "mean": 700.3,
+        "p05": 304.4,
+        "median": 353.3,
+        "p95": 1654.4,
+        "max": 1916.1
+      },
+      "serve": {
+        "rssMb": 359,
+        "peakMb": 432,
+        "heapMb": 8,
+        "cpuMs": 8700796,
+        "sampledAt": 1791556507004
+      },
+      "serveCpuMsPerStatement": 185,
+      "hostBusy": 0.278,
+      "node": {
+        "at": 1791556483936,
+        "rssMb": 298,
+        "peakMb": 300,
+        "cpuMs": 760639,
+        "heapMb": 105,
+        "collected": false
+      },
+      "journalMb": 3480.8,
+      "elapsedS": 2351,
+      "interrupted": 0,
+      "suspendedS": 0,
+      "at": "2026-10-09T14:35:10.532Z"
+    },
+    {
+      "from": 160000,
+      "through": 170000,
+      "firstInBlockMs": {
+        "count": 714,
+        "mean": 186.9,
+        "p05": 136.1,
+        "median": 180.6,
+        "p95": 261.3,
+        "max": 552.6
+      },
+      "otherMs": {
+        "count": 9286,
+        "mean": 236.7,
+        "p05": 141.5,
+        "median": 188.7,
+        "p95": 353.8,
+        "max": 2076.6
+      },
+      "slowMs": {
+        "count": 924,
+        "mean": 678.6,
+        "p05": 304.5,
+        "median": 357.1,
+        "p95": 1709.5,
+        "max": 2076.6
+      },
+      "serve": {
+        "rssMb": 390,
+        "peakMb": 432,
+        "heapMb": 40,
+        "cpuMs": 10544312,
+        "sampledAt": 1791558895914
+      },
+      "serveCpuMsPerStatement": 184,
+      "hostBusy": 0.272,
+      "node": {
+        "at": 1791558884272,
+        "rssMb": 304,
+        "peakMb": 304,
+        "cpuMs": 846468,
+        "heapMb": 104,
+        "collected": false
+      },
+      "journalMb": 3698.1,
+      "elapsedS": 2389,
+      "interrupted": 0,
+      "suspendedS": 0,
+      "at": "2026-10-09T15:14:59.301Z"
+    },
+    {
+      "from": 170000,
+      "through": 180000,
+      "firstInBlockMs": {
+        "count": 715,
+        "mean": 184.8,
+        "p05": 136.5,
+        "median": 179.5,
+        "p95": 255.9,
+        "max": 421
+      },
+      "otherMs": {
+        "count": 9285,
+        "mean": 234.5,
+        "p05": 141.4,
+        "median": 187.3,
+        "p95": 341.5,
+        "max": 2029.2
+      },
+      "slowMs": {
+        "count": 823,
+        "mean": 712.6,
+        "p05": 304.6,
+        "median": 352.4,
+        "p95": 1690.4,
+        "max": 2029.2
+      },
+      "serve": {
+        "rssMb": 405,
+        "peakMb": 432,
+        "heapMb": 8,
+        "cpuMs": 12392702,
+        "sampledAt": 1791561261804
+      },
+      "serveCpuMsPerStatement": 185,
+      "hostBusy": 0.273,
+      "node": {
+        "at": 1791561224444,
+        "rssMb": 311,
+        "peakMb": 311,
+        "cpuMs": 933593,
+        "heapMb": 97,
+        "collected": false
+      },
+      "journalMb": 3914,
+      "elapsedS": 2366,
+      "interrupted": 0,
+      "suspendedS": 0,
+      "at": "2026-10-09T15:54:24.920Z"
+    },
+    {
+      "from": 180000,
+      "through": 190000,
+      "firstInBlockMs": {
+        "count": 714,
+        "mean": 187.3,
+        "p05": 137.8,
+        "median": 181.9,
+        "p95": 258.3,
+        "max": 443.8
+      },
+      "otherMs": {
+        "count": 9286,
+        "mean": 236.4,
+        "p05": 141.6,
+        "median": 188.9,
+        "p95": 356.3,
+        "max": 1943.7
+      },
+      "slowMs": {
+        "count": 884,
+        "mean": 691.7,
+        "p05": 304.4,
+        "median": 362.9,
+        "p95": 1690.3,
+        "max": 1943.7
+      },
+      "serve": {
+        "rssMb": 409,
+        "peakMb": 432,
+        "heapMb": 87,
+        "cpuMs": 14265014,
+        "sampledAt": 1791563646249
+      },
+      "serveCpuMsPerStatement": 187,
+      "hostBusy": 0.271,
+      "node": {
+        "at": 1791563624609,
+        "rssMb": 317,
+        "peakMb": 317,
+        "cpuMs": 1023984,
+        "heapMb": 70,
+        "collected": false
+      },
+      "journalMb": 4130.8,
+      "elapsedS": 2386,
+      "interrupted": 0,
+      "suspendedS": 0,
+      "at": "2026-10-09T16:34:11.216Z"
+    },
+    {
+      "from": 190000,
+      "through": 200000,
+      "firstInBlockMs": {
+        "count": 715,
+        "mean": 243,
+        "p05": 101,
+        "median": 178.9,
+        "p95": 1221.9,
+        "max": 1451.9
+      },
+      "otherMs": {
+        "count": 9284,
+        "mean": 201.2,
+        "p05": 102.1,
+        "median": 168.5,
+        "p95": 327.2,
+        "max": 2919.3
+      },
+      "slowMs": {
+        "count": 677,
+        "mean": 765.7,
+        "p05": 306.7,
+        "median": 367.2,
+        "p95": 1721.9,
+        "max": 2919.3
+      },
+      "serve": {
+        "rssMb": 357,
+        "peakMb": 432,
+        "heapMb": 50,
+        "cpuMs": 15920280,
+        "sampledAt": 1791856434403
+      },
+      "serveCpuMsPerStatement": 166,
+      "hostBusy": 0.286,
+      "node": {
+        "at": 1791856435654,
+        "rssMb": 332,
+        "peakMb": 332,
+        "cpuMs": 1105202,
+        "heapMb": 88,
+        "collected": false
+      },
+      "journalMb": 4348,
+      "elapsedS": 292790,
+      "interrupted": 2,
+      "suspendedS": 290682,
+      "at": "2026-10-13T01:53:55.770Z"
+    },
+    {
+      "from": 200000,
+      "through": 210000,
+      "firstInBlockMs": {
+        "count": 714,
+        "mean": 192.7,
+        "p05": 97.8,
+        "median": 132.4,
+        "p95": 264,
+        "max": 1319.5
+      },
+      "otherMs": {
+        "count": 9286,
+        "mean": 162.8,
+        "p05": 97.9,
+        "median": 129.7,
+        "p95": 237.8,
+        "max": 1596.6
+      },
+      "slowMs": {
+        "count": 260,
+        "mean": 1197.7,
+        "p05": 351.8,
+        "median": 1271.6,
+        "p95": 1423,
+        "max": 1596.6
+      },
+      "serve": {
+        "rssMb": 397,
+        "peakMb": 432,
+        "heapMb": 8,
+        "cpuMs": 17164639,
+        "sampledAt": 1791858109526
+      },
+      "serveCpuMsPerStatement": 124,
+      "hostBusy": 0.262,
+      "node": {
+        "at": 1791858055767,
+        "rssMb": 230,
+        "peakMb": 379,
+        "cpuMs": 1171171,
+        "heapMb": 61,
+        "collected": false
+      },
+      "journalMb": 4564.7,
+      "elapsedS": 1676,
+      "interrupted": 0,
+      "suspendedS": 0,
+      "at": "2026-10-13T02:21:52.195Z"
+    },
+    {
+      "from": 210000,
+      "through": 220000,
+      "firstInBlockMs": {
+        "count": 715,
+        "mean": 139.8,
+        "p05": 118,
+        "median": 130.4,
+        "p95": 205.8,
+        "max": 266
+      },
+      "otherMs": {
+        "count": 9285,
+        "mean": 178.6,
+        "p05": 121.1,
+        "median": 136,
+        "p95": 254.8,
+        "max": 1615.1
+      },
+      "slowMs": {
+        "count": 283,
+        "mean": 1139.7,
+        "p05": 308.9,
+        "median": 1270.4,
+        "p95": 1387.2,
+        "max": 1615.1
+      },
+      "serve": {
+        "rssMb": 354,
+        "peakMb": 432,
+        "heapMb": 31,
+        "cpuMs": 18404827,
+        "sampledAt": 1791859898697
+      },
+      "serveCpuMsPerStatement": 124,
+      "hostBusy": 0.244,
+      "node": {
+        "at": 1791859855874,
+        "rssMb": 386,
+        "peakMb": 386,
+        "cpuMs": 1247124,
+        "heapMb": 109,
+        "collected": false
+      },
+      "journalMb": 4781.1,
+      "elapsedS": 1787,
+      "interrupted": 0,
+      "suspendedS": 0,
+      "at": "2026-10-13T02:51:38.762Z"
+    },
+    {
+      "from": 220000,
+      "through": 230000,
+      "firstInBlockMs": {
+        "count": 714,
+        "mean": 140.7,
+        "p05": 118,
+        "median": 129.3,
+        "p95": 205.5,
+        "max": 1298.6
+      },
+      "otherMs": {
+        "count": 9286,
+        "mean": 178.4,
+        "p05": 121.4,
+        "median": 136.4,
+        "p95": 253.1,
+        "max": 1442.1
+      },
+      "slowMs": {
+        "count": 283,
+        "mean": 1136.3,
+        "p05": 312.9,
+        "median": 1271.6,
+        "p95": 1376.8,
+        "max": 1442.1
+      },
+      "serve": {
+        "rssMb": 401,
+        "peakMb": 432,
+        "heapMb": 48,
+        "cpuMs": 19641124,
+        "sampledAt": 1791861683846
+      },
+      "serveCpuMsPerStatement": 124,
+      "hostBusy": 0.245,
+      "node": {
+        "at": 1791861655975,
+        "rssMb": 396,
+        "peakMb": 396,
+        "cpuMs": 1323186,
+        "heapMb": 87,
+        "collected": false
+      },
+      "journalMb": 4997,
+      "elapsedS": 1786,
+      "interrupted": 0,
+      "suspendedS": 0,
+      "at": "2026-10-13T03:21:24.657Z"
+    },
+    {
+      "from": 230000,
+      "through": 240000,
+      "firstInBlockMs": {
+        "count": 714,
+        "mean": 139.7,
+        "p05": 119.8,
+        "median": 130.3,
+        "p95": 205.7,
+        "max": 249.4
+      },
+      "otherMs": {
+        "count": 9286,
+        "mean": 181,
+        "p05": 122,
+        "median": 137.3,
+        "p95": 255.6,
+        "max": 1651.8
+      },
+      "slowMs": {
+        "count": 289,
+        "mean": 1154.4,
+        "p05": 317.3,
+        "median": 1307,
+        "p95": 1441.1,
+        "max": 1651.8
+      },
+      "serve": {
+        "rssMb": 348,
+        "peakMb": 432,
+        "heapMb": 8,
+        "cpuMs": 20893624,
+        "sampledAt": 1791863493597
+      },
+      "serveCpuMsPerStatement": 125,
+      "hostBusy": 0.243,
+      "node": {
+        "at": 1791863456101,
+        "rssMb": 402,
+        "peakMb": 402,
+        "cpuMs": 1399640,
+        "heapMb": 86,
+        "collected": false
+      },
+      "journalMb": 5213.4,
+      "elapsedS": 1809,
+      "interrupted": 0,
+      "suspendedS": 0,
+      "at": "2026-10-13T03:51:33.829Z"
+    },
+    {
+      "from": 240000,
+      "through": 250000,
+      "firstInBlockMs": {
+        "count": 715,
+        "mean": 140.3,
+        "p05": 119.3,
+        "median": 131.9,
+        "p95": 205.3,
+        "max": 276.4
+      },
+      "otherMs": {
+        "count": 9285,
+        "mean": 182,
+        "p05": 122.1,
+        "median": 137.4,
+        "p95": 258.5,
+        "max": 1789.4
+      },
+      "slowMs": {
+        "count": 294,
+        "mean": 1161.8,
+        "p05": 319,
+        "median": 1328,
+        "p95": 1463.8,
+        "max": 1789.4
+      },
+      "serve": {
+        "rssMb": 391,
+        "peakMb": 432,
+        "heapMb": 72,
+        "cpuMs": 22156030,
+        "sampledAt": 1791865312883
+      },
+      "serveCpuMsPerStatement": 126,
+      "hostBusy": 0.244,
+      "node": {
+        "at": 1791865256251,
+        "rssMb": 405,
+        "peakMb": 405,
+        "cpuMs": 1478937,
+        "heapMb": 67,
+        "collected": false
+      },
+      "journalMb": 5430.8,
+      "elapsedS": 1819,
+      "interrupted": 0,
+      "suspendedS": 0,
+      "at": "2026-10-13T04:21:52.975Z"
+    },
+    {
+      "from": 250000,
+      "through": 260000,
+      "firstInBlockMs": {
+        "count": 714,
+        "mean": 142.8,
+        "p05": 120,
+        "median": 132.8,
+        "p95": 205.4,
+        "max": 1436.6
+      },
+      "otherMs": {
+        "count": 9286,
+        "mean": 182.5,
+        "p05": 122.8,
+        "median": 138,
+        "p95": 258.6,
+        "max": 1798.6
+      },
+      "slowMs": {
+        "count": 296,
+        "mean": 1156.4,
+        "p05": 316.6,
+        "median": 1328.4,
+        "p95": 1444.9,
+        "max": 1798.6
+      },
+      "serve": {
+        "rssMb": 358,
+        "peakMb": 432,
+        "heapMb": 8,
+        "cpuMs": 23429890,
+        "sampledAt": 1791867136246
+      },
+      "serveCpuMsPerStatement": 127,
+      "hostBusy": 0.247,
+      "node": {
+        "at": 1791867116424,
+        "rssMb": 389,
+        "peakMb": 426,
+        "cpuMs": 1566655,
+        "heapMb": 127,
+        "collected": false
+      },
+      "journalMb": 5646.8,
+      "elapsedS": 1825,
+      "interrupted": 0,
+      "suspendedS": 0,
+      "at": "2026-10-13T04:52:18.343Z"
+    },
+    {
+      "from": 260000,
+      "through": 270000,
+      "firstInBlockMs": {
+        "count": 714,
+        "mean": 144.3,
+        "p05": 119.8,
+        "median": 134.2,
+        "p95": 208.9,
+        "max": 289.9
+      },
+      "otherMs": {
+        "count": 9286,
+        "mean": 182.8,
+        "p05": 122.9,
+        "median": 138.3,
+        "p95": 261.1,
+        "max": 1569.8
+      },
+      "slowMs": {
+        "count": 303,
+        "mean": 1128.5,
+        "p05": 310.9,
+        "median": 1317,
+        "p95": 1441.7,
+        "max": 1569.8
+      },
+      "serve": {
+        "rssMb": 355,
+        "peakMb": 433,
+        "heapMb": 8,
+        "cpuMs": 24719000,
+        "sampledAt": 1791868967622
+      },
+      "serveCpuMsPerStatement": 129,
+      "hostBusy": 0.248,
+      "node": {
+        "at": 1791868916650,
+        "rssMb": 414,
+        "peakMb": 426,
+        "cpuMs": 1650453,
+        "heapMb": 124,
+        "collected": false
+      },
+      "journalMb": 5863.2,
+      "elapsedS": 1830,
+      "interrupted": 0,
+      "suspendedS": 0,
+      "at": "2026-10-13T05:22:48.086Z"
+    },
+    {
+      "from": 270000,
+      "through": 280000,
+      "firstInBlockMs": {
+        "count": 714,
+        "mean": 145.7,
+        "p05": 120.6,
+        "median": 136,
+        "p95": 207.8,
+        "max": 1328.2
+      },
+      "otherMs": {
+        "count": 9286,
+        "mean": 184,
+        "p05": 123.6,
+        "median": 140.5,
+        "p95": 263,
+        "max": 1581.8
+      },
+      "slowMs": {
+        "count": 308,
+        "mean": 1127.1,
+        "p05": 311.3,
+        "median": 1320,
+        "p95": 1497.7,
+        "max": 1581.8
+      },
+      "serve": {
+        "rssMb": 398,
+        "peakMb": 436,
+        "heapMb": 8,
+        "cpuMs": 25991921,
+        "sampledAt": 1791870808884
+      },
+      "serveCpuMsPerStatement": 127,
+      "hostBusy": 0.265,
+      "node": {
+        "at": 1791870776747,
+        "rssMb": 417,
+        "peakMb": 426,
+        "cpuMs": 1746421,
+        "heapMb": 111,
+        "collected": false
+      },
+      "journalMb": 6080.1,
+      "elapsedS": 1845,
+      "interrupted": 0,
+      "suspendedS": 0,
+      "at": "2026-10-13T05:53:32.934Z"
+    },
+    {
+      "from": 280000,
+      "through": 290000,
+      "firstInBlockMs": {
+        "count": 715,
+        "mean": 142.6,
+        "p05": 121.1,
+        "median": 134,
+        "p95": 205.5,
+        "max": 261.7
+      },
+      "otherMs": {
+        "count": 9285,
+        "mean": 184.9,
+        "p05": 123.8,
+        "median": 139.8,
+        "p95": 265.6,
+        "max": 1639.2
+      },
+      "slowMs": {
+        "count": 303,
+        "mean": 1157.3,
+        "p05": 315.1,
+        "median": 1351.7,
+        "p95": 1466.7,
+        "max": 1639.2
+      },
+      "serve": {
+        "rssMb": 369,
+        "peakMb": 436,
+        "heapMb": 42,
+        "cpuMs": 27278078,
+        "sampledAt": 1791872662574
+      },
+      "serveCpuMsPerStatement": 129,
+      "hostBusy": 0.249,
+      "node": {
+        "at": 1791872636839,
+        "rssMb": 422,
+        "peakMb": 426,
+        "cpuMs": 1842796,
+        "heapMb": 93,
+        "collected": false
+      },
+      "journalMb": 6296.4,
+      "elapsedS": 1853,
+      "interrupted": 0,
+      "suspendedS": 0,
+      "at": "2026-10-13T06:24:26.027Z"
+    },
+    {
+      "from": 290000,
+      "through": 300000,
+      "firstInBlockMs": {
+        "count": 714,
+        "mean": 146.1,
+        "p05": 121.7,
+        "median": 134.5,
+        "p95": 208.9,
+        "max": 1389
+      },
+      "otherMs": {
+        "count": 9286,
+        "mean": 185.7,
+        "p05": 123.6,
+        "median": 140.7,
+        "p95": 270,
+        "max": 1605.2
+      },
+      "slowMs": {
+        "count": 313,
+        "mean": 1128.5,
+        "p05": 307,
+        "median": 1350.5,
+        "p95": 1479.7,
+        "max": 1605.2
+      },
+      "serve": {
+        "rssMb": 354,
+        "peakMb": 436,
+        "heapMb": 8,
+        "cpuMs": 28574202,
+        "sampledAt": 1791874531587
+      },
+      "serveCpuMsPerStatement": 130,
+      "hostBusy": 0.252,
+      "node": {
+        "at": 1791874496901,
+        "rssMb": 426,
+        "peakMb": 426,
+        "cpuMs": 1943374,
+        "heapMb": 93,
+        "collected": false
+      },
+      "journalMb": 6513.4,
+      "elapsedS": 1866,
+      "interrupted": 0,
+      "suspendedS": 0,
+      "at": "2026-10-13T06:55:31.587Z"
+    },
+    {
+      "from": 300000,
+      "through": 310000,
+      "firstInBlockMs": {
+        "count": 714,
+        "mean": 144.7,
+        "p05": 122,
+        "median": 135.4,
+        "p95": 216.1,
+        "max": 305.7
+      },
+      "otherMs": {
+        "count": 9286,
+        "mean": 188.1,
+        "p05": 124.1,
+        "median": 142.6,
+        "p95": 268.3,
+        "max": 1633
+      },
+      "slowMs": {
+        "count": 315,
+        "mean": 1152.7,
+        "p05": 306,
+        "median": 1388.2,
+        "p95": 1528.7,
+        "max": 1633
+      },
+      "serve": {
+        "rssMb": 360,
+        "peakMb": 436,
+        "heapMb": 39,
+        "cpuMs": 29866671,
+        "sampledAt": 1791876420764
+      },
+      "serveCpuMsPerStatement": 129,
+      "hostBusy": 0.248,
+      "node": {
+        "at": 1791876417079,
+        "rssMb": 430,
+        "peakMb": 430,
+        "cpuMs": 2048890,
+        "heapMb": 124,
+        "collected": false
+      },
+      "journalMb": 6729.8,
+      "elapsedS": 1891,
+      "interrupted": 0,
+      "suspendedS": 0,
+      "at": "2026-10-13T07:27:02.518Z"
+    },
+    {
+      "from": 310000,
+      "through": 320000,
+      "firstInBlockMs": {
+        "count": 715,
+        "mean": 147.6,
+        "p05": 122.2,
+        "median": 135.4,
+        "p95": 215.3,
+        "max": 1440.9
+      },
+      "otherMs": {
+        "count": 9285,
+        "mean": 187.5,
+        "p05": 124.3,
+        "median": 141.4,
+        "p95": 269,
+        "max": 1644.6
+      },
+      "slowMs": {
+        "count": 321,
+        "mean": 1141.1,
+        "p05": 306.8,
+        "median": 1390.3,
+        "p95": 1520.4,
+        "max": 1644.6
+      },
+      "serve": {
+        "rssMb": 354,
+        "peakMb": 436,
+        "heapMb": 95,
+        "cpuMs": 31180015,
+        "sampledAt": 1791878307171
+      },
+      "serveCpuMsPerStatement": 131,
+      "hostBusy": 0.252,
+      "node": {
+        "at": 1791878277266,
+        "rssMb": 433,
+        "peakMb": 433,
+        "cpuMs": 2154046,
+        "heapMb": 112,
+        "collected": false
+      },
+      "journalMb": 6946.2,
+      "elapsedS": 1887,
+      "interrupted": 0,
+      "suspendedS": 0,
+      "at": "2026-10-13T07:58:29.734Z"
+    },
+    {
+      "from": 320000,
+      "through": 330000,
+      "firstInBlockMs": {
+        "count": 714,
+        "mean": 147.1,
+        "p05": 123,
+        "median": 136.7,
+        "p95": 210.3,
+        "max": 1448.8
+      },
+      "otherMs": {
+        "count": 9286,
+        "mean": 189.3,
+        "p05": 125.1,
+        "median": 142.6,
+        "p95": 273,
+        "max": 1803.9
+      },
+      "slowMs": {
+        "count": 340,
+        "mean": 1101.1,
+        "p05": 306.3,
+        "median": 1390.1,
+        "p95": 1525.5,
+        "max": 1803.9
+      },
+      "serve": {
+        "rssMb": 363,
+        "peakMb": 436,
+        "heapMb": 66,
+        "cpuMs": 32499593,
+        "sampledAt": 1791880208745
+      },
+      "serveCpuMsPerStatement": 132,
+      "hostBusy": 0.251,
+      "node": {
+        "at": 1791880197448,
+        "rssMb": 438,
+        "peakMb": 438,
+        "cpuMs": 2265718,
+        "heapMb": 121,
+        "collected": false
+      },
+      "journalMb": 7162.7,
+      "elapsedS": 1905,
+      "interrupted": 0,
+      "suspendedS": 0,
+      "at": "2026-10-13T08:30:15.153Z"
+    },
+    {
+      "from": 330000,
+      "through": 340000,
+      "firstInBlockMs": {
+        "count": 714,
+        "mean": 146.3,
+        "p05": 122.3,
+        "median": 136.3,
+        "p95": 218.2,
+        "max": 298.7
+      },
+      "otherMs": {
+        "count": 9286,
+        "mean": 187.7,
+        "p05": 125,
+        "median": 142.1,
+        "p95": 268.9,
+        "max": 1601.6
+      },
+      "slowMs": {
+        "count": 318,
+        "mean": 1143.3,
+        "p05": 307.9,
+        "median": 1383.7,
+        "p95": 1524.4,
+        "max": 1601.6
+      },
+      "serve": {
+        "rssMb": 394,
+        "peakMb": 436,
+        "heapMb": 58,
+        "cpuMs": 33786655,
+        "sampledAt": 1791882104389
+      },
+      "serveCpuMsPerStatement": 129,
+      "hostBusy": 0.249,
+      "node": {
+        "at": 1791882057713,
+        "rssMb": 441,
+        "peakMb": 441,
+        "cpuMs": 2375233,
+        "heapMb": 94,
+        "collected": false
+      },
+      "journalMb": 7379.2,
+      "elapsedS": 1891,
+      "interrupted": 0,
+      "suspendedS": 0,
+      "at": "2026-10-13T09:01:46.056Z"
+    },
+    {
+      "from": 340000,
+      "through": 350000,
+      "firstInBlockMs": {
+        "count": 714,
+        "mean": 145.9,
+        "p05": 123,
+        "median": 136.5,
+        "p95": 210.4,
+        "max": 318.2
+      },
+      "otherMs": {
+        "count": 9286,
+        "mean": 188.4,
+        "p05": 124.9,
+        "median": 142.4,
+        "p95": 270,
+        "max": 1854.3
+      },
+      "slowMs": {
+        "count": 312,
+        "mean": 1169.8,
+        "p05": 308,
+        "median": 1391.8,
+        "p95": 1556.8,
+        "max": 1854.3
+      },
+      "serve": {
+        "rssMb": 403,
+        "peakMb": 436,
+        "heapMb": 8,
+        "cpuMs": 35086171,
+        "sampledAt": 1791883998449
+      },
+      "serveCpuMsPerStatement": 130,
+      "hostBusy": 0.25,
+      "node": {
+        "at": 1791883977872,
+        "rssMb": 461,
+        "peakMb": 544,
+        "cpuMs": 2492109,
+        "heapMb": 109,
+        "collected": false
+      },
+      "journalMb": 7595.4,
+      "elapsedS": 1896,
+      "interrupted": 0,
+      "suspendedS": 0,
+      "at": "2026-10-13T09:33:21.606Z"
+    },
+    {
+      "from": 350000,
+      "through": 360000,
+      "firstInBlockMs": {
+        "count": 715,
+        "mean": 145.4,
+        "p05": 123.3,
+        "median": 137.1,
+        "p95": 209.5,
+        "max": 258.9
+      },
+      "otherMs": {
+        "count": 9285,
+        "mean": 189.6,
+        "p05": 125.4,
+        "median": 142.5,
+        "p95": 271.5,
+        "max": 1740.3
+      },
+      "slowMs": {
+        "count": 325,
+        "mean": 1159.2,
+        "p05": 310.3,
+        "median": 1425.8,
+        "p95": 1554.1,
+        "max": 1740.3
+      },
+      "serve": {
+        "rssMb": 362,
+        "peakMb": 437,
+        "heapMb": 39,
+        "cpuMs": 36408030,
+        "sampledAt": 1791885906679
+      },
+      "serveCpuMsPerStatement": 132,
+      "hostBusy": 0.252,
+      "node": {
+        "at": 1791885898113,
+        "rssMb": 469,
+        "peakMb": 544,
+        "cpuMs": 2610280,
+        "heapMb": 116,
+        "collected": false
+      },
+      "journalMb": 7812.2,
+      "elapsedS": 1907,
+      "interrupted": 0,
+      "suspendedS": 0,
+      "at": "2026-10-13T10:05:08.306Z"
+    },
+    {
+      "from": 360000,
+      "through": 370000,
+      "firstInBlockMs": {
+        "count": 714,
+        "mean": 149.8,
+        "p05": 123.5,
+        "median": 138.2,
+        "p95": 215.2,
+        "max": 1394.7
+      },
+      "otherMs": {
+        "count": 9286,
+        "mean": 190.4,
+        "p05": 126,
+        "median": 143.2,
+        "p95": 271.5,
+        "max": 1681.3
+      },
+      "slowMs": {
+        "count": 317,
+        "mean": 1182,
+        "p05": 305.8,
+        "median": 1439.4,
+        "p95": 1553.3,
+        "max": 1681.3
+      },
+      "serve": {
+        "rssMb": 360,
+        "peakMb": 437,
+        "heapMb": 66,
+        "cpuMs": 37730389,
+        "sampledAt": 1791887822713
+      },
+      "serveCpuMsPerStatement": 132,
+      "hostBusy": 0.252,
+      "node": {
+        "at": 1791887818244,
+        "rssMb": 472,
+        "peakMb": 544,
+        "cpuMs": 2731093,
+        "heapMb": 92,
+        "collected": false
+      },
+      "journalMb": 8027.5,
+      "elapsedS": 1919,
+      "interrupted": 0,
+      "suspendedS": 0,
+      "at": "2026-10-13T10:37:06.884Z"
+    },
+    {
+      "from": 370000,
+      "through": 380000,
+      "firstInBlockMs": {
+        "count": 714,
+        "mean": 160.2,
+        "p05": 124.2,
+        "median": 145.2,
+        "p95": 235.6,
+        "max": 1865.2
+      },
+      "otherMs": {
+        "count": 9286,
+        "mean": 204.2,
+        "p05": 127.1,
+        "median": 151.8,
+        "p95": 291,
+        "max": 3574.3
+      },
+      "slowMs": {
+        "count": 424,
+        "mean": 1049.7,
+        "p05": 304.4,
+        "median": 1395,
+        "p95": 2120,
+        "max": 3574.3
+      },
+      "serve": {
+        "rssMb": 377,
+        "peakMb": 438,
+        "heapMb": 96,
+        "cpuMs": 39160765,
+        "sampledAt": 1791889870520
+      },
+      "serveCpuMsPerStatement": 143,
+      "hostBusy": 0.395,
+      "node": {
+        "at": 1791889855324,
+        "rssMb": 476,
+        "peakMb": 544,
+        "cpuMs": 2861968,
+        "heapMb": 109,
+        "collected": false
+      },
+      "journalMb": 8245.1,
+      "elapsedS": 2054,
+      "interrupted": 0,
+      "suspendedS": 0,
+      "at": "2026-10-13T11:11:17.313Z"
+    },
+    {
+      "from": 380000,
+      "through": 390000,
+      "firstInBlockMs": {
+        "count": 715,
+        "mean": 159.9,
+        "p05": 126.7,
+        "median": 146.5,
+        "p95": 243.4,
+        "max": 390.2
+      },
+      "otherMs": {
+        "count": 9285,
+        "mean": 206.4,
+        "p05": 129.3,
+        "median": 152.5,
+        "p95": 297,
+        "max": 2840.3
+      },
+      "slowMs": {
+        "count": 459,
+        "mean": 1008.4,
+        "p05": 304.5,
+        "median": 1406.4,
+        "p95": 1957.6,
+        "max": 2840.3
+      },
+      "serve": {
+        "rssMb": 376,
+        "peakMb": 438,
+        "heapMb": 46,
+        "cpuMs": 40580124,
+        "sampledAt": 1791891949049
+      },
+      "serveCpuMsPerStatement": 142,
+      "hostBusy": 0.423,
+      "node": {
+        "at": 1791891895714,
+        "rssMb": 480,
+        "peakMb": 544,
+        "cpuMs": 2995999,
+        "heapMb": 108,
+        "collected": false
+      },
+      "journalMb": 8462.3,
+      "elapsedS": 2072,
+      "interrupted": 0,
+      "suspendedS": 0,
+      "at": "2026-10-13T11:45:49.400Z"
+    },
+    {
+      "from": 390000,
+      "through": 400000,
+      "firstInBlockMs": {
+        "count": 714,
+        "mean": 157.1,
+        "p05": 126.9,
+        "median": 142.9,
+        "p95": 223.8,
+        "max": 1531.4
+      },
+      "otherMs": {
+        "count": 9286,
+        "mean": 200.1,
+        "p05": 129.6,
+        "median": 148.3,
+        "p95": 286.5,
+        "max": 3145.7
+      },
+      "slowMs": {
+        "count": 397,
+        "mean": 1081.7,
+        "p05": 305.1,
+        "median": 1446.9,
+        "p95": 1772.5,
+        "max": 3145.7
+      },
+      "serve": {
+        "rssMb": 388,
+        "peakMb": 438,
+        "heapMb": 57,
+        "cpuMs": 41939905,
+        "sampledAt": 1791893956850
+      },
+      "serveCpuMsPerStatement": 136,
+      "hostBusy": 0.36,
+      "node": {
+        "at": 1791893936076,
+        "rssMb": 484,
+        "peakMb": 544,
+        "cpuMs": 3134311,
+        "heapMb": 136,
+        "collected": false
+      },
+      "journalMb": 8678.7,
+      "elapsedS": 2012,
+      "interrupted": 0,
+      "suspendedS": 0,
+      "at": "2026-10-13T12:19:21.119Z"
+    },
+    {
+      "from": 400000,
+      "through": 410000,
+      "firstInBlockMs": {
+        "count": 714,
+        "mean": 174.8,
+        "p05": 133.9,
+        "median": 151.9,
+        "p95": 253.2,
+        "max": 4314.1
+      },
+      "otherMs": {
+        "count": 9286,
+        "mean": 225.7,
+        "p05": 137,
+        "median": 162.8,
+        "p95": 332.9,
+        "max": 5336.1
+      },
+      "slowMs": {
+        "count": 648,
+        "mean": 921,
+        "p05": 304.8,
+        "median": 398,
+        "p95": 2269.2,
+        "max": 5336.1
+      },
+      "serve": {
+        "rssMb": 354,
+        "peakMb": 438,
+        "heapMb": 8,
+        "cpuMs": 43409202,
+        "sampledAt": 1791896216757
+      },
+      "serveCpuMsPerStatement": 147,
+      "hostBusy": 0.527,
+      "node": {
+        "at": 1791896216433,
+        "rssMb": 384,
+        "peakMb": 544,
+        "cpuMs": 3279077,
+        "heapMb": 167,
+        "collected": false
+      },
+      "journalMb": 8895.3,
+      "elapsedS": 2260,
+      "interrupted": 0,
+      "suspendedS": 0,
+      "at": "2026-10-13T12:57:00.778Z"
+    },
+    {
+      "from": 410000,
+      "through": 420000,
+      "firstInBlockMs": {
+        "count": 714,
+        "mean": 160.7,
+        "p05": 132.1,
+        "median": 146.5,
+        "p95": 224.1,
+        "max": 1634.5
+      },
+      "otherMs": {
+        "count": 9286,
+        "mean": 203.7,
+        "p05": 134.8,
+        "median": 151.9,
+        "p95": 281.4,
+        "max": 2230.8
+      },
+      "slowMs": {
+        "count": 362,
+        "mean": 1188.7,
+        "p05": 307.9,
+        "median": 1561.7,
+        "p95": 1768.5,
+        "max": 2230.8
+      },
+      "serve": {
+        "rssMb": 351,
+        "peakMb": 438,
+        "heapMb": 62,
+        "cpuMs": 44788499,
+        "sampledAt": 1791898260454
+      },
+      "serveCpuMsPerStatement": 138,
+      "hostBusy": 0.401,
+      "node": {
+        "at": 1791898256739,
+        "rssMb": 401,
+        "peakMb": 544,
+        "cpuMs": 3422827,
+        "heapMb": 150,
+        "collected": false
+      },
+      "journalMb": 9112.6,
+      "elapsedS": 2044,
+      "interrupted": 0,
+      "suspendedS": 0,
+      "at": "2026-10-13T13:31:05.079Z"
+    },
+    {
+      "from": 420000,
+      "through": 430000,
+      "firstInBlockMs": {
+        "count": 715,
+        "mean": 162.7,
+        "p05": 130.8,
+        "median": 146.2,
+        "p95": 226.7,
+        "max": 1668.6
+      },
+      "otherMs": {
+        "count": 9285,
+        "mean": 202.8,
+        "p05": 133.6,
+        "median": 151.3,
+        "p95": 282.1,
+        "max": 2480.3
+      },
+      "slowMs": {
+        "count": 375,
+        "mean": 1144.9,
+        "p05": 305.4,
+        "median": 1509.7,
+        "p95": 1780.8,
+        "max": 2480.3
+      },
+      "serve": {
+        "rssMb": 360,
+        "peakMb": 438,
+        "heapMb": 8,
+        "cpuMs": 46186811,
+        "sampledAt": 1791900300816
+      },
+      "serveCpuMsPerStatement": 140,
+      "hostBusy": 0.393,
+      "node": {
+        "at": 1791900297141,
+        "rssMb": 417,
+        "peakMb": 544,
+        "cpuMs": 3569311,
+        "heapMb": 172,
+        "collected": false
+      },
+      "journalMb": 9329.2,
+      "elapsedS": 2037,
+      "interrupted": 0,
+      "suspendedS": 0,
+      "at": "2026-10-13T14:05:01.862Z"
+    },
+    {
+      "from": 430000,
+      "through": 440000,
+      "firstInBlockMs": {
+        "count": 714,
+        "mean": 169,
+        "p05": 131.8,
+        "median": 148.1,
+        "p95": 231.5,
+        "max": 1677.7
+      },
+      "otherMs": {
+        "count": 9286,
+        "mean": 207.2,
+        "p05": 134.9,
+        "median": 153.5,
+        "p95": 288.3,
+        "max": 3290.4
+      },
+      "slowMs": {
+        "count": 406,
+        "mean": 1110.1,
+        "p05": 305.9,
+        "median": 1523.4,
+        "p95": 1837.7,
+        "max": 3290.4
+      },
+      "serve": {
+        "rssMb": 366,
+        "peakMb": 438,
+        "heapMb": 8,
+        "cpuMs": 47606077,
+        "sampledAt": 1791902382867
+      },
+      "serveCpuMsPerStatement": 142,
+      "hostBusy": 0.444,
+      "node": {
+        "at": 1791902337726,
+        "rssMb": 422,
+        "peakMb": 544,
+        "cpuMs": 3717374,
+        "heapMb": 146,
+        "collected": false
+      },
+      "journalMb": 9545.5,
+      "elapsedS": 2081,
+      "interrupted": 0,
+      "suspendedS": 0,
+      "at": "2026-10-13T14:39:43.015Z"
+    },
+    {
+      "from": 440000,
+      "through": 450000,
+      "firstInBlockMs": {
+        "count": 714,
+        "mean": 164.2,
+        "p05": 132.8,
+        "median": 150.9,
+        "p95": 233.2,
+        "max": 577.4
+      },
+      "otherMs": {
+        "count": 9286,
+        "mean": 214.8,
+        "p05": 136.1,
+        "median": 158,
+        "p95": 306.9,
+        "max": 3524.4
+      },
+      "slowMs": {
+        "count": 504,
+        "mean": 1009.1,
+        "p05": 305.3,
+        "median": 459,
+        "p95": 2072.5,
+        "max": 3524.4
+      },
+      "serve": {
+        "rssMb": 366,
+        "peakMb": 438,
+        "heapMb": 80,
+        "cpuMs": 49052155,
+        "sampledAt": 1791904525324
+      },
+      "serveCpuMsPerStatement": 145,
+      "hostBusy": 0.49,
+      "node": {
+        "at": 1791904498446,
+        "rssMb": 425,
+        "peakMb": 544,
+        "cpuMs": 3875874,
+        "heapMb": 144,
+        "collected": false
+      },
+      "journalMb": 9762,
+      "elapsedS": 2150,
+      "interrupted": 0,
+      "suspendedS": 0,
+      "at": "2026-10-13T15:15:33.132Z"
+    },
+    {
+      "from": 450000,
+      "through": 460000,
+      "firstInBlockMs": {
+        "count": 715,
+        "mean": 184.9,
+        "p05": 136.2,
+        "median": 176.2,
+        "p95": 254.9,
+        "max": 735.4
+      },
+      "otherMs": {
+        "count": 9285,
+        "mean": 250.9,
+        "p05": 141.6,
+        "median": 184.3,
+        "p95": 373.9,
+        "max": 5812.8
+      },
+      "slowMs": {
+        "count": 838,
+        "mean": 905.9,
+        "p05": 305.4,
+        "median": 398.7,
+        "p95": 2355.8,
+        "max": 5812.8
+      },
+      "serve": {
+        "rssMb": 375,
+        "peakMb": 438,
+        "heapMb": 95,
+        "cpuMs": 50648390,
+        "sampledAt": 1791907031284
+      },
+      "serveCpuMsPerStatement": 160,
+      "hostBusy": 0.634,
+      "node": {
+        "at": 1791907019142,
+        "rssMb": 415,
+        "peakMb": 544,
+        "cpuMs": 4051093,
+        "heapMb": 114,
+        "collected": false
+      },
+      "journalMb": 9978.9,
+      "elapsedS": 2504,
+      "interrupted": 0,
+      "suspendedS": 0,
+      "at": "2026-10-13T15:57:16.698Z"
+    },
+    {
+      "from": 460000,
+      "through": 470000,
+      "firstInBlockMs": {
+        "count": 714,
+        "mean": 160.4,
+        "p05": 134.2,
+        "median": 147.6,
+        "p95": 224.6,
+        "max": 1675.9
+      },
+      "otherMs": {
+        "count": 9286,
+        "mean": 208.1,
+        "p05": 137.4,
+        "median": 154.4,
+        "p95": 290,
+        "max": 2208
+      },
+      "slowMs": {
+        "count": 407,
+        "mean": 1119,
+        "p05": 303.6,
+        "median": 1568,
+        "p95": 1864.8,
+        "max": 2208
+      },
+      "serve": {
+        "rssMb": 396,
+        "peakMb": 438,
+        "heapMb": 8,
+        "cpuMs": 52037484,
+        "sampledAt": 1791909109508
+      },
+      "serveCpuMsPerStatement": 139,
+      "hostBusy": 0.459,
+      "node": {
+        "at": 1791909059510,
+        "rssMb": 447,
+        "peakMb": 544,
+        "cpuMs": 4204234,
+        "heapMb": 138,
+        "collected": false
+      },
+      "journalMb": 10195.2,
+      "elapsedS": 2082,
+      "interrupted": 0,
+      "suspendedS": 0,
+      "at": "2026-10-13T16:31:58.325Z"
+    },
+    {
+      "from": 472655,
+      "through": 480000,
+      "firstInBlockMs": {
+        "count": 525,
+        "mean": 165.2,
+        "p05": 126.3,
+        "median": 156.6,
+        "p95": 229.8,
+        "max": 338.6
+      },
+      "otherMs": {
+        "count": 6820,
+        "mean": 217.8,
+        "p05": 129,
+        "median": 163.6,
+        "p95": 303.6,
+        "max": 2588.6
+      },
+      "slowMs": {
+        "count": 355,
+        "mean": 1050.2,
+        "p05": 305.4,
+        "median": 494.9,
+        "p95": 2136.8,
+        "max": 2588.6
+      },
+      "serve": {
+        "rssMb": 379,
+        "peakMb": 521,
+        "heapMb": 34,
+        "cpuMs": 10832890,
+        "sampledAt": 1791930917318
+      },
+      "serveCpuMsPerStatement": 1473,
+      "hostBusy": 0.672,
+      "node": {
+        "at": 1791930869448,
+        "rssMb": 421,
+        "peakMb": 427,
+        "cpuMs": 356077,
+        "heapMb": 173,
+        "collected": false
+      },
+      "journalMb": 10420.1,
+      "elapsedS": 6871,
+      "interrupted": 351,
+      "suspendedS": 0,
+      "at": "2026-10-13T22:35:19.303Z"
+    },
+    {
+      "from": 480000,
+      "through": 490000,
+      "firstInBlockMs": {
+        "count": 714,
+        "mean": 177.9,
+        "p05": 136.4,
+        "median": 165.8,
+        "p95": 250.9,
+        "max": 693.2
+      },
+      "otherMs": {
+        "count": 9286,
+        "mean": 236.1,
+        "p05": 140,
+        "median": 173.7,
+        "p95": 352,
+        "max": 6628.4
+      },
+      "slowMs": {
+        "count": 655,
+        "mean": 979.4,
+        "p05": 306.9,
+        "median": 444.8,
+        "p95": 2225.7,
+        "max": 6628.4
+      },
+      "serve": {
+        "rssMb": 380,
+        "peakMb": 521,
+        "heapMb": 8,
+        "cpuMs": 12374687,
+        "sampledAt": 1791933271610
+      },
+      "serveCpuMsPerStatement": 154,
+      "hostBusy": 0.543,
+      "node": {
+        "at": 1791933269695,
+        "rssMb": 446,
+        "peakMb": 447,
+        "cpuMs": 525249,
+        "heapMb": 181,
+        "collected": false
+      },
+      "journalMb": 10636.6,
+      "elapsedS": 2353,
+      "interrupted": 0,
+      "suspendedS": 0,
+      "at": "2026-10-13T23:14:32.161Z"
+    },
+    {
+      "from": 490000,
+      "through": 500000,
+      "firstInBlockMs": {
+        "count": 715,
+        "mean": 160.9,
+        "p05": 131.6,
+        "median": 146.5,
+        "p95": 232.4,
+        "max": 1651.2
+      },
+      "otherMs": {
+        "count": 9285,
+        "mean": 204.5,
+        "p05": 135.1,
+        "median": 152.6,
+        "p95": 286,
+        "max": 2173.8
+      },
+      "slowMs": {
+        "count": 389,
+        "mean": 1126.1,
+        "p05": 303.3,
+        "median": 1531,
+        "p95": 1776.6,
+        "max": 2173.8
+      },
+      "serve": {
+        "rssMb": 427,
+        "peakMb": 521,
+        "heapMb": 68,
+        "cpuMs": 13791702,
+        "sampledAt": 1791935315263
+      },
+      "serveCpuMsPerStatement": 142,
+      "hostBusy": 0.327,
+      "node": {
+        "at": 1791935310010,
+        "rssMb": 448,
+        "peakMb": 449,
+        "cpuMs": 681983,
+        "heapMb": 147,
+        "collected": false
+      },
+      "journalMb": 10853.3,
+      "elapsedS": 2046,
+      "interrupted": 0,
+      "suspendedS": 0,
+      "at": "2026-10-13T23:48:38.074Z"
+    },
+    {
+      "from": 500000,
+      "through": 510000,
+      "firstInBlockMs": {
+        "count": 714,
+        "mean": 160.7,
+        "p05": 131.1,
+        "median": 147.4,
+        "p95": 225.7,
+        "max": 1503.9
+      },
+      "otherMs": {
+        "count": 9286,
+        "mean": 206.5,
+        "p05": 134.3,
+        "median": 153.4,
+        "p95": 288.5,
+        "max": 2303.4
+      },
+      "slowMs": {
+        "count": 402,
+        "mean": 1115.6,
+        "p05": 305,
+        "median": 1530.5,
+        "p95": 1854,
+        "max": 2303.4
+      },
+      "serve": {
+        "rssMb": 402,
+        "peakMb": 521,
+        "heapMb": 8,
+        "cpuMs": 15231796,
+        "sampledAt": 1791937386838
+      },
+      "serveCpuMsPerStatement": 144,
+      "hostBusy": 0.326,
+      "node": {
+        "at": 1791937350364,
+        "rssMb": 444,
+        "peakMb": 589,
+        "cpuMs": 838890,
+        "heapMb": 169,
+        "collected": false
+      },
+      "journalMb": 11069.6,
+      "elapsedS": 2069,
+      "interrupted": 0,
+      "suspendedS": 0,
+      "at": "2026-10-14T00:23:07.383Z"
+    },
+    {
+      "from": 510000,
+      "through": 520000,
+      "firstInBlockMs": {
+        "count": 714,
+        "mean": 168.7,
+        "p05": 132.7,
+        "median": 156.7,
+        "p95": 235.9,
+        "max": 520.4
+      },
+      "otherMs": {
+        "count": 9286,
+        "mean": 221.2,
+        "p05": 136.5,
+        "median": 164.8,
+        "p95": 313.2,
+        "max": 2787.9
+      },
+      "slowMs": {
+        "count": 533,
+        "mean": 989.8,
+        "p05": 304.8,
+        "median": 398.2,
+        "p95": 2123.4,
+        "max": 2787.9
+      },
+      "serve": {
+        "rssMb": 411,
+        "peakMb": 521,
+        "heapMb": 8,
+        "cpuMs": 16789889,
+        "sampledAt": 1791939599184
+      },
+      "serveCpuMsPerStatement": 156,
+      "hostBusy": 0.477,
+      "node": {
+        "at": 1791939570747,
+        "rssMb": 456,
+        "peakMb": 589,
+        "cpuMs": 1010874,
+        "heapMb": 194,
+        "collected": false
+      },
+      "journalMb": 11286.1,
+      "elapsedS": 2212,
+      "interrupted": 0,
+      "suspendedS": 0,
+      "at": "2026-10-14T00:59:59.398Z"
+    },
+    {
+      "from": 520000,
+      "through": 530000,
+      "firstInBlockMs": {
+        "count": 715,
+        "mean": 180.9,
+        "p05": 135.7,
+        "median": 167.6,
+        "p95": 244.1,
+        "max": 1548.2
+      },
+      "otherMs": {
+        "count": 9285,
+        "mean": 234.8,
+        "p05": 138.9,
+        "median": 173.2,
+        "p95": 340,
+        "max": 5933
+      },
+      "slowMs": {
+        "count": 636,
+        "mean": 988.7,
+        "p05": 306.3,
+        "median": 419.8,
+        "p95": 2270.9,
+        "max": 5933
+      },
+      "serve": {
+        "rssMb": 405,
+        "peakMb": 521,
+        "heapMb": 8,
+        "cpuMs": 18393436,
+        "sampledAt": 1791941941452
+      },
+      "serveCpuMsPerStatement": 160,
+      "hostBusy": 0.529,
+      "node": {
+        "at": 1791941911029,
+        "rssMb": 463,
+        "peakMb": 589,
+        "cpuMs": 1190811,
+        "heapMb": 153,
+        "collected": false
+      },
+      "journalMb": 11503.6,
+      "elapsedS": 2348,
+      "interrupted": 0,
+      "suspendedS": 0,
+      "at": "2026-10-14T01:39:07.008Z"
+    },
+    {
+      "from": 530000,
+      "through": 540000,
+      "firstInBlockMs": {
+        "count": 714,
+        "mean": 175.8,
+        "p05": 134.2,
+        "median": 157.7,
+        "p95": 239.3,
+        "max": 1922.3
+      },
+      "otherMs": {
+        "count": 9286,
+        "mean": 230.5,
+        "p05": 137.3,
+        "median": 164.8,
+        "p95": 324.2,
+        "max": 7248.1
+      },
+      "slowMs": {
+        "count": 607,
+        "mean": 1039.9,
+        "p05": 304.5,
+        "median": 578,
+        "p95": 2288.9,
+        "max": 7248.1
+      },
+      "serve": {
+        "rssMb": 378,
+        "peakMb": 521,
+        "heapMb": 56,
+        "cpuMs": 19905905,
+        "sampledAt": 1791944245333
+      },
+      "serveCpuMsPerStatement": 151,
+      "hostBusy": 0.445,
+      "node": {
+        "at": 1791944191560,
+        "rssMb": 471,
+        "peakMb": 589,
+        "cpuMs": 1365796,
+        "heapMb": 198,
+        "collected": false
+      },
+      "journalMb": 11719.6,
+      "elapsedS": 2304,
+      "interrupted": 0,
+      "suspendedS": 0,
+      "at": "2026-10-14T02:17:31.432Z"
+    },
+    {
+      "from": 540000,
+      "through": 550000,
+      "firstInBlockMs": {
+        "count": 714,
+        "mean": 165.8,
+        "p05": 133.1,
+        "median": 154.6,
+        "p95": 231,
+        "max": 490.1
+      },
+      "otherMs": {
+        "count": 9286,
+        "mean": 221.9,
+        "p05": 137.3,
+        "median": 161.3,
+        "p95": 315.6,
+        "max": 4840.6
+      },
+      "slowMs": {
+        "count": 534,
+        "mean": 1046.9,
+        "p05": 306.3,
+        "median": 706.1,
+        "p95": 2035.3,
+        "max": 4840.6
+      },
+      "serve": {
+        "rssMb": 411,
+        "peakMb": 521,
+        "heapMb": 8,
+        "cpuMs": 21396499,
+        "sampledAt": 1791946466248
+      },
+      "serveCpuMsPerStatement": 149,
+      "hostBusy": 0.393,
+      "node": {
+        "at": 1791946411964,
+        "rssMb": 478,
+        "peakMb": 589,
+        "cpuMs": 1544640,
+        "heapMb": 217,
+        "collected": false
+      },
+      "journalMb": 11936.6,
+      "elapsedS": 2219,
+      "interrupted": 0,
+      "suspendedS": 0,
+      "at": "2026-10-14T02:54:30.423Z"
+    },
+    {
+      "from": 550000,
+      "through": 560000,
+      "firstInBlockMs": {
+        "count": 714,
+        "mean": 158,
+        "p05": 133.5,
+        "median": 147,
+        "p95": 226.3,
+        "max": 433.2
+      },
+      "otherMs": {
+        "count": 9286,
+        "mean": 207.2,
+        "p05": 136.3,
+        "median": 154.3,
+        "p95": 296.5,
+        "max": 2392.6
+      },
+      "slowMs": {
+        "count": 449,
+        "mean": 1027.9,
+        "p05": 302.9,
+        "median": 1528.8,
+        "p95": 1771.3,
+        "max": 2392.6
+      },
+      "serve": {
+        "rssMb": 414,
+        "peakMb": 521,
+        "heapMb": 8,
+        "cpuMs": 22843608,
+        "sampledAt": 1791948545495
+      },
+      "serveCpuMsPerStatement": 145,
+      "hostBusy": 0.319,
+      "node": {
+        "at": 1791948512301,
+        "rssMb": 487,
+        "peakMb": 589,
+        "cpuMs": 1719734,
+        "heapMb": 209,
+        "collected": false
+      },
+      "journalMb": 12153.7,
+      "elapsedS": 2077,
+      "interrupted": 0,
+      "suspendedS": 0,
+      "at": "2026-10-14T03:29:07.182Z"
+    },
+    {
+      "from": 560000,
+      "through": 570000,
+      "firstInBlockMs": {
+        "count": 715,
+        "mean": 174.2,
+        "p05": 137.2,
+        "median": 160.7,
+        "p95": 238.4,
+        "max": 846.8
+      },
+      "otherMs": {
+        "count": 9285,
+        "mean": 233.4,
+        "p05": 140.7,
+        "median": 168.6,
+        "p95": 335.6,
+        "max": 6013.1
+      },
+      "slowMs": {
+        "count": 639,
+        "mean": 999.3,
+        "p05": 305.7,
+        "median": 417.9,
+        "p95": 2216.2,
+        "max": 6013.1
+      },
+      "serve": {
+        "rssMb": 374,
+        "peakMb": 521,
+        "heapMb": 8,
+        "cpuMs": 24373186,
+        "sampledAt": 1791950870439
+      },
+      "serveCpuMsPerStatement": 153,
+      "hostBusy": 0.493,
+      "node": {
+        "at": 1791950852614,
+        "rssMb": 492,
+        "peakMb": 589,
+        "cpuMs": 1902812,
+        "heapMb": 164,
+        "collected": false
+      },
+      "journalMb": 12370.8,
+      "elapsedS": 2329,
+      "interrupted": 0,
+      "suspendedS": 0,
+      "at": "2026-10-14T04:07:55.964Z"
+    },
+    {
+      "from": 570000,
+      "through": 580000,
+      "firstInBlockMs": {
+        "count": 714,
+        "mean": 198.5,
+        "p05": 139.6,
+        "median": 171.5,
+        "p95": 262.2,
+        "max": 1881.7
+      },
+      "otherMs": {
+        "count": 9286,
+        "mean": 262.6,
+        "p05": 143.4,
+        "median": 180.3,
+        "p95": 409.4,
+        "max": 6928.1
+      },
+      "slowMs": {
+        "count": 791,
+        "mean": 1106,
+        "p05": 305.3,
+        "median": 489.1,
+        "p95": 2613.5,
+        "max": 6928.1
+      },
+      "serve": {
+        "rssMb": 393,
+        "peakMb": 521,
+        "heapMb": 8,
+        "cpuMs": 25957671,
+        "sampledAt": 1791953492752
+      },
+      "serveCpuMsPerStatement": 158,
+      "hostBusy": 0.52,
+      "node": {
+        "at": 1791953493157,
+        "rssMb": 501,
+        "peakMb": 589,
+        "cpuMs": 2093437,
+        "heapMb": 188,
+        "collected": false
+      },
+      "journalMb": 12587,
+      "elapsedS": 2618,
+      "interrupted": 0,
+      "suspendedS": 0,
+      "at": "2026-10-14T04:51:34.316Z"
+    },
+    {
+      "from": 580000,
+      "through": 590000,
+      "firstInBlockMs": {
+        "count": 714,
+        "mean": 183.6,
+        "p05": 140.3,
+        "median": 170.9,
+        "p95": 249.3,
+        "max": 1705.6
+      },
+      "otherMs": {
+        "count": 9286,
+        "mean": 246.9,
+        "p05": 143.8,
+        "median": 178.5,
+        "p95": 361.2,
+        "max": 7946
+      },
+      "slowMs": {
+        "count": 735,
+        "mean": 992.8,
+        "p05": 306,
+        "median": 408.8,
+        "p95": 2360,
+        "max": 7946
+      },
+      "serve": {
+        "rssMb": 392,
+        "peakMb": 521,
+        "heapMb": 8,
+        "cpuMs": 27549500,
+        "sampledAt": 1791955955046
+      },
+      "serveCpuMsPerStatement": 159,
+      "hostBusy": 0.546,
+      "node": {
+        "at": 1791955953414,
+        "rssMb": 508,
+        "peakMb": 589,
+        "cpuMs": 2283640,
+        "heapMb": 205,
+        "collected": false
+      },
+      "journalMb": 12803.7,
+      "elapsedS": 2462,
+      "interrupted": 0,
+      "suspendedS": 0,
+      "at": "2026-10-14T05:32:36.449Z"
+    },
+    {
+      "from": 590000,
+      "through": 600000,
+      "firstInBlockMs": {
+        "count": 715,
+        "mean": 173.2,
+        "p05": 140.1,
+        "median": 158.9,
+        "p95": 235.3,
+        "max": 1039.4
+      },
+      "otherMs": {
+        "count": 9285,
+        "mean": 231,
+        "p05": 143.6,
+        "median": 167.5,
+        "p95": 336.5,
+        "max": 5214
+      },
+      "slowMs": {
+        "count": 642,
+        "mean": 973.9,
+        "p05": 305.8,
+        "median": 432.8,
+        "p95": 2211.8,
+        "max": 5214
+      },
+      "serve": {
+        "rssMb": 382,
+        "peakMb": 521,
+        "heapMb": 8,
+        "cpuMs": 29042202,
+        "sampledAt": 1791958257061
+      },
+      "serveCpuMsPerStatement": 149,
+      "hostBusy": 0.469,
+      "node": {
+        "at": 1791958233465,
+        "rssMb": 514,
+        "peakMb": 589,
+        "cpuMs": 2466265,
+        "heapMb": 203,
+        "collected": false
+      },
+      "journalMb": 13021,
+      "elapsedS": 2305,
+      "interrupted": 0,
+      "suspendedS": 0,
+      "at": "2026-10-14T06:11:01.394Z"
+    },
+    {
+      "from": 600000,
+      "through": 610000,
+      "firstInBlockMs": {
+        "count": 714,
+        "mean": 172.5,
+        "p05": 139.9,
+        "median": 155.4,
+        "p95": 241.3,
+        "max": 1812.1
+      },
+      "otherMs": {
+        "count": 9286,
+        "mean": 221.5,
+        "p05": 143.2,
+        "median": 162.4,
+        "p95": 309.8,
+        "max": 5560.6
+      },
+      "slowMs": {
+        "count": 529,
+        "mean": 1032.8,
+        "p05": 303.8,
+        "median": 532.7,
+        "p95": 2002.6,
+        "max": 5560.6
+      },
+      "serve": {
+        "rssMb": 434,
+        "peakMb": 521,
+        "heapMb": 8,
+        "cpuMs": 30503890,
+        "sampledAt": 1791960475098
+      },
+      "serveCpuMsPerStatement": 146,
+      "hostBusy": 0.446,
+      "node": {
+        "at": 1791960453687,
+        "rssMb": 521,
+        "peakMb": 589,
+        "cpuMs": 2652000,
+        "heapMb": 172,
+        "collected": false
+      },
+      "journalMb": 13237.8,
+      "elapsedS": 2216,
+      "interrupted": 0,
+      "suspendedS": 0,
+      "at": "2026-10-14T06:47:56.865Z"
+    },
+    {
+      "from": 610000,
+      "through": 620000,
+      "firstInBlockMs": {
+        "count": 714,
+        "mean": 164.5,
+        "p05": 139.8,
+        "median": 154.5,
+        "p95": 235.4,
+        "max": 369.3
+      },
+      "otherMs": {
+        "count": 9286,
+        "mean": 217.6,
+        "p05": 143.6,
+        "median": 160.6,
+        "p95": 302.5,
+        "max": 2316
+      },
+      "slowMs": {
+        "count": 484,
+        "mean": 1042.3,
+        "p05": 303.4,
+        "median": 525.3,
+        "p95": 1952.8,
+        "max": 2316
+      },
+      "serve": {
+        "rssMb": 411,
+        "peakMb": 521,
+        "heapMb": 8,
+        "cpuMs": 31956874,
+        "sampledAt": 1791962646698
+      },
+      "serveCpuMsPerStatement": 145,
+      "hostBusy": 0.453,
+      "node": {
+        "at": 1791962614047,
+        "rssMb": 528,
+        "peakMb": 589,
+        "cpuMs": 2836546,
+        "heapMb": 173,
+        "collected": false
+      },
+      "journalMb": 13454.5,
+      "elapsedS": 2172,
+      "interrupted": 0,
+      "suspendedS": 0,
+      "at": "2026-10-14T07:24:08.635Z"
+    },
+    {
+      "from": 620000,
+      "through": 630000,
+      "firstInBlockMs": {
+        "count": 714,
+        "mean": 164.3,
+        "p05": 140.2,
+        "median": 154.2,
+        "p95": 237,
+        "max": 366.1
+      },
+      "otherMs": {
+        "count": 9286,
+        "mean": 217.2,
+        "p05": 143.9,
+        "median": 160.1,
+        "p95": 301,
+        "max": 2616
+      },
+      "slowMs": {
+        "count": 481,
+        "mean": 1039.5,
+        "p05": 302.1,
+        "median": 474.1,
+        "p95": 1895.7,
+        "max": 2616
+      },
+      "serve": {
+        "rssMb": 402,
+        "peakMb": 521,
+        "heapMb": 8,
+        "cpuMs": 33421718,
+        "sampledAt": 1791964813743
+      },
+      "serveCpuMsPerStatement": 146,
+      "hostBusy": 0.433,
+      "node": {
+        "at": 1791964774426,
+        "rssMb": 534,
+        "peakMb": 589,
+        "cpuMs": 3024390,
+        "heapMb": 225,
+        "collected": false
+      },
+      "journalMb": 13671.6,
+      "elapsedS": 2167,
+      "interrupted": 0,
+      "suspendedS": 0,
+      "at": "2026-10-14T08:00:15.460Z"
+    },
+    {
+      "from": 630000,
+      "through": 640000,
+      "firstInBlockMs": {
+        "count": 715,
+        "mean": 181.4,
+        "p05": 141.4,
+        "median": 170.3,
+        "p95": 249.7,
+        "max": 909
+      },
+      "otherMs": {
+        "count": 9285,
+        "mean": 240.3,
+        "p05": 145.7,
+        "median": 180.7,
+        "p95": 347.2,
+        "max": 3259
+      },
+      "slowMs": {
+        "count": 686,
+        "mean": 932,
+        "p05": 305,
+        "median": 385,
+        "p95": 2353.6,
+        "max": 3259
+      },
+      "serve": {
+        "rssMb": 416,
+        "peakMb": 521,
+        "heapMb": 76,
+        "cpuMs": 35069718,
+        "sampledAt": 1791967212829
+      },
+      "serveCpuMsPerStatement": 165,
+      "hostBusy": 0.606,
+      "node": {
+        "at": 1791967174667,
+        "rssMb": 540,
+        "peakMb": 589,
+        "cpuMs": 3232921,
+        "heapMb": 179,
+        "collected": false
+      },
+      "journalMb": 13888.9,
+      "elapsedS": 2398,
+      "interrupted": 0,
+      "suspendedS": 0,
+      "at": "2026-10-14T08:40:13.872Z"
+    },
+    {
+      "from": 640000,
+      "through": 650000,
+      "firstInBlockMs": {
+        "count": 714,
+        "mean": 174.8,
+        "p05": 141.9,
+        "median": 162.9,
+        "p95": 252.2,
+        "max": 395.5
+      },
+      "otherMs": {
+        "count": 9286,
+        "mean": 232.5,
+        "p05": 145.7,
+        "median": 170.9,
+        "p95": 333.5,
+        "max": 3392.3
+      },
+      "slowMs": {
+        "count": 654,
+        "mean": 923.6,
+        "p05": 304.9,
+        "median": 378.9,
+        "p95": 2187.2,
+        "max": 3392.3
+      },
+      "serve": {
+        "rssMb": 428,
+        "peakMb": 521,
+        "heapMb": 8,
+        "cpuMs": 36639687,
+        "sampledAt": 1791969532167
+      },
+      "serveCpuMsPerStatement": 157,
+      "hostBusy": 0.548,
+      "node": {
+        "at": 1791969515014,
+        "rssMb": 547,
+        "peakMb": 589,
+        "cpuMs": 3441499,
+        "heapMb": 242,
+        "collected": false
+      },
+      "journalMb": 14105.5,
+      "elapsedS": 2320,
+      "interrupted": 0,
+      "suspendedS": 0,
+      "at": "2026-10-14T09:18:54.256Z"
+    },
+    {
+      "from": 650000,
+      "through": 660000,
+      "firstInBlockMs": {
+        "count": 714,
+        "mean": 180.6,
+        "p05": 142.8,
+        "median": 169.5,
+        "p95": 243.9,
+        "max": 347
+      },
+      "otherMs": {
+        "count": 9286,
+        "mean": 239.3,
+        "p05": 146.9,
+        "median": 177.5,
+        "p95": 341.6,
+        "max": 3205.2
+      },
+      "slowMs": {
+        "count": 702,
+        "mean": 912.8,
+        "p05": 302.9,
+        "median": 384.1,
+        "p95": 2342.7,
+        "max": 3205.2
+      },
+      "serve": {
+        "rssMb": 434,
+        "peakMb": 521,
+        "heapMb": 8,
+        "cpuMs": 38256343,
+        "sampledAt": 1791971920856
+      },
+      "serveCpuMsPerStatement": 162,
+      "hostBusy": 0.587,
+      "node": {
+        "at": 1791971915508,
+        "rssMb": 554,
+        "peakMb": 589,
+        "cpuMs": 3659968,
+        "heapMb": 203,
+        "collected": false
+      },
+      "journalMb": 14321.3,
+      "elapsedS": 2390,
+      "interrupted": 0,
+      "suspendedS": 0,
+      "at": "2026-10-14T09:58:43.879Z"
+    },
+    {
+      "from": 660000,
+      "through": 670000,
+      "firstInBlockMs": {
+        "count": 715,
+        "mean": 175.9,
+        "p05": 142.7,
+        "median": 163.1,
+        "p95": 247.4,
+        "max": 1780.3
+      },
+      "otherMs": {
+        "count": 9285,
+        "mean": 230.4,
+        "p05": 146.4,
+        "median": 169.6,
+        "p95": 318.5,
+        "max": 6204.7
+      },
+      "slowMs": {
+        "count": 586,
+        "mean": 991.9,
+        "p05": 306.2,
+        "median": 396.7,
+        "p95": 2239,
+        "max": 6204.7
+      },
+      "serve": {
+        "rssMb": 413,
+        "peakMb": 521,
+        "heapMb": 86,
+        "cpuMs": 39809765,
+        "sampledAt": 1791974224297
+      },
+      "serveCpuMsPerStatement": 155,
+      "hostBusy": 0.527,
+      "node": {
+        "at": 1791974195925,
+        "rssMb": 562,
+        "peakMb": 745,
+        "cpuMs": 3865639,
+        "heapMb": 184,
+        "collected": false
+      },
+      "journalMb": 14538.5,
+      "elapsedS": 2302,
+      "interrupted": 0,
+      "suspendedS": 0,
+      "at": "2026-10-14T10:37:05.487Z"
+    },
+    {
+      "from": 670000,
+      "through": 680000,
+      "firstInBlockMs": {
+        "count": 714,
+        "mean": 166.7,
+        "p05": 142.2,
+        "median": 155.7,
+        "p95": 232.6,
+        "max": 314
+      },
+      "otherMs": {
+        "count": 9286,
+        "mean": 220.1,
+        "p05": 145.9,
+        "median": 162.5,
+        "p95": 307.5,
+        "max": 2471.6
+      },
+      "slowMs": {
+        "count": 505,
+        "mean": 1028,
+        "p05": 304.6,
+        "median": 400.5,
+        "p95": 1951.8,
+        "max": 2471.6
+      },
+      "serve": {
+        "rssMb": 419,
+        "peakMb": 521,
+        "heapMb": 8,
+        "cpuMs": 41276249,
+        "sampledAt": 1791976417700
+      },
+      "serveCpuMsPerStatement": 147,
+      "hostBusy": 0.484,
+      "node": {
+        "at": 1791976416409,
+        "rssMb": 570,
+        "peakMb": 745,
+        "cpuMs": 4068968,
+        "heapMb": 209,
+        "collected": false
+      },
+      "journalMb": 14754.9,
+      "elapsedS": 2197,
+      "interrupted": 0,
+      "suspendedS": 0,
+      "at": "2026-10-14T11:13:42.360Z"
+    },
+    {
+      "from": 680000,
+      "through": 690000,
+      "firstInBlockMs": {
+        "count": 714,
+        "mean": 162.7,
+        "p05": 137.9,
+        "median": 152.1,
+        "p95": 234.9,
+        "max": 313.6
+      },
+      "otherMs": {
+        "count": 9286,
+        "mean": 213.6,
+        "p05": 140.9,
+        "median": 157.8,
+        "p95": 310.2,
+        "max": 2408.1
+      },
+      "slowMs": {
+        "count": 526,
+        "mean": 966.8,
+        "p05": 304,
+        "median": 389.5,
+        "p95": 1828.2,
+        "max": 2408.1
+      },
+      "serve": {
+        "rssMb": 414,
+        "peakMb": 521,
+        "heapMb": 8,
+        "cpuMs": 42774077,
+        "sampledAt": 1791978559682
+      },
+      "serveCpuMsPerStatement": 150,
+      "hostBusy": 0.299,
+      "node": {
+        "at": 1791978516675,
+        "rssMb": 576,
+        "peakMb": 745,
+        "cpuMs": 4273421,
+        "heapMb": 188,
+        "collected": false
+      },
+      "journalMb": 14971.6,
+      "elapsedS": 2138,
+      "interrupted": 0,
+      "suspendedS": 0,
+      "at": "2026-10-14T11:49:20.234Z"
+    },
+    {
+      "from": 690000,
+      "through": 700000,
+      "firstInBlockMs": {
+        "count": 714,
+        "mean": 164.4,
+        "p05": 138.6,
+        "median": 152.2,
+        "p95": 237.2,
+        "max": 408.3
+      },
+      "otherMs": {
+        "count": 9286,
+        "mean": 218,
+        "p05": 141.6,
+        "median": 160.1,
+        "p95": 316.7,
+        "max": 2909.3
+      },
+      "slowMs": {
+        "count": 585,
+        "mean": 925.4,
+        "p05": 304.3,
+        "median": 377.3,
+        "p95": 1854.3,
+        "max": 2909.3
+      },
+      "serve": {
+        "rssMb": 381,
+        "peakMb": 521,
+        "heapMb": 8,
+        "cpuMs": 44299983,
+        "sampledAt": 1791980739769
+      },
+      "serveCpuMsPerStatement": 153,
+      "hostBusy": 0.303,
+      "node": {
+        "at": 1791980737106,
+        "rssMb": 584,
+        "peakMb": 745,
+        "cpuMs": 4490280,
+        "heapMb": 191,
+        "collected": false
+      },
+      "journalMb": 15188.7,
+      "elapsedS": 2180,
+      "interrupted": 0,
+      "suspendedS": 0,
+      "at": "2026-10-14T12:25:39.939Z"
+    },
+    {
+      "from": 700000,
+      "through": 710000,
+      "firstInBlockMs": {
+        "count": 715,
+        "mean": 164.5,
+        "p05": 139.5,
+        "median": 152.4,
+        "p95": 229.8,
+        "max": 1790.5
+      },
+      "otherMs": {
+        "count": 9285,
+        "mean": 214.3,
+        "p05": 142.1,
+        "median": 158.8,
+        "p95": 310.2,
+        "max": 2258.4
+      },
+      "slowMs": {
+        "count": 532,
+        "mean": 964.5,
+        "p05": 305.1,
+        "median": 382.2,
+        "p95": 1838.6,
+        "max": 2258.4
+      },
+      "serve": {
+        "rssMb": 379,
+        "peakMb": 521,
+        "heapMb": 63,
+        "cpuMs": 45777171,
+        "sampledAt": 1791982884417
+      },
+      "serveCpuMsPerStatement": 148,
+      "hostBusy": 0.291,
+      "node": {
+        "at": 1791982837333,
+        "rssMb": 593,
+        "peakMb": 745,
+        "cpuMs": 4704077,
+        "heapMb": 237,
+        "collected": false
+      },
+      "journalMb": 15405.6,
+      "elapsedS": 2146,
+      "interrupted": 0,
+      "suspendedS": 0,
+      "at": "2026-10-14T13:01:25.433Z"
+    },
+    {
+      "from": 710000,
+      "through": 720000,
+      "firstInBlockMs": {
+        "count": 714,
+        "mean": 162.6,
+        "p05": 139.5,
+        "median": 152.6,
+        "p95": 229.2,
+        "max": 289.3
+      },
+      "otherMs": {
+        "count": 9286,
+        "mean": 214.2,
+        "p05": 142.6,
+        "median": 158.8,
+        "p95": 309.4,
+        "max": 2000.6
+      },
+      "slowMs": {
+        "count": 537,
+        "mean": 958.4,
+        "p05": 303.5,
+        "median": 385.6,
+        "p95": 1835.3,
+        "max": 2000.6
+      },
+      "serve": {
+        "rssMb": 435,
+        "peakMb": 521,
+        "heapMb": 8,
+        "cpuMs": 47253812,
+        "sampledAt": 1791985025225
+      },
+      "serveCpuMsPerStatement": 148,
+      "hostBusy": 0.286,
+      "node": {
+        "at": 1791984997784,
+        "rssMb": 600,
+        "peakMb": 745,
+        "cpuMs": 4926514,
+        "heapMb": 243,
+        "collected": false
+      },
+      "journalMb": 15622.7,
+      "elapsedS": 2144,
+      "interrupted": 0,
+      "suspendedS": 0,
+      "at": "2026-10-14T13:37:09.294Z"
+    },
+    {
+      "from": 720000,
+      "through": 730000,
+      "firstInBlockMs": {
+        "count": 714,
+        "mean": 163.3,
+        "p05": 139.8,
+        "median": 153.6,
+        "p95": 231.9,
+        "max": 368.1
+      },
+      "otherMs": {
+        "count": 9286,
+        "mean": 216.1,
+        "p05": 143.1,
+        "median": 159.7,
+        "p95": 316,
+        "max": 2297.3
+      },
+      "slowMs": {
+        "count": 566,
+        "mean": 938.8,
+        "p05": 306,
+        "median": 369.9,
+        "p95": 1861.3,
+        "max": 2297.3
+      },
+      "serve": {
+        "rssMb": 419,
+        "peakMb": 521,
+        "heapMb": 8,
+        "cpuMs": 48747890,
+        "sampledAt": 1791987187171
+      },
+      "serveCpuMsPerStatement": 149,
+      "hostBusy": 0.287,
+      "node": {
+        "at": 1791987158284,
+        "rssMb": 605,
+        "peakMb": 745,
+        "cpuMs": 5150686,
+        "heapMb": 197,
+        "collected": false
+      },
+      "journalMb": 15839.6,
+      "elapsedS": 2162,
+      "interrupted": 0,
+      "suspendedS": 0,
+      "at": "2026-10-14T14:13:10.945Z"
+    },
+    {
+      "from": 730000,
+      "through": 740000,
+      "firstInBlockMs": {
+        "count": 715,
+        "mean": 163.5,
+        "p05": 139.8,
+        "median": 153.3,
+        "p95": 230.5,
+        "max": 335.4
+      },
+      "otherMs": {
+        "count": 9285,
+        "mean": 216.1,
+        "p05": 142.9,
+        "median": 159.7,
+        "p95": 311.3,
+        "max": 2233
+      },
+      "slowMs": {
+        "count": 549,
+        "mean": 957.7,
+        "p05": 304.8,
+        "median": 375.4,
+        "p95": 1865.4,
+        "max": 2233
+      },
+      "serve": {
+        "rssMb": 412,
+        "peakMb": 521,
+        "heapMb": 8,
+        "cpuMs": 50253218,
+        "sampledAt": 1791989348985
+      },
+      "serveCpuMsPerStatement": 151,
+      "hostBusy": 0.286,
+      "node": {
+        "at": 1791989318504,
+        "rssMb": 611,
+        "peakMb": 745,
+        "cpuMs": 5375608,
+        "heapMb": 246,
+        "collected": false
+      },
+      "journalMb": 16056.1,
+      "elapsedS": 2162,
+      "interrupted": 0,
+      "suspendedS": 0,
+      "at": "2026-10-14T14:49:13.128Z"
+    },
+    {
+      "from": 740000,
+      "through": 750000,
+      "firstInBlockMs": {
+        "count": 714,
+        "mean": 163.2,
+        "p05": 140.3,
+        "median": 153.5,
+        "p95": 230.6,
+        "max": 288.7
+      },
+      "otherMs": {
+        "count": 9286,
+        "mean": 216.8,
+        "p05": 143.7,
+        "median": 159.8,
+        "p95": 316.1,
+        "max": 1992.3
+      },
+      "slowMs": {
+        "count": 578,
+        "mean": 926.3,
+        "p05": 304.6,
+        "median": 372,
+        "p95": 1871.4,
+        "max": 1992.3
+      },
+      "serve": {
+        "rssMb": 420,
+        "peakMb": 521,
+        "heapMb": 8,
+        "cpuMs": 51774531,
+        "sampledAt": 1791991520398
+      },
+      "serveCpuMsPerStatement": 152,
+      "hostBusy": 0.288,
+      "node": {
+        "at": 1791991478707,
+        "rssMb": 620,
+        "peakMb": 745,
+        "cpuMs": 5603796,
+        "heapMb": 253,
+        "collected": false
+      },
+      "journalMb": 16272.5,
+      "elapsedS": 2168,
+      "interrupted": 0,
+      "suspendedS": 0,
+      "at": "2026-10-14T15:25:20.848Z"
+    },
+    {
+      "from": 750000,
+      "through": 760000,
+      "firstInBlockMs": {
+        "count": 714,
+        "mean": 162.7,
+        "p05": 140.1,
+        "median": 152.2,
+        "p95": 230.8,
+        "max": 326.2
+      },
+      "otherMs": {
+        "count": 9286,
+        "mean": 217,
+        "p05": 143.9,
+        "median": 160.2,
+        "p95": 315.4,
+        "max": 1951.8
+      },
+      "slowMs": {
+        "count": 576,
+        "mean": 926,
+        "p05": 304.3,
+        "median": 378.8,
+        "p95": 1846.9,
+        "max": 1951.8
+      },
+      "serve": {
+        "rssMb": 394,
+        "peakMb": 521,
+        "heapMb": 33,
+        "cpuMs": 53300000,
+        "sampledAt": 1791993686818
+      },
+      "serveCpuMsPerStatement": 153,
+      "hostBusy": 0.29,
+      "node": {
+        "at": 1791993638936,
+        "rssMb": 626,
+        "peakMb": 745,
+        "cpuMs": 5832499,
+        "heapMb": 262,
+        "collected": false
+      },
+      "journalMb": 16489.5,
+      "elapsedS": 2170,
+      "interrupted": 0,
+      "suspendedS": 0,
+      "at": "2026-10-14T16:01:30.301Z"
+    },
+    {
+      "from": 760000,
+      "through": 770000,
+      "firstInBlockMs": {
+        "count": 714,
+        "mean": 163.7,
+        "p05": 141.4,
+        "median": 154.9,
+        "p95": 228.8,
+        "max": 560.1
+      },
+      "otherMs": {
+        "count": 9286,
+        "mean": 218.2,
+        "p05": 144.7,
+        "median": 161.1,
+        "p95": 316.4,
+        "max": 2118.8
+      },
+      "slowMs": {
+        "count": 581,
+        "mean": 935.6,
+        "p05": 303.8,
+        "median": 363.4,
+        "p95": 1911.5,
+        "max": 2118.8
+      },
+      "serve": {
+        "rssMb": 406,
+        "peakMb": 521,
+        "heapMb": 32,
+        "cpuMs": 54801327,
+        "sampledAt": 1791995868404
+      },
+      "serveCpuMsPerStatement": 150,
+      "hostBusy": 0.286,
+      "node": {
+        "at": 1791995859358,
+        "rssMb": 635,
+        "peakMb": 745,
+        "cpuMs": 6070937,
+        "heapMb": 270,
+        "collected": false
+      },
+      "journalMb": 16706.1,
+      "elapsedS": 2181,
+      "interrupted": 0,
+      "suspendedS": 0,
+      "at": "2026-10-14T16:37:50.783Z"
+    },
+    {
+      "from": 770000,
+      "through": 780000,
+      "firstInBlockMs": {
+        "count": 715,
+        "mean": 167.5,
+        "p05": 141,
+        "median": 153.3,
+        "p95": 234.1,
+        "max": 1863.9
+      },
+      "otherMs": {
+        "count": 9285,
+        "mean": 218.4,
+        "p05": 144.7,
+        "median": 161.8,
+        "p95": 314,
+        "max": 2330.3
+      },
+      "slowMs": {
+        "count": 573,
+        "mean": 947.8,
+        "p05": 304.2,
+        "median": 373.2,
+        "p95": 1917.6,
+        "max": 2330.3
+      },
+      "serve": {
+        "rssMb": 412,
+        "peakMb": 521,
+        "heapMb": 8,
+        "cpuMs": 56303609,
+        "sampledAt": 1791998047085
+      },
+      "serveCpuMsPerStatement": 150,
+      "hostBusy": 0.286,
+      "node": {
+        "at": 1791998019762,
+        "rssMb": 641,
+        "peakMb": 745,
+        "cpuMs": 6307296,
+        "heapMb": 299,
+        "collected": false
+      },
+      "journalMb": 16923.4,
+      "elapsedS": 2186,
+      "interrupted": 0,
+      "suspendedS": 0,
+      "at": "2026-10-14T17:14:16.686Z"
+    },
+    {
+      "from": 780000,
+      "through": 790000,
+      "firstInBlockMs": {
+        "count": 714,
+        "mean": 164.4,
+        "p05": 141.6,
+        "median": 154.4,
+        "p95": 233.7,
+        "max": 330.8
+      },
+      "otherMs": {
+        "count": 9286,
+        "mean": 218.5,
+        "p05": 144.8,
+        "median": 161.3,
+        "p95": 319.4,
+        "max": 2328.2
+      },
+      "slowMs": {
+        "count": 602,
+        "mean": 910.2,
+        "p05": 303.7,
+        "median": 358.9,
+        "p95": 1908.2,
+        "max": 2328.2
+      },
+      "serve": {
+        "rssMb": 422,
+        "peakMb": 521,
+        "heapMb": 8,
+        "cpuMs": 57831561,
+        "sampledAt": 1792000239238
+      },
+      "serveCpuMsPerStatement": 153,
+      "hostBusy": 0.289,
+      "node": {
+        "at": 1792000240066,
+        "rssMb": 651,
+        "peakMb": 859,
+        "cpuMs": 6549061,
+        "heapMb": 239,
+        "collected": false
+      },
+      "journalMb": 17139.8,
+      "elapsedS": 2184,
+      "interrupted": 0,
+      "suspendedS": 0,
+      "at": "2026-10-14T17:50:40.316Z"
+    },
+    {
+      "from": 790000,
+      "through": 800000,
+      "firstInBlockMs": {
+        "count": 714,
+        "mean": 164.8,
+        "p05": 142.4,
+        "median": 154.8,
+        "p95": 230.8,
+        "max": 277.6
+      },
+      "otherMs": {
+        "count": 9286,
+        "mean": 219.6,
+        "p05": 145.4,
+        "median": 162.2,
+        "p95": 315.2,
+        "max": 2343.8
+      },
+      "slowMs": {
+        "count": 578,
+        "mean": 939.8,
+        "p05": 303.1,
+        "median": 369.3,
+        "p95": 1900.5,
+        "max": 2343.8
+      },
+      "serve": {
+        "rssMb": 436,
+        "peakMb": 521,
+        "heapMb": 8,
+        "cpuMs": 59362828,
+        "sampledAt": 1792002431498
+      },
+      "serveCpuMsPerStatement": 153,
+      "hostBusy": 0.289,
+      "node": {
+        "at": 1792002400337,
+        "rssMb": 658,
+        "peakMb": 859,
+        "cpuMs": 6790765,
+        "heapMb": 263,
+        "collected": false
+      },
+      "journalMb": 17356.5,
+      "elapsedS": 2195,
+      "interrupted": 0,
+      "suspendedS": 0,
+      "at": "2026-10-14T18:27:15.460Z"
+    },
+    {
+      "from": 800000,
+      "through": 810000,
+      "firstInBlockMs": {
+        "count": 715,
+        "mean": 165,
+        "p05": 142.7,
+        "median": 155.2,
+        "p95": 229.4,
+        "max": 264.4
+      },
+      "otherMs": {
+        "count": 9285,
+        "mean": 219.3,
+        "p05": 145.9,
+        "median": 161.6,
+        "p95": 318.5,
+        "max": 2094.7
+      },
+      "slowMs": {
+        "count": 595,
+        "mean": 922.4,
+        "p05": 304.7,
+        "median": 359.6,
+        "p95": 1898.1,
+        "max": 2094.7
+      },
+      "serve": {
+        "rssMb": 434,
+        "peakMb": 521,
+        "heapMb": 8,
+        "cpuMs": 60907999,
+        "sampledAt": 1792004623647
+      },
+      "serveCpuMsPerStatement": 155,
+      "hostBusy": 0.29,
+      "node": {
+        "at": 1792004620747,
+        "rssMb": 664,
+        "peakMb": 859,
+        "cpuMs": 7041405,
+        "heapMb": 216,
+        "collected": false
+      },
+      "journalMb": 17572.5,
+      "elapsedS": 2192,
+      "interrupted": 0,
+      "suspendedS": 0,
+      "at": "2026-10-14T19:03:47.760Z"
+    },
+    {
+      "from": 810000,
+      "through": 820000,
+      "firstInBlockMs": {
+        "count": 714,
+        "mean": 165.6,
+        "p05": 143.1,
+        "median": 156.4,
+        "p95": 234,
+        "max": 433.4
+      },
+      "otherMs": {
+        "count": 9286,
+        "mean": 221.4,
+        "p05": 146,
+        "median": 162.2,
+        "p95": 323.2,
+        "max": 2539.3
+      },
+      "slowMs": {
+        "count": 637,
+        "mean": 900.9,
+        "p05": 304.7,
+        "median": 356,
+        "p95": 1976.3,
+        "max": 2539.3
+      },
+      "serve": {
+        "rssMb": 401,
+        "peakMb": 521,
+        "heapMb": 63,
+        "cpuMs": 62446436,
+        "sampledAt": 1792006838893
+      },
+      "serveCpuMsPerStatement": 154,
+      "hostBusy": 0.287,
+      "node": {
+        "at": 1792006781244,
+        "rssMb": 735,
+        "peakMb": 859,
+        "cpuMs": 7287046,
+        "heapMb": 304,
+        "collected": false
+      },
+      "journalMb": 17789.7,
+      "elapsedS": 2212,
+      "interrupted": 0,
+      "suspendedS": 0,
+      "at": "2026-10-14T19:40:40.160Z"
+    },
+    {
+      "from": 820000,
+      "through": 830000,
+      "firstInBlockMs": {
+        "count": 714,
+        "mean": 166,
+        "p05": 143.1,
+        "median": 156.1,
+        "p95": 235.4,
+        "max": 525.8
+      },
+      "otherMs": {
+        "count": 9286,
+        "mean": 220.7,
+        "p05": 146.5,
+        "median": 162.4,
+        "p95": 321.4,
+        "max": 2303.4
+      },
+      "slowMs": {
+        "count": 616,
+        "mean": 915,
+        "p05": 303.7,
+        "median": 363.2,
+        "p95": 1961.2,
+        "max": 2303.4
+      },
+      "serve": {
+        "rssMb": 404,
+        "peakMb": 521,
+        "heapMb": 8,
+        "cpuMs": 63960874,
+        "sampledAt": 1792009046255
+      },
+      "serveCpuMsPerStatement": 151,
+      "hostBusy": 0.284,
+      "node": {
+        "at": 1792009001645,
+        "rssMb": 752,
+        "peakMb": 859,
+        "cpuMs": 7542843,
+        "heapMb": 271,
+        "collected": false
+      },
+      "journalMb": 18006.4,
+      "elapsedS": 2207,
+      "interrupted": 0,
+      "suspendedS": 0,
+      "at": "2026-10-14T20:17:26.692Z"
+    },
+    {
+      "from": 837128,
+      "through": 840000,
+      "firstInBlockMs": {
+        "count": 206,
+        "mean": 142.2,
+        "p05": 125.6,
+        "median": 134.9,
+        "p95": 196,
+        "max": 243.7
+      },
+      "otherMs": {
+        "count": 2666,
+        "mean": 190.1,
+        "p05": 126.4,
+        "median": 138.4,
+        "p95": 262.5,
+        "max": 3102.3
+      },
+      "slowMs": {
+        "count": 89,
+        "mean": 1377.1,
+        "p05": 318.9,
+        "median": 1597.7,
+        "p95": 1856.9,
+        "max": 3102.3
+      },
+      "serve": {
+        "rssMb": 406,
+        "peakMb": 417,
+        "heapMb": 78,
+        "cpuMs": 439546,
+        "sampledAt": 1792053351748
+      },
+      "serveCpuMsPerStatement": 148,
+      "hostBusy": 0.292,
+      "node": {
+        "at": 1792053311993,
+        "rssMb": 619,
+        "peakMb": 870,
+        "cpuMs": 703499,
+        "heapMb": 300,
+        "collected": false
+      },
+      "journalMb": 18222.8,
+      "elapsedS": 547,
+      "interrupted": 0,
+      "suspendedS": 0,
+      "at": "2026-10-15T08:35:54.068Z"
+    },
+    {
+      "from": 840000,
+      "through": 850000,
+      "firstInBlockMs": {
+        "count": 715,
+        "mean": 153.7,
+        "p05": 123.8,
+        "median": 149.4,
+        "p95": 218.5,
+        "max": 273
+      },
+      "otherMs": {
+        "count": 9285,
+        "mean": 206.8,
+        "p05": 124.9,
+        "median": 155.6,
+        "p95": 301.8,
+        "max": 2462.1
+      },
+      "slowMs": {
+        "count": 477,
+        "mean": 1049.3,
+        "p05": 304.6,
+        "median": 450.7,
+        "p95": 1901.7,
+        "max": 2462.1
+      },
+      "serve": {
+        "rssMb": 377,
+        "peakMb": 430,
+        "heapMb": 8,
+        "cpuMs": 1925093,
+        "sampledAt": 1792055411421
+      },
+      "serveCpuMsPerStatement": 149,
+      "hostBusy": 0.277,
+      "node": {
+        "at": 1792055412403,
+        "rssMb": 622,
+        "peakMb": 870,
+        "cpuMs": 962187,
+        "heapMb": 314,
+        "collected": false
+      },
+      "journalMb": 18439.7,
+      "elapsedS": 2061,
+      "interrupted": 0,
+      "suspendedS": 0,
+      "at": "2026-10-15T09:10:15.345Z"
+    },
+    {
+      "from": 850000,
+      "through": 860000,
+      "firstInBlockMs": {
+        "count": 714,
+        "mean": 164.1,
+        "p05": 143.2,
+        "median": 154.9,
+        "p95": 232,
+        "max": 297.3
+      },
+      "otherMs": {
+        "count": 9286,
+        "mean": 220.7,
+        "p05": 146.5,
+        "median": 162.8,
+        "p95": 324.1,
+        "max": 2237.8
+      },
+      "slowMs": {
+        "count": 635,
+        "mean": 891.8,
+        "p05": 303.6,
+        "median": 354.9,
+        "p95": 1903.7,
+        "max": 2237.8
+      },
+      "serve": {
+        "rssMb": 359,
+        "peakMb": 438,
+        "heapMb": 8,
+        "cpuMs": 3440921,
+        "sampledAt": 1792057613495
+      },
+      "serveCpuMsPerStatement": 152,
+      "hostBusy": 0.261,
+      "node": {
+        "at": 1792057572775,
+        "rssMb": 626,
+        "peakMb": 870,
+        "cpuMs": 1214999,
+        "heapMb": 261,
+        "collected": false
+      },
+      "journalMb": 18656.8,
+      "elapsedS": 2201,
+      "interrupted": 0,
+      "suspendedS": 0,
+      "at": "2026-10-15T09:46:56.389Z"
+    },
+    {
+      "from": 860000,
+      "through": 870000,
+      "firstInBlockMs": {
+        "count": 714,
+        "mean": 195.6,
+        "p05": 144.5,
+        "median": 182.6,
+        "p95": 278.5,
+        "max": 603
+      },
+      "otherMs": {
+        "count": 9286,
+        "mean": 259.8,
+        "p05": 148,
+        "median": 195.1,
+        "p95": 404.1,
+        "max": 3773.2
+      },
+      "slowMs": {
+        "count": 1068,
+        "mean": 757.1,
+        "p05": 306.9,
+        "median": 389.5,
+        "p95": 2310.3,
+        "max": 3773.2
+      },
+      "serve": {
+        "rssMb": 409,
+        "peakMb": 447,
+        "heapMb": 8,
+        "cpuMs": 5352468,
+        "sampledAt": 1792060214737
+      },
+      "serveCpuMsPerStatement": 191,
+      "hostBusy": 0.3,
+      "node": {
+        "at": 1792060211868,
+        "rssMb": 629,
+        "peakMb": 870,
+        "cpuMs": 1519484,
+        "heapMb": 251,
+        "collected": false
+      },
+      "journalMb": 18873.8,
+      "elapsedS": 2603,
+      "interrupted": 0,
+      "suspendedS": 0,
+      "at": "2026-10-15T10:30:17.747Z"
+    },
+    {
+      "from": 870000,
+      "through": 880000,
+      "firstInBlockMs": {
+        "count": 716,
+        "mean": 210.3,
+        "p05": 154.4,
+        "median": 200,
+        "p95": 289,
+        "max": 1757.2
+      },
+      "otherMs": {
+        "count": 9283,
+        "mean": 278.6,
+        "p05": 160.8,
+        "median": 211.5,
+        "p95": 418.8,
+        "max": 4039.5
+      },
+      "slowMs": {
+        "count": 1211,
+        "mean": 752.3,
+        "p05": 307,
+        "median": 392,
+        "p95": 2334.5,
+        "max": 4039.5
+      },
+      "serve": {
+        "rssMb": 421,
+        "peakMb": 447,
+        "heapMb": 8,
+        "cpuMs": 7427703,
+        "sampledAt": 1792064618049
+      },
+      "serveCpuMsPerStatement": 208,
+      "hostBusy": 0.31,
+      "node": {
+        "at": 1792064607193,
+        "rssMb": 636,
+        "peakMb": 870,
+        "cpuMs": 1834671,
+        "heapMb": 321,
+        "collected": false
+      },
+      "journalMb": 19091.2,
+      "elapsedS": 4402,
+      "interrupted": 2,
+      "suspendedS": 1604,
+      "at": "2026-10-15T11:43:39.952Z"
+    },
+    {
+      "from": 880000,
+      "through": 890000,
+      "firstInBlockMs": {
+        "count": 714,
+        "mean": 172.1,
+        "p05": 143.3,
+        "median": 159.2,
+        "p95": 242.8,
+        "max": 379.8
+      },
+      "otherMs": {
+        "count": 9286,
+        "mean": 230.8,
+        "p05": 147.2,
+        "median": 168.1,
+        "p95": 337.8,
+        "max": 3883.9
+      },
+      "slowMs": {
+        "count": 729,
+        "mean": 866.5,
+        "p05": 304.7,
+        "median": 361,
+        "p95": 2049.8,
+        "max": 3883.9
+      },
+      "serve": {
+        "rssMb": 422,
+        "peakMb": 451,
+        "heapMb": 8,
+        "cpuMs": 9029390,
+        "sampledAt": 1792066920065
+      },
+      "serveCpuMsPerStatement": 160,
+      "hostBusy": 0.323,
+      "node": {
+        "at": 1792066887515,
+        "rssMb": 638,
+        "peakMb": 870,
+        "cpuMs": 2106109,
+        "heapMb": 291,
+        "collected": false
+      },
+      "journalMb": 19308,
+      "elapsedS": 2304,
+      "interrupted": 0,
+      "suspendedS": 0,
+      "at": "2026-10-15T12:22:03.780Z"
+    },
+    {
+      "from": 890000,
+      "through": 900000,
+      "firstInBlockMs": {
+        "count": 714,
+        "mean": 168.6,
+        "p05": 143,
+        "median": 157.8,
+        "p95": 235.5,
+        "max": 407.2
+      },
+      "otherMs": {
+        "count": 9286,
+        "mean": 226.7,
+        "p05": 146.5,
+        "median": 166.7,
+        "p95": 328.9,
+        "max": 2707
+      },
+      "slowMs": {
+        "count": 692,
+        "mean": 874.3,
+        "p05": 307.2,
+        "median": 354.1,
+        "p95": 1984.9,
+        "max": 2707
+      },
+      "serve": {
+        "rssMb": 372,
+        "peakMb": 453,
+        "heapMb": 8,
+        "cpuMs": 10587265,
+        "sampledAt": 1792069188882
+      },
+      "serveCpuMsPerStatement": 156,
+      "hostBusy": 0.295,
+      "node": {
+        "at": 1792069168037,
+        "rssMb": 641,
+        "peakMb": 870,
+        "cpuMs": 2383296,
+        "heapMb": 273,
+        "collected": false
+      },
+      "journalMb": 19524.4,
+      "elapsedS": 2266,
+      "interrupted": 0,
+      "suspendedS": 0,
+      "at": "2026-10-15T12:59:50.004Z"
+    },
+    {
+      "from": 900000,
+      "through": 910000,
+      "firstInBlockMs": {
+        "count": 714,
+        "mean": 166.6,
+        "p05": 143.1,
+        "median": 156.5,
+        "p95": 238,
+        "max": 289.6
+      },
+      "otherMs": {
+        "count": 9286,
+        "mean": 223.2,
+        "p05": 146.4,
+        "median": 164.5,
+        "p95": 329.3,
+        "max": 2306.7
+      },
+      "slowMs": {
+        "count": 685,
+        "mean": 869.5,
+        "p05": 304.2,
+        "median": 349.6,
+        "p95": 1972.8,
+        "max": 2306.7
+      },
+      "serve": {
+        "rssMb": 376,
+        "peakMb": 453,
+        "heapMb": 8,
+        "cpuMs": 12113406,
+        "sampledAt": 1792071422688
+      },
+      "serveCpuMsPerStatement": 153,
+      "hostBusy": 0.262,
+      "node": {
+        "at": 1792071388463,
+        "rssMb": 644,
+        "peakMb": 870,
+        "cpuMs": 2655108,
+        "heapMb": 266,
+        "collected": false
+      },
+      "journalMb": 19741.5,
+      "elapsedS": 2233,
+      "interrupted": 0,
+      "suspendedS": 0,
+      "at": "2026-10-15T13:37:03.399Z"
+    },
+    {
+      "from": 910000,
+      "through": 920000,
+      "firstInBlockMs": {
+        "count": 715,
+        "mean": 164.7,
+        "p05": 143.3,
+        "median": 156.3,
+        "p95": 229.1,
+        "max": 282.2
+      },
+      "otherMs": {
+        "count": 9285,
+        "mean": 225.1,
+        "p05": 147.2,
+        "median": 166.6,
+        "p95": 330.6,
+        "max": 2174.7
+      },
+      "slowMs": {
+        "count": 680,
+        "mean": 881,
+        "p05": 306.9,
+        "median": 353.3,
+        "p95": 1977.7,
+        "max": 2174.7
+      },
+      "serve": {
+        "rssMb": 378,
+        "peakMb": 453,
+        "heapMb": 8,
+        "cpuMs": 13663967,
+        "sampledAt": 1792073671758
+      },
+      "serveCpuMsPerStatement": 155,
+      "hostBusy": 0.258,
+      "node": {
+        "at": 1792073668994,
+        "rssMb": 679,
+        "peakMb": 870,
+        "cpuMs": 2936280,
+        "heapMb": 319,
+        "collected": false
+      },
+      "journalMb": 19957.9,
+      "elapsedS": 2249,
+      "interrupted": 0,
+      "suspendedS": 0,
+      "at": "2026-10-15T14:14:31.938Z"
+    },
+    {
+      "from": 920000,
+      "through": 930000,
+      "firstInBlockMs": {
+        "count": 714,
+        "mean": 167.1,
+        "p05": 144.3,
+        "median": 157.9,
+        "p95": 233.2,
+        "max": 327.7
+      },
+      "otherMs": {
+        "count": 9286,
+        "mean": 226.7,
+        "p05": 147.8,
+        "median": 166.9,
+        "p95": 333.9,
+        "max": 2248.5
+      },
+      "slowMs": {
+        "count": 700,
+        "mean": 870.4,
+        "p05": 306.8,
+        "median": 354.5,
+        "p95": 1993,
+        "max": 2248.5
+      },
+      "serve": {
+        "rssMb": 410,
+        "peakMb": 454,
+        "heapMb": 8,
+        "cpuMs": 15230327,
+        "sampledAt": 1792075933697
+      },
+      "serveCpuMsPerStatement": 157,
+      "hostBusy": 0.258,
+      "node": {
+        "at": 1792075889312,
+        "rssMb": 682,
+        "peakMb": 870,
+        "cpuMs": 3206264,
+        "heapMb": 301,
+        "collected": false
+      },
+      "journalMb": 20175,
+      "elapsedS": 2262,
+      "interrupted": 0,
+      "suspendedS": 0,
+      "at": "2026-10-15T14:52:14.408Z"
+    },
+    {
+      "from": 930000,
+      "through": 940000,
+      "firstInBlockMs": {
+        "count": 714,
+        "mean": 167.6,
+        "p05": 144.5,
+        "median": 158.4,
+        "p95": 231.7,
+        "max": 286.2
+      },
+      "otherMs": {
+        "count": 9286,
+        "mean": 224.9,
+        "p05": 147.9,
+        "median": 165.6,
+        "p95": 336,
+        "max": 2125.1
+      },
+      "slowMs": {
+        "count": 705,
+        "mean": 854.7,
+        "p05": 308,
+        "median": 357.7,
+        "p95": 1950,
+        "max": 2125.1
+      },
+      "serve": {
+        "rssMb": 398,
+        "peakMb": 455,
+        "heapMb": 58,
+        "cpuMs": 16797874,
+        "sampledAt": 1792078179255
+      },
+      "serveCpuMsPerStatement": 157,
+      "hostBusy": 0.259,
+      "node": {
+        "at": 1792078169936,
+        "rssMb": 686,
+        "peakMb": 870,
+        "cpuMs": 3489640,
+        "heapMb": 265,
+        "collected": false
+      },
+      "journalMb": 20391.9,
+      "elapsedS": 2248,
+      "interrupted": 0,
+      "suspendedS": 0,
+      "at": "2026-10-15T15:29:41.937Z"
+    },
+    {
+      "from": 940000,
+      "through": 950000,
+      "firstInBlockMs": {
+        "count": 715,
+        "mean": 167.8,
+        "p05": 144.8,
+        "median": 158.9,
+        "p95": 234.4,
+        "max": 278
+      },
+      "otherMs": {
+        "count": 9285,
+        "mean": 227.3,
+        "p05": 148.2,
+        "median": 167,
+        "p95": 337.5,
+        "max": 2195.7
+      },
+      "slowMs": {
+        "count": 710,
+        "mean": 866.3,
+        "p05": 307.4,
+        "median": 355.1,
+        "p95": 1993.2,
+        "max": 2195.7
+      },
+      "serve": {
+        "rssMb": 394,
+        "peakMb": 457,
+        "heapMb": 68,
+        "cpuMs": 18391515,
+        "sampledAt": 1792080447788
+      },
+      "serveCpuMsPerStatement": 159,
+      "hostBusy": 0.261,
+      "node": {
+        "at": 1792080450384,
+        "rssMb": 691,
+        "peakMb": 870,
+        "cpuMs": 3770890,
+        "heapMb": 337,
+        "collected": false
+      },
+      "journalMb": 20608.7,
+      "elapsedS": 2270,
+      "interrupted": 0,
+      "suspendedS": 0,
+      "at": "2026-10-15T16:07:32.200Z"
+    },
+    {
+      "from": 950000,
+      "through": 960000,
+      "firstInBlockMs": {
+        "count": 714,
+        "mean": 169.4,
+        "p05": 145.4,
+        "median": 160,
+        "p95": 237.3,
+        "max": 506.1
+      },
+      "otherMs": {
+        "count": 9286,
+        "mean": 227.2,
+        "p05": 148.6,
+        "median": 167,
+        "p95": 333,
+        "max": 2339.7
+      },
+      "slowMs": {
+        "count": 706,
+        "mean": 872.1,
+        "p05": 308.4,
+        "median": 351.1,
+        "p95": 2008.6,
+        "max": 2339.7
+      },
+      "serve": {
+        "rssMb": 376,
+        "peakMb": 457,
+        "heapMb": 8,
+        "cpuMs": 19939890,
+        "sampledAt": 1792082718632
+      },
+      "serveCpuMsPerStatement": 155,
+      "hostBusy": 0.256,
+      "node": {
+        "at": 1792082670643,
+        "rssMb": 694,
+        "peakMb": 870,
+        "cpuMs": 4050280,
+        "heapMb": 321,
+        "collected": false
+      },
+      "journalMb": 20825.4,
+      "elapsedS": 2270,
+      "interrupted": 0,
+      "suspendedS": 0,
+      "at": "2026-10-15T16:45:22.275Z"
+    },
+    {
+      "from": 960000,
+      "through": 970000,
+      "firstInBlockMs": {
+        "count": 714,
+        "mean": 168.4,
+        "p05": 145.4,
+        "median": 158,
+        "p95": 239.8,
+        "max": 298.8
+      },
+      "otherMs": {
+        "count": 9286,
+        "mean": 227.7,
+        "p05": 148.9,
+        "median": 167.9,
+        "p95": 338.6,
+        "max": 2284.6
+      },
+      "slowMs": {
+        "count": 712,
+        "mean": 869.5,
+        "p05": 306.9,
+        "median": 355.8,
+        "p95": 2013.6,
+        "max": 2284.6
+      },
+      "serve": {
+        "rssMb": 431,
+        "peakMb": 457,
+        "heapMb": 84,
+        "cpuMs": 21493296,
+        "sampledAt": 1792084991883
+      },
+      "serveCpuMsPerStatement": 155,
+      "hostBusy": 0.257,
+      "node": {
+        "at": 1792084950973,
+        "rssMb": 699,
+        "peakMb": 870,
+        "cpuMs": 4341437,
+        "heapMb": 342,
+        "collected": false
+      },
+      "journalMb": 21041.7,
+      "elapsedS": 2274,
+      "interrupted": 0,
+      "suspendedS": 0,
+      "at": "2026-10-15T17:23:16.454Z"
+    },
+    {
+      "from": 970000,
+      "through": 980000,
+      "firstInBlockMs": {
+        "count": 714,
+        "mean": 168,
+        "p05": 145.6,
+        "median": 159.8,
+        "p95": 237.2,
+        "max": 269.9
+      },
+      "otherMs": {
+        "count": 9286,
+        "mean": 228.1,
+        "p05": 149.1,
+        "median": 167.6,
+        "p95": 337,
+        "max": 2154
+      },
+      "slowMs": {
+        "count": 731,
+        "mean": 855.9,
+        "p05": 306.6,
+        "median": 352.4,
+        "p95": 2020.2,
+        "max": 2154
+      },
+      "serve": {
+        "rssMb": 394,
+        "peakMb": 458,
+        "heapMb": 8,
+        "cpuMs": 23057327,
+        "sampledAt": 1792087271884
+      },
+      "serveCpuMsPerStatement": 156,
+      "hostBusy": 0.257,
+      "node": {
+        "at": 1792087231541,
+        "rssMb": 702,
+        "peakMb": 870,
+        "cpuMs": 4633780,
+        "heapMb": 318,
+        "collected": false
+      },
+      "journalMb": 21258.9,
+      "elapsedS": 2279,
+      "interrupted": 0,
+      "suspendedS": 0,
+      "at": "2026-10-15T18:01:15.023Z"
+    },
+    {
+      "from": 980000,
+      "through": 990000,
+      "firstInBlockMs": {
+        "count": 715,
+        "mean": 167.3,
+        "p05": 146.4,
+        "median": 158.8,
+        "p95": 231.1,
+        "max": 295.2
+      },
+      "otherMs": {
+        "count": 9285,
+        "mean": 229,
+        "p05": 149.2,
+        "median": 167.6,
+        "p95": 339.5,
+        "max": 2542.8
+      },
+      "slowMs": {
+        "count": 724,
+        "mean": 873,
+        "p05": 305.8,
+        "median": 358.1,
+        "p95": 2043.5,
+        "max": 2542.8
+      },
+      "serve": {
+        "rssMb": 401,
+        "peakMb": 459,
+        "heapMb": 63,
+        "cpuMs": 24638703,
+        "sampledAt": 1792089555604
+      },
+      "serveCpuMsPerStatement": 158,
+      "hostBusy": 0.263,
+      "node": {
+        "at": 1792089511914,
+        "rssMb": 706,
+        "peakMb": 870,
+        "cpuMs": 4926968,
+        "heapMb": 321,
+        "collected": false
+      },
+      "journalMb": 21475.3,
+      "elapsedS": 2286,
+      "interrupted": 0,
+      "suspendedS": 0,
+      "at": "2026-10-15T18:39:21.308Z"
+    },
+    {
+      "from": 990000,
+      "through": 1000000,
+      "firstInBlockMs": {
+        "count": 714,
+        "mean": 167.3,
+        "p05": 146,
+        "median": 159.6,
+        "p95": 229.9,
+        "max": 272.7
+      },
+      "otherMs": {
+        "count": 9286,
+        "mean": 229.1,
+        "p05": 149.9,
+        "median": 168.3,
+        "p95": 343.3,
+        "max": 2243
+      },
+      "slowMs": {
+        "count": 726,
+        "mean": 867,
+        "p05": 307.2,
+        "median": 356.6,
+        "p95": 2038.9,
+        "max": 2243
+      },
+      "serve": {
+        "rssMb": 401,
+        "peakMb": 460,
+        "heapMb": 8,
+        "cpuMs": 26227764,
+        "sampledAt": 1792091845512
+      },
+      "serveCpuMsPerStatement": 159,
+      "hostBusy": 0.26,
+      "node": {
+        "at": 1792091792334,
+        "rssMb": 711,
+        "peakMb": 870,
+        "cpuMs": 5226577,
+        "heapMb": 363,
+        "collected": false
+      },
+      "journalMb": 21691.6,
+      "elapsedS": 2287,
+      "interrupted": 0,
+      "suspendedS": 0,
+      "at": "2026-10-15T19:17:28.503Z"
+    },
+    {
+      "from": 1000000,
+      "through": 1000200,
+      "firstInBlockMs": {
+        "count": 15,
+        "mean": 265.9,
+        "p05": 164,
+        "median": 187.9,
+        "p95": 1193.5,
+        "max": 1193.5
+      },
+      "otherMs": {
+        "count": 185,
+        "mean": 271.1,
+        "p05": 171.8,
+        "median": 191.8,
+        "p95": 404.7,
+        "max": 2996.5
+      },
+      "slowMs": {
+        "count": 21,
+        "mean": 880.2,
+        "p05": 328.7,
+        "median": 404.7,
+        "p95": 2623.3,
+        "max": 2996.5
+      },
+      "serve": {
+        "rssMb": 402,
+        "peakMb": 457,
+        "heapMb": 9,
+        "cpuMs": 3851499,
+        "sampledAt": 1792234275806
+      },
+      "serveCpuMsPerStatement": 19160,
+      "hostBusy": 0.53,
+      "node": {
+        "at": 1792234266655,
+        "rssMb": 768,
+        "peakMb": 775,
+        "cpuMs": 6835780,
+        "heapMb": 323,
+        "collected": false
+      },
+      "journalMb": 21695.8,
+      "elapsedS": 77076,
+      "interrupted": 0,
+      "suspendedS": 0,
+      "at": "2026-10-17T10:51:19.157Z"
+    }
+  ],
+  "marks": [
+    {
+      "mark": 100000,
+      "statements": 100000,
+      "ownedOutputs": 49996,
+      "ownedSpent": 24995,
+      "serveAtMark": {
+        "rssMb": 380,
+        "peakMb": 430,
+        "heapMb": 40,
+        "cpuMs": 12126843,
+        "sampledAt": 1791538163149
+      },
+      "readerFirst": {
+        "elapsedMs": 3209900,
+        "cpuMs": 5982109,
+        "maxRssMb": 645,
+        "noir": false,
+        "suspendedMs": 0,
+        "quarterMeansMb": [
+          513,
+          518,
+          515,
+          517
+        ],
+        "hostBusy": 0.716,
+        "bytes": {
+          "nodeDown": 20450897,
+          "nodeUp": 1825633,
+          "serviceDown": 1558007295,
+          "serviceUp": 374
+        },
+        "position": "100000",
+        "issued": "16",
+        "checkpoint": "2385",
+        "sync": {
+          "tipHeight": "907174",
+          "unresolvedIndex": null,
+          "stopped": []
+        },
+        "keptBytes": 1885549750
+      },
+      "walletFirst": {
+        "elapsedMs": 3195903,
+        "cpuMs": 6284296,
+        "maxRssMb": 666,
+        "noir": false,
+        "suspendedMs": 0,
+        "quarterMeansMb": [
+          533,
+          539,
+          545,
+          545
+        ],
+        "hostBusy": 0.584,
+        "bytes": {
+          "nodeDown": 20450897,
+          "nodeUp": 1825633,
+          "serviceDown": 1558007295,
+          "serviceUp": 374
+        },
+        "holdings": 25009,
+        "checkpoint": "2385",
+        "keptBytes": 2130466591
+      },
+      "step": {
+        "statements": 100200,
+        "reader": {
+          "elapsedMs": 15999,
+          "cpuMs": 22874,
+          "maxRssMb": 379,
+          "noir": false,
+          "suspendedMs": 0,
+          "quarterMeansMb": [
+            175,
+            212,
+            268,
+            294
+          ],
+          "hostBusy": 0.617,
+          "bytes": {
+            "nodeDown": 71699,
+            "nodeUp": 6999,
+            "serviceDown": 3118276,
+            "serviceUp": 377
+          },
+          "position": "100200",
+          "issued": "16",
+          "checkpoint": "2392",
+          "sync": {
+            "tipHeight": "907200",
+            "unresolvedIndex": null,
+            "stopped": []
+          },
+          "keptBytes": 1889379510
+        },
+        "wallet": {
+          "elapsedMs": 21874,
+          "cpuMs": 28999,
+          "maxRssMb": 382,
+          "noir": false,
+          "suspendedMs": 0,
+          "quarterMeansMb": [
+            182,
+            271,
+            333,
+            341
+          ],
+          "hostBusy": 0.543,
+          "bytes": {
+            "nodeDown": 71699,
+            "nodeUp": 6999,
+            "serviceDown": 3118276,
+            "serviceUp": 377
+          },
+          "holdings": 25009,
+          "checkpoint": "2392",
+          "keptBytes": 2134787871
+        }
+      },
+      "idle": {
+        "reader": {
+          "elapsedMs": 7424,
+          "cpuMs": 7921,
+          "maxRssMb": 274,
+          "noir": false,
+          "suspendedMs": 0,
+          "quarterMeansMb": [
+            87,
+            195,
+            245,
+            258
+          ],
+          "hostBusy": 0.563,
+          "bytes": {
+            "nodeDown": 3790,
+            "nodeUp": 395,
+            "serviceDown": 994,
+            "serviceUp": 377
+          },
+          "position": "100200",
+          "issued": "16",
+          "checkpoint": "2392",
+          "sync": {
+            "tipHeight": "907200",
+            "unresolvedIndex": null,
+            "stopped": []
+          },
+          "keptBytes": 1889379510
+        },
+        "wallet": {
+          "elapsedMs": 11547,
+          "cpuMs": 12390,
+          "maxRssMb": 306,
+          "noir": false,
+          "suspendedMs": 0,
+          "quarterMeansMb": [
+            88,
+            198,
+            247,
+            233
+          ],
+          "hostBusy": 0.459,
+          "bytes": {
+            "nodeDown": 3790,
+            "nodeUp": 395,
+            "serviceDown": 994,
+            "serviceUp": 377
+          },
+          "holdings": 25009,
+          "checkpoint": "2392",
+          "keptBytes": 2134787871
+        }
+      },
+      "restart": {
+        "statements": 100201,
+        "before": {
+          "rssMb": 371,
+          "peakMb": 430,
+          "heapMb": 8,
+          "cpuMs": 12530124,
+          "sampledAt": 1791544686656
+        },
+        "startMs": 6618,
+        "firstAdmissionMs": 551,
+        "after": {
+          "rssMb": 173,
+          "peakMb": 247,
+          "heapMb": 6,
+          "cpuMs": 8108,
+          "sampledAt": 1791544694878
+        },
+        "operatorDirMb": 2187
+      },
+      "done": true
+    },
+    {
+      "mark": 1000000,
+      "statements": 1000000,
+      "ownedOutputs": 499996,
+      "ownedSpent": 474995,
+      "serveAtMark": {
+        "rssMb": 393,
+        "peakMb": 460,
+        "heapMb": 46,
+        "cpuMs": 26230796,
+        "sampledAt": 1792091852633
+      },
+      "readerFirst": {
+        "elapsedMs": 37107908,
+        "cpuMs": 65838109,
+        "maxRssMb": 655,
+        "noir": false,
+        "suspendedMs": 0,
+        "quarterMeansMb": [
+          439,
+          478,
+          501,
+          521
+        ],
+        "hostBusy": 0.528,
+        "bytes": {
+          "nodeDown": 211226989,
+          "nodeUp": 18210158,
+          "serviceDown": 15580074264,
+          "serviceUp": 374
+        },
+        "position": "1000000",
+        "issued": "16",
+        "checkpoint": "23818",
+        "sync": {
+          "tipHeight": "971518",
+          "unresolvedIndex": null,
+          "stopped": []
+        },
+        "keptBytes": 18834330808
+      },
+      "walletFirst": {
+        "elapsedMs": 39893911,
+        "cpuMs": 68019843,
+        "maxRssMb": 1169,
+        "noir": false,
+        "suspendedMs": 0,
+        "quarterMeansMb": [
+          528,
+          742,
+          951,
+          982
+        ],
+        "hostBusy": 0.532,
+        "bytes": {
+          "nodeDown": 211226989,
+          "nodeUp": 18210158,
+          "serviceDown": 15580074264,
+          "serviceUp": 374
+        },
+        "holdings": 25009,
+        "checkpoint": "23818",
+        "keptBytes": 21185816350
+      },
+      "step": {
+        "statements": 1000200,
+        "reader": {
+          "elapsedMs": 29253,
+          "cpuMs": 33031,
+          "maxRssMb": 471,
+          "noir": false,
+          "suspendedMs": 0,
+          "quarterMeansMb": [
+            141,
+            217,
+            308,
+            350
+          ],
+          "hostBusy": 0.408,
+          "bytes": {
+            "nodeDown": 76823,
+            "nodeUp": 7761,
+            "serviceDown": 3118021,
+            "serviceUp": 378
+          },
+          "position": "1000200",
+          "issued": "16",
+          "checkpoint": "23824",
+          "sync": {
+            "tipHeight": "971547",
+            "unresolvedIndex": null,
+            "stopped": []
+          },
+          "keptBytes": 18838099128
+        },
+        "wallet": {
+          "elapsedMs": 46850,
+          "cpuMs": 54125,
+          "maxRssMb": 487,
+          "noir": false,
+          "suspendedMs": 0,
+          "quarterMeansMb": [
+            199,
+            327,
+            401,
+            455
+          ],
+          "hostBusy": 0.362,
+          "bytes": {
+            "nodeDown": 76823,
+            "nodeUp": 7761,
+            "serviceDown": 3118021,
+            "serviceUp": 378
+          },
+          "holdings": 25009,
+          "checkpoint": "23824",
+          "keptBytes": 21190047518
+        }
+      },
+      "idle": {
+        "reader": {
+          "elapsedMs": 15265,
+          "cpuMs": 16389,
+          "maxRssMb": 315,
+          "noir": false,
+          "suspendedMs": 0,
+          "quarterMeansMb": [
+            91,
+            197,
+            251,
+            245
+          ],
+          "hostBusy": 0.339,
+          "bytes": {
+            "nodeDown": 3790,
+            "nodeUp": 395,
+            "serviceDown": 994,
+            "serviceUp": 378
+          },
+          "position": "1000200",
+          "issued": "16",
+          "checkpoint": "23824",
+          "sync": {
+            "tipHeight": "971547",
+            "unresolvedIndex": null,
+            "stopped": []
+          },
+          "keptBytes": 18838099128
+        },
+        "wallet": {
+          "elapsedMs": 33157,
+          "cpuMs": 35202,
+          "maxRssMb": 419,
+          "noir": false,
+          "suspendedMs": 0,
+          "quarterMeansMb": [
+            99,
+            198,
+            253,
+            234
+          ],
+          "hostBusy": 0.32,
+          "bytes": {
+            "nodeDown": 3790,
+            "nodeUp": 395,
+            "serviceDown": 994,
+            "serviceUp": 378
+          },
+          "holdings": 25009,
+          "checkpoint": "23824",
+          "keptBytes": 21190047518
+        }
+      },
+      "restart": {
+        "statements": 1000201,
+        "before": {
+          "rssMb": 338,
+          "peakMb": 457,
+          "heapMb": 9,
+          "cpuMs": 3857906,
+          "sampledAt": 1792234405891
+        },
+        "startMs": 18984,
+        "firstAdmissionMs": 2250,
+        "after": {
+          "rssMb": 241,
+          "peakMb": 245,
+          "heapMb": 6,
+          "cpuMs": 18109,
+          "sampledAt": 1792234429419
+        },
+        "operatorDirMb": 21696.2
+      },
+      "done": true
+    }
+  ],
+  "waits": {
+    "SCHEDULE": 45,
+    "STALE": 0,
+    "ABORT": 1070
+  },
+  "suspensions": [
+    {
+      "at": "2026-10-13T01:43:56.017Z",
+      "gapS": 290682
+    },
+    {
+      "at": "2026-10-15T08:26:29.600Z",
+      "gapS": 17
+    },
+    {
+      "at": "2026-10-15T11:35:24.542Z",
+      "gapS": 1604
+    },
+    {
+      "at": "2026-10-16T13:26:22.134Z",
+      "gapS": 24
+    }
+  ],
+  "errors": [
+    {
+      "at": "2026-10-13T16:41:31.299Z",
+      "error": "TypeError: fetch failed"
+    },
+    {
+      "at": "2026-10-13T16:47:11.373Z",
+      "error": "TypeError: fetch failed"
+    },
+    {
+      "at": "2026-10-13T16:53:18.314Z",
+      "error": "TypeError: fetch failed"
+    },
+    {
+      "at": "2026-10-13T16:59:19.445Z",
+      "error": "TypeError: fetch failed"
+    },
+    {
+      "at": "2026-10-13T17:05:29.206Z",
+      "error": "TypeError: fetch failed"
+    },
+    {
+      "at": "2026-10-13T17:11:15.320Z",
+      "error": "TypeError: fetch failed"
+    },
+    {
+      "at": "2026-10-13T17:16:48.845Z",
+      "error": "TypeError: fetch failed"
+    },
+    {
+      "at": "2026-10-13T17:22:40.593Z",
+      "error": "TypeError: fetch failed"
+    },
+    {
+      "at": "2026-10-13T17:29:16.297Z",
+      "error": "TypeError: fetch failed"
+    },
+    {
+      "at": "2026-10-13T20:35:04.991Z",
+      "error": "AbortError: This operation was aborted"
+    }
+  ],
+  "done": true
+}
