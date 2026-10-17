@@ -10,7 +10,7 @@ import { testExhaustionSet } from "../src/ergo-exhaustion.js";
 import { exhaustionOver, openView, readsTrailsSuccinctly, requireVenue, venueStart, venueText } from "../src/cli/venue.js";
 import { testSetIdentity } from "../src/succinct-set.js";
 import type { ExhaustionProver } from "../src/cli/backend.js";
-import { foldPublicInputs, type ExhaustionSupplier, type Fold } from "../src/ergo-exhaustion.js";
+import { foldPublicInputs, FoldVerificationError, type ExhaustionSupplier, type Fold } from "../src/ergo-exhaustion.js";
 import { ExhaustionPool } from "../src/ergo-exhaustion-pool.js";
 import { EXHAUSTION_CIRCUITS } from "../src/ergo-exhaustion-set.js";
 import { decodeFold, encodeFold } from "../src/ergo-exhaustion-wire.js";
@@ -244,6 +244,20 @@ describe("a succinct directory's view", () => {
       expect([unverified.asked, another.asked, forked.asked, events.length]).toEqual([1, 1, 1, 3]);
       expect(await refusing.source.supplier.fold(1n << 40n)).toBeUndefined();
       expect(existsSync(other.dir.file("exhaustion-fold.bin"))).toBe(false);
+
+      // A fold whose verification throws on its bytes (`FoldVerificationError`) is the peer's: passed over at once.
+      const third = await synced(), garbled = await peerOver("garbled", blocks.slice(0, 6), { alter: f => ({ ...f, proof: f.proof.map(() => 0xee) }) });
+      const bytesThrowing = { identity: set.identity, test: true, start: set.start, foldKeyHash: set.foldKeyHash,
+        verifyFold: (first: boolean, inputs: readonly bigint[], proof: Uint8Array) => {
+          if (proof[0] === 0xee) throw new FoldVerificationError("unnamed");
+          return set.verifyFold(first, inputs, proof);
+        } };
+      events.length = 0;
+      const passing = exhaustionOver(third.dir, third.view, undefined, { exhaustion: bytesThrowing, peers: () => [garbled.supplier] });
+      await passing.advance(() => { throw new Error("taken"); });
+      await passing.advance(() => { throw new Error("taken"); });
+      expect(events).toEqual([expect.objectContaining({ code: "PEER", peer: "garbled", message: expect.stringContaining("not asked again") })]);
+      expect(garbled.asked).toBe(1);
 
       // A fold that verifies while the view's own map has another root is kept as evidence; the set is served no more.
       const unsound = await synced();

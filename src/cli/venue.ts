@@ -22,7 +22,7 @@ import { ERGO_SYNTHETIC_REFERENCE, ERGO_TESTNET_REFERENCE, ergoProfileIdentity, 
   type ErgoReferenceContext } from "../ergo-profile.js";
 import { ErgoPublisher, ergoNodePublisher, payToPublicKeyTree, readPlainBox, rowOutbox, verifyErgoProof, type ErgoPublisherPersistence,
   type ErgoPublishingSupplier } from "../ergo-publisher.js";
-import { foldPublicInputs, type ExhaustionSet, type ExhaustionSupplier, type Fold } from "../ergo-exhaustion.js";
+import { foldPublicInputs, FoldVerificationError, type ExhaustionSet, type ExhaustionSupplier, type Fold } from "../ergo-exhaustion.js";
 import { ExhaustionServer, ExhaustionServerError, type ServedBlock } from "../ergo-exhaustion-server.js";
 import { decodeFold, encodeFold } from "../ergo-exhaustion-wire.js";
 import { ErgoVenueJournal } from "../ergo-store.js";
@@ -560,7 +560,11 @@ export function exhaustionOver(directory: Pick<Directory, "path" | "file">, view
         if (target === server) { server = make(); kept = null; unverified = 0; }
         return false;
       }
-      if (refused instanceof ExhaustionServerError || refused instanceof EncodingError) { silence(name, (refused as Error).message); continue; }
+      // A verification that threw on the fold's bytes (`FoldVerificationError`) is the peer's, as a refusal is.
+      if (refused instanceof ExhaustionServerError || refused instanceof EncodingError || refused instanceof FoldVerificationError) {
+        silence(name, (refused as Error).message);
+        continue;
+      }
       // A verification that could not run is this replica's until it recurs: the next offer is tried, and a peer whose
       // fold fails to verify so KEPT_TRIES times is passed over.
       const tries = (unverifiable.get(name) ?? 0) + 1;
