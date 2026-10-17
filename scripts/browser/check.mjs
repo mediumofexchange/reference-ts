@@ -24,6 +24,10 @@
 //             (`/via/<port>/`, wallet-worker.mjs), standing in for a wrapped app's native transport. CI's real-proof
 //             group `browser` runs it (after `npm run build`).
 //   --browser <path>   the engine (default: MOE_BROWSER, else Chrome or Edge where installed, else Playwright's).
+//   --connect <url> [--port <n>]  launch no browser: drive one already running whose DevTools endpoint answers at
+//             <url> (such as a phone's Chrome through `adb forward tcp:9222 localabstract:chrome_devtools_remote`, with
+//             `adb reverse tcp:<n> tcp:<n>` for this server), in a new tab closed at the end; every check, --wallet
+//             among them, runs as it does in a browser launched here, without the browser's memory sampled from outside.
 //   --serve [--port <n>]  launch no browser: serve the check on 127.0.0.1:<n> and judge the first result a browser
 //             posts, such as a phone's Chrome reaching it through `adb reverse tcp:<n> tcp:<n>` (a secure context, as
 //             cross-origin isolation needs). The address printed carries the run's token, which every post must.
@@ -61,10 +65,12 @@ function parse(argv) {
     else if (arg === "--serve") options.serve = true;
     else if (arg === "--port" && i + 1 < argv.length) options.port = Number(argv[++i]);
     else if (arg === "--minutes" && i + 1 < argv.length) options.minutes = Number(argv[++i]);
+    else if (arg === "--connect" && i + 1 < argv.length) options.connect = argv[++i].replace(/\/+$/, "");
     else if (["--browser", "--parameters", "--report"].includes(arg) && i + 1 < argv.length) options[arg.slice(2)] = resolve(argv[++i]);
     else throw new Error(`browser check: unknown or incomplete option ${arg}`);
   }
   if (!Number.isSafeInteger(options.port) || options.port < 0 || options.port > 65535) throw new Error("browser check: --port takes a port number");
+  if (options.connect !== undefined && (options.serve || options.port === 0)) throw new Error("browser check: --connect takes a --port the browser reaches, and no --serve");
   if (!Number.isSafeInteger(options.minutes) || options.minutes < 1) throw new Error("browser check: --minutes takes a whole number of minutes");
   options.report ??= join(root, `scratch/browser-${options.check}.json`);
   return options;
@@ -271,7 +277,7 @@ async function main() {
 
   const routes = new Set(), { server, port, result } = await serve(out, options.parameters, log, options.port, token, routes);
   const address = (path, name) => `http://127.0.0.1:${port}${path}?t=${token}#${name}`;
-  if (options.serve && entry === "wallet") throw new Error("browser check: --wallet drives the page itself; it is not served to another browser");
+  if (options.serve && entry === "wallet") throw new Error("browser check: --wallet drives the page over DevTools; for another browser use --connect");
   if (options.serve) {
     log(`open ${address("/", entry)} in the browser to measure (a phone: adb reverse tcp:${port} tcp:${port})`);
     try {
@@ -282,7 +288,7 @@ async function main() {
     } finally { server.close(); }
   }
 
-  const executable = findBrowser(options.browser);
+  const executable = options.connect === undefined ? findBrowser(options.browser) : undefined;
   const start = () => {
     const directory = mkdtempSync(join(tmpdir(), "moe-browser-"));
     return { profile: directory, browser: spawn(executable, [
@@ -291,8 +297,8 @@ async function main() {
       ...(process.platform === "linux" ? ["--no-sandbox"] : []), "about:blank",
     ], { stdio: "ignore" }) };
   };
-  let { browser, profile } = start();
-  let connection;
+  let { browser, profile } = executable === undefined ? {} : start();
+  let connection, targetId;
   try {
     // The port file's lines once both are written; on Windows the browser holds it open while writing (EBUSY), which is
     // read as not written yet.
@@ -305,8 +311,8 @@ async function main() {
     };
     // A browser that exits or writes no port within 60 s is started once more with a fresh profile: a hosted Windows
     // runner's first start of the browser has missed 30 s (main's CI at 7e91d6e and abf6da3). The second failure stands.
-    let lines;
-    for (let attempt = 1; ; attempt++) {
+    let lines = [];
+    for (let attempt = 1; browser !== undefined; attempt++) {
       let i = 0;
       while ((lines = portLines()).length < 2 && i <= 600 && browser.exitCode === null) { await new Promise(r => setTimeout(r, 100)); i++; }
       if (lines.length >= 2) break;
@@ -320,23 +326,25 @@ async function main() {
       ({ browser, profile } = start());
     }
     const [devPort, path] = lines;
+    const endpoint = browser !== undefined ? `ws://127.0.0.1:${devPort}${path}` : await fetch(`${options.connect}/json/version`)
+      .then(answer => answer.json()).then(version => version.webSocketDebuggerUrl, () => { throw new Error(`browser check: no DevTools endpoint at ${options.connect}`); });
     // A crashed page posts nothing: its check fails at once rather than after the wait.
     let crash;
     const crashed = new Promise((_, reject) => { crash = method => reject(new Error(`browser check: the page crashed (${method})`)); });
     crashed.catch(() => {});
-    connection = await devtools(`ws://127.0.0.1:${devPort}${path}`, message => {
+    connection = await devtools(endpoint, message => {
       if (message.method === "Inspector.targetCrashed" || message.method === "Target.targetCrashed") crash(message.method);
     });
     const version = await connection.send("Browser.getVersion");
     await connection.send("Target.setDiscoverTargets", { discover: true });
-    const { targetId } = await connection.send("Target.createTarget", { url: "about:blank" });
+    ({ targetId } = await connection.send("Target.createTarget", { url: "about:blank" }));
     const { sessionId } = await connection.send("Target.attachToTarget", { targetId, flatten: true });
     await connection.send("Inspector.enable", {}, sessionId);
     // Each page's own result: a late post from an earlier page is set aside, not taken for this one's.
     const resultOf = async kind => { for (;;) { const posted = await result(); if (posted.kind === kind || posted.kind === undefined) return posted; log({ setAside: posted }); } };
-    const idle = treeRss(browser.pid);
+    const idle = browser === undefined ? undefined : treeRss(browser.pid);
     let peak = idle;
-    const sampler = setInterval(() => { const rss = treeRss(browser.pid); if (rss !== undefined && rss > peak) peak = rss; }, 200);
+    const sampler = setInterval(() => { const rss = browser === undefined ? undefined : treeRss(browser.pid); if (rss !== undefined && rss > peak) peak = rss; }, 200);
     let outcome;
     if (entry === "wallet") {
       await connection.send("Page.navigate", { url: `http://127.0.0.1:${port}/wallet.html` }, sessionId);
@@ -371,13 +379,18 @@ async function main() {
     writeFileSync(options.report, `${JSON.stringify(report, null, 2)}\n`);
     return judge(report, log);
   } finally {
+    if (browser === undefined && targetId !== undefined) {
+      await Promise.race([connection.send("Target.closeTarget", { targetId }).catch(() => {}), new Promise(r => setTimeout(r, 5_000).unref())]);
+    }
     connection?.close();
     server.close();
-    const exited = browser.exitCode !== null ? Promise.resolve() : new Promise(r => browser.once("exit", r));
-    browser.kill();
-    await Promise.race([exited, new Promise(r => setTimeout(r, 10_000).unref())]);
-    // A profile the browser still holds (Windows) is left in the system's temporary directory, not a failure.
-    try { rmSync(profile, { recursive: true, force: true, maxRetries: 10, retryDelay: 300 }); } catch (error) { log(`left ${profile}: ${error.code}`); }
+    if (browser !== undefined) {
+      const exited = browser.exitCode !== null ? Promise.resolve() : new Promise(r => browser.once("exit", r));
+      browser.kill();
+      await Promise.race([exited, new Promise(r => setTimeout(r, 10_000).unref())]);
+      // A profile the browser still holds (Windows) is left in the system's temporary directory, not a failure.
+      try { rmSync(profile, { recursive: true, force: true, maxRetries: 10, retryDelay: 300 }); } catch (error) { log(`left ${profile}: ${error.code}`); }
+    }
   }
 }
 
