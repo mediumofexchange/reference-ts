@@ -105,6 +105,8 @@ function runCheck(check, s, wrapper, groupName, minutes) {
   });
 }
 
+const SOURCES = ["src/pool/v3/programs.json", "src/pool/v3/check-set.json", "src/pool/v3/check-set-programs.json", "scripts/browser/throttle.mjs",
+  "scripts/browser/check.mjs", "scripts/browser/proofs.mjs", "scripts/browser/rates.mjs", "scripts/browser/wallet-drill.mjs", "scripts/browser/wallet-worker.mjs"];
 const fileHash = path => bytesToHex(createHash("sha256").update(readFileSync(join(root, path))).digest());
 
 // The design point (production requirements; direction 2026-10-16): a mean day of 900 statements and 720 Ergo headers,
@@ -205,7 +207,8 @@ async function main() {
     host: { cpu: cpus()[0]?.model, cores: availableParallelism(), memoryGiB: Math.round(totalmem() / 2 ** 30), node: process.version, cgroup: g.version },
     throttle: { core: options.core, otherCores: rest, periodMicroseconds: PERIOD, memoryCapMiB: options.memoryMib },
     manifest: { revision: spawnSync("git", ["-C", root, "rev-parse", "HEAD"], { encoding: "utf8" }).stdout.trim(), configurationHash: bytesToHex(configurationHash(configuration)),
-      programs: fileHash("src/pool/v3/programs.json"), checkSet: fileHash("src/pool/v3/check-set.json"), checkSetPrograms: fileHash("src/pool/v3/check-set-programs.json"),
+      // The relations' and check set's programs (the manifest the rates ran under) and the checks that timed them.
+      sources: Object.fromEntries(SOURCES.map(path => [path, fileHash(path)])),
       bbjs: JSON.parse(readFileSync(join(root, "node_modules/@aztec/bb.js/package.json"), "utf8")).version,
       browser: runs[0]?.checks[options.checks[0]]?.result?.browser },
     workloads: { day: DAY, peak: PEAK, restore: RESTORE },
