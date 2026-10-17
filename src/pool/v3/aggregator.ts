@@ -22,8 +22,7 @@ import { bytesToHex } from "@noble/hashes/utils.js";
 import { copyBytes, EncodingError } from "../../bytes.js";
 import { fieldToHex } from "../field.js";
 import { PROOF_OPTIONS, startCheckSetBackend, type KeyedVerifier, type ProvingParameters } from "../proof-verifier.js";
-import { shippedCheckSet, type SetStart } from "../../succinct-set.js";
-import { LEAF_KINDS, TRAIL_CIRCUITS, trailKeys, trailPrograms, type TrailCheckSet, type TrailCircuit } from "./check-set.js";
+import { LEAF_KINDS, openTrailCheckSet, TRAIL_CIRCUITS, trailKeys, trailPrograms, type TrailCheckSet, type TrailCircuit } from "./check-set.js";
 import type { Record } from "./records.js";
 import { COVER_PROOF_BYTES, nodeDigest, statementLeafDigest, type Cover, type SpanProver } from "./succinct.js";
 
@@ -62,11 +61,12 @@ export interface TrailProverOptions {
 
 /**
  * The aggregator, checking statement proofs with `statements` (pool-v3's verifier, routing each kind to its own key)
- * before their leaves, under the shipped set from `from` (succinct-read §6). `parameters` supplies the check set's
- * parameters at each start of a proving instance, the first here and each after a failure, so a long-lived prover keeps
- * no copy of their 128 MiB; each start checks them.
+ * before their leaves, under the shipped set `identity` names (`testSetIdentity`, succinct-read §6; computed by the caller,
+ * since pool-v3's modules import only the neutral core). `parameters` supplies the check set's parameters at each start
+ * of a proving instance, the first here and each after a failure, so a long-lived prover keeps no copy of their 128 MiB;
+ * each start checks them.
  */
-export async function openTrailProver(parameters: () => Promise<ProvingParameters>, statements: KeyedVerifier, from: SetStart,
+export async function openTrailProver(parameters: () => Promise<ProvingParameters>, statements: KeyedVerifier, identity: Uint8Array,
   options: TrailProverOptions = {}): Promise<TrailProver> {
   const native = options.native === true, threads = options.threads;
   const programs = trailPrograms(), keys = trailKeys();
@@ -78,7 +78,7 @@ export async function openTrailProver(parameters: () => Promise<ProvingParameter
   // starts at all before the caller relies on it.
   const first = await start();
   let current: ReturnType<typeof over> | undefined, set: TrailCheckSet;
-  try { set = shippedCheckSet(first, from); } finally { await first.destroy().catch(() => {}); }
+  try { set = openTrailCheckSet(first, identity); } finally { await first.destroy().catch(() => {}); }
   const noir = new Map(TRAIL_CIRCUITS.map(name => [name, new Noir(programs[name] as unknown as CompiledCircuit)] as const));
   const retire = async (): Promise<void> => {
     const retired = current;

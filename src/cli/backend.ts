@@ -11,7 +11,7 @@ import { CHECK_SET_FILES, copyParameters, prepareCheckSetParameters, readCheckSe
 import type { TrailProver } from "../pool/v3/aggregator.js";
 import type { FoldInputs } from "../ergo-exhaustion.js";
 import type { ServerPeriod } from "../ergo-exhaustion-server.js";
-import { shippedCheckSet, type SetStart } from "../succinct-set.js";
+import { shippedCheckSet, testSetIdentity, type SetStart } from "../succinct-set.js";
 import { CommandError, flag, integer, UsageError, type Arguments, type Directory } from "./common.js";
 
 /** `--verifiers n`: the verifier's instance count, default 2, at most 6 (about 85 MB each). */
@@ -79,7 +79,7 @@ export async function openCoverProver(directory: Pick<Directory, "path">, start:
   }
   const { openTrailProver } = await import("../pool/v3/aggregator.js");
   try {
-    const prover = await openTrailProver(() => readCheckSetParameters(directory.path), statements, start, { native, threads: availableParallelism() });
+    const prover = await openTrailProver(() => readCheckSetParameters(directory.path), statements, testSetIdentity(start), { native, threads: availableParallelism() });
     return { prover, close: () => prover.close() };
   } catch (error) {
     // A native binary that would not start (a parameter fault stays its own): by name, with the way round it.

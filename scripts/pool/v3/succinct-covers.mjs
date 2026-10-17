@@ -10,6 +10,7 @@ import { join } from "node:path";
 import { availableParallelism } from "node:os";
 import { prepareCheckSetParameters, readCheckSetParameters } from "../../../dist/pool/parameter-files.js";
 import { openTrailProver } from "../../../dist/pool/v3/aggregator.js";
+import { testSetIdentity } from "../../../dist/succinct-set.js";
 import { EvidenceStore } from "../../../dist/pool/v3/evidence-store.js";
 import { readPackage } from "../../../dist/pool/v3/package-reader.js";
 import { decodeRecord } from "../../../dist/pool/v3/records.js";
@@ -62,7 +63,7 @@ export async function readWithCovers(journal, backing, selection, ranges, { veri
     await prepareCheckSetParameters(PARAMETER_DIRECTORY);
     let prover;
     try {
-      prover = await openTrailProver(() => readCheckSetParameters(PARAMETER_DIRECTORY), verifier, { id: new Uint8Array(32), height: 0n }, { threads: availableParallelism() });
+      prover = await openTrailProver(() => readCheckSetParameters(PARAMETER_DIRECTORY), verifier, testSetIdentity({ id: new Uint8Array(32), height: 0n }), { threads: availableParallelism() });
       // The replica proves as it does for any reader (`V3Replica.prove`), with leaves only over the chosen records:
       // `coverTrail` proves a node only over two covered spans, so it keeps the aligned spans inside the ranges.
       const chosen = new Set(ranges.flatMap(({ first, count }) => proved.slice(first, first + count).map(record => sha(record.proof))));

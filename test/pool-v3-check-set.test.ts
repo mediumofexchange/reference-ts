@@ -61,7 +61,7 @@ describe("the trail check set (succinct-read §3.2)", () => {
     for (const native of [false, true]) {
       const refusal = native ? nativeRefusal() : undefined;
       await expect(openTrailProver(async () => ({ g1: new Uint8Array(64), g2: new Uint8Array(128) }), { verify: async () => true, parallel: 1, close: async () => {} },
-        { id: new Uint8Array(32), height: 0n }, { native })).rejects.toMatchObject(refusal === undefined ? { name: "ParameterError", code: "G2", message: "the BN254 G2 parameters are not the manifest's" }
+        new Uint8Array(32), { native })).rejects.toMatchObject(refusal === undefined ? { name: "ParameterError", code: "G2", message: "the BN254 G2 parameters are not the manifest's" }
         : { name: "ParameterError", code: "BACKEND", message: refusal });
     }
   });

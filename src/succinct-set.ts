@@ -54,7 +54,7 @@ const exhaustionName: Readonly<Record<ExhaustionCircuit, SuccinctCircuit>> = Obj
  * revision, whose bytecode is noir_wasm's) with the vendored sponge, prove under the backend and target pool-v3 §4 names,
  * and read Ignition's leading points up to the exhaustion leaves' 2^22, of which the trail set's 2^21 are a prefix. */
 export const SUCCINCT_SET_MANIFEST: SetManifest = Object.freeze({
-  specification: "succinct-read 2e9bac4",
+  specification: "succinct-read c90b230",
   circuits: Object.freeze(Object.fromEntries([
     ...TRAIL_CIRCUITS.map(name => [trailName[name], Object.freeze({
       sources: Object.freeze({ "main.nr": CHECK_SET_MANIFEST.circuits[name].source, ...CHECK_SET_MANIFEST.modules }),

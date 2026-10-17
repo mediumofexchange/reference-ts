@@ -140,11 +140,12 @@ try {
   live = undefined;
   await api.destroy();
   assert(await ended(keyProcesses), "the key-deriving native process did not end");
-  prover = await openTrailProver(() => readCheckSetParameters(PARAMETER_DIRECTORY), statements, START, { native, threads });
+  prover = await openTrailProver(() => readCheckSetParameters(PARAMETER_DIRECTORY), statements, testSetIdentity(START), { native, threads });
   assert.equal(prover.backend, native ? "native" : "wasm");
   const { set } = prover, keys = trailKeys();
   assert.equal(set.test, true);
-  assert.deepEqual(set.identity, testSetIdentity(START));
+  // The shipped set's test identity at the zero start, as test/succinct-set.test.ts pins it.
+  assert.equal(Buffer.from(set.identity).toString("hex"), "1edfd4f19c82b711190dcafdb2e6d754abd64c6566cd0a7fbe0f8438f7fdd8b2");
   const fixture = JSON.parse(readFileSync(join(root, "test/fixtures/pool-v3-genuine-proofs.json"), "utf8")).proofs;
   const records = Object.fromEntries(Object.entries(fixture).map(([name, g]) => [name, { domain: adoptedDomain(), kind: g.kind,
     publicInputs: g.publicInputs.map(BigInt), proof: new Uint8Array(Buffer.from(g.proof, "base64")), authorization: new Uint8Array(), capsules: [] }]));
@@ -310,7 +311,7 @@ try {
     const ending = prover; prover = undefined;
     await ending.close();
     assert(await ended(children().map(child => child.pid)), "the native prover's process did not end");
-    const wasm =await openTrailProver(() => readCheckSetParameters(PARAMETER_DIRECTORY), statements, START, { threads });
+    const wasm =await openTrailProver(() => readCheckSetParameters(PARAMETER_DIRECTORY), statements, testSetIdentity(START), { threads });
     try {
       const leaf = await timed("leaf-spend on WebAssembly", () => wasm.leaf(records.spend));
       const node = await timed("node over two leaves on WebAssembly", () => wasm.node(leaves.issue, leaves.spend));
