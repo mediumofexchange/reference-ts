@@ -11,13 +11,13 @@ argument that each circuit computes the check it replaces. Measurements stay in 
 | §6 item | Status | Evidence |
 |---|---|---|
 | Each circuit's sources, bytecode, key and key hash, with compiler, backend and verifier target | Pinned for the twelve, sources checked against the files; the leading 2^22 Ignition points (the exhaustion leaves) are the set's, the trail set's 2^21 their prefix | `SUCCINCT_SET_MANIFEST` (`src/succinct-set.ts`) over `CHECK_SET_MANIFEST` and `EXHAUSTION_SET_MANIFEST`; `scripts/pool/v3/check-set.mjs`, `scripts/venue/exhaustion-set.mjs` |
-| The exhaustion's start header | Rule fixed (§6: the anchor of each venue served or an ancestor, final under the greatest of their depths); its value is chosen at adoption, a recent final mainnet header while no mainnet backing exists | [2026-10-17](../decisions/2026-10.md#2026-10-17--frame-one-set-identity-over-the-twelve-circuits-their-sources-toolchain-parameters-and-start-and-name-a-start-final-when-adopted-slice-43-succinct-read-6) |
+| The exhaustion's start header | Rule fixed (§6: the anchor of each venue served or an ancestor, final under the greatest of their depths); its value is named last: a recent final mainnet header, when a prover starts folding from it, after the twelve circuits are frozen and before the external review's second scope and the device run on a mainnet venue | [2026-10-17](../decisions/2026-10.md#2026-10-17--frame-one-set-identity-over-the-twelve-circuits-their-sources-toolchain-parameters-and-start-and-name-a-start-final-when-adopted-slice-43-succinct-read-6); [slice 45](../decisions/2026-10.md#2026-10-17--put-the-references-own-publications-through-the-shipped-exhaustion-circuits-on-three-testnet-days-pin-every-corpus-days-chain-and-name-the-adoptions-start-last-slice-45-succinct-read-6) |
 | The set identity and its frame | Frame fixed (§6) and implemented; test sets take it under `moe/succinct/v1/test-set` from a venue's anchor; the adopted value waits for the start | `setBytes`, `testSetIdentity`; `test/succinct-set.test.ts` |
 | Trail leaves equal to pool-v3 §11.4's verifier on genuine and hostile proofs | Done for the test set | [slice 36](../decisions/2026-10.md#2026-10-13--prove-the-trail-check-sets-six-circuits-on-the-pinned-webassembly-backend-verify-covers-under-pinned-keys-and-take-native-proving-as-the-aggregators-lever-slice-36-next-12) |
 | The in-circuit verifier's limb-range, on-curve and key-hash constraints | Read from bb 5.2.0's source and exercised against a malicious prover | [2026-10-16](../decisions/2026-10.md#2026-10-16--refuse-a-proof-publishing-exactly-one-pairing-point-at-infinity-and-hold-bbs-in-circuit-limb-curve-and-key-hash-constraints-against-a-malicious-prover-slice-43-succinct-read-2-6) |
 | The deferred pairing of every recursive circuit, with §2 rule 2's refusal | Done | the same decision |
 | The bounds the exhaustion circuits' compiled programs leave to the backend's gadgets | Read from the compiled programs at the check's sizes and from bb 5.2.0's source: a 64-bit XOR's operands, a table's or stack's index; a check of the programs' ACIR in the harness is the lever | [audit 35](../decisions/2026-10.md#2026-10-17--frame-each-circuit-by-the-files-its-compiler-reads-stop-a-dropped-set-for-trail-reads-and-hold-every-fetched-transaction-against-every-key-audit-35) |
-| The exhaustion's entries equal to venue-ergo §§5–6 over named mainnet days and a hostile set | Three days executed on the shipped programs; mainnet holds no output with the shape, so real entries wait for testnet days (local) | [corpus](VENUE_ALTERNATIVES.md#the-agreement-corpus-slice-43) |
+| The exhaustion's entries equal to venue-ergo §§5–6 over named mainnet days and a hostile set | Three days executed on the shipped programs; mainnet holds no output with the shape, so beside them three testnet days put the reference publisher's 64 records through the map-update leaf at full size; to re-record: the whole corpus under the per-kind controls (local) | [corpus](VENUE_ALTERNATIVES.md#the-agreement-corpus-slice-43) |
 | The scan's reading of the grammar argued from its source | Below | [The scan](#the-scan-reads-the-grammar-as-the-framer-does) |
 | Tree, header (every version), map-update, multiset and join checks against hostile witnesses | At small sizes in `check:exhaustion`; on the shipped programs with `--shipped`, the recursive joins proved with `--prove` | [report](ergo-exhaustion-check-verification.json) |
 | Adversarial review of every circuit and the argument for each | Trail circuits: slice 36's review; exhaustion circuits: their 2026-10-15 review and this argument's | the decisions |
@@ -155,8 +155,8 @@ any `R5` that follows doubles it to 2; other registers keep it. So an output emi
 the framer's shaped outputs, in output order, with their subjects. Outside it, the scan reads by its own deterministic
 rule, which the set identity fixes (§4.2): it checks no bound or minimality, wraps a long VLQ in the field as the
 circuit does (`scanStep` computes modulo `p`), and a byte its mode cannot take sends it to `ERR`, which it never
-leaves. The [corpus](VENUE_ALTERNATIVES.md#the-agreement-corpus-slice-43) holds both readings equal over three days
-and 65 crafted transactions.
+leaves. The [corpus](VENUE_ALTERNATIVES.md#the-agreement-corpus-slice-43) holds both readings equal over three mainnet days,
+three testnet days with 64 real entries and 65 crafted transactions.
 
 ### The map stream (`leaf-u`)
 
@@ -202,7 +202,7 @@ witness run through the backend's circuit checker reaches it; the 2026-10-15 rev
 joins are proved on the shipped set with `--shipped --prove`: two periods folded first then next, five hostile
 recursions not proved or not verifying, the reader taking both folds and refusing seven hostile ones (same report).
 Limits: execution checks no recursive verification, so a recursive join's hostile case needs `--prove`; the order check is a range check without a message; mainnet holds no output with
-the shape, so the map-update leaves run on synthetic entries until testnet days are recorded (local).
+the shape, so the map-update leaves run on real entries only over the testnet days, the reference publisher's own, in light blocks.
 
 **The bounds behind the hints** were read from the compiled programs at the check's sizes ([audit 35](../decisions/2026-10.md#2026-10-17--frame-each-circuit-by-the-files-its-compiler-reads-stop-a-dropped-set-for-trail-reads-and-hold-every-fetched-transaction-against-every-key-audit-35)):
 every unconstrained return of an integer or boolean type, and every `main` parameter of one, carries a range check of

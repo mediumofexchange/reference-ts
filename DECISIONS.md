@@ -36,6 +36,7 @@ as current instructions.
 
 ## Index
 
+- `2026-10-17` [Put the reference's own publications through the shipped exhaustion circuits on three testnet days, pin every corpus day's chain, and name the adoption's start last (slice 45, succinct-read §6)](decisions/2026-10.md#2026-10-17--put-the-references-own-publications-through-the-shipped-exhaustion-circuits-on-three-testnet-days-pin-every-corpus-days-chain-and-name-the-adoptions-start-last-slice-45-succinct-read-6)
 - `2026-10-17` [Frame each circuit by the files its compiler reads, stop a dropped set for trail reads, and hold every fetched transaction against every key (audit 35)](decisions/2026-10.md#2026-10-17--frame-each-circuit-by-the-files-its-compiler-reads-stop-a-dropped-set-for-trail-reads-and-hold-every-fetched-transaction-against-every-key-audit-35)
 - `2026-10-17` [Drop a spent note's witness, and rewrite a completed block's witnesses a page at a time (slice 44, Next 4 (ck))](decisions/2026-10.md#2026-10-17--drop-a-spent-notes-witness-and-rewrite-a-completed-blocks-witnesses-a-page-at-a-time-slice-44-next-4-ck)
 - `2026-10-17` [Record the design point at 10⁶ statements, and take a wallet's spent witnesses, a read's opening hash and the operator's read wait as open budgets (slice 18)](decisions/2026-10.md#2026-10-17--record-the-design-point-at-10-statements-and-take-a-wallets-spent-witnesses-a-reads-opening-hash-and-the-operators-read-wait-as-open-budgets-slice-18)
