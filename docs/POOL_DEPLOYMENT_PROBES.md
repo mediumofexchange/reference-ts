@@ -937,7 +937,7 @@ Findings:
   - stand-in records verified against eight real proofs, as in M11c2;
   - one backing and segment, and synthetic blocks;
   - one run per point, on one host;
-  - 10⁶ itself remains a local-machine run (WORK.md Open questions).
+  - 10⁶ itself was a local-machine run ([slice 18](#the-design-point-at-10-slice-18)).
 
 ### The design point's two edges (slice 15)
 
@@ -997,7 +997,7 @@ Findings:
   - At 10⁵ the waits lay between 0.52 and 0.61 s, against M13h's 1.30–1.48 s at the same checkpoint size. At the design
     point's 28 statements a checkpoint that is about 0.37 s.
   - They grew from 0.42 s at 2·10³. Growth per decade gives about 0.6 s at 10⁶ at this size; growth per statement gives
-    about 1.7 s. Only the 10⁶ run can tell (WORK.md Open questions).
+    about 1.7 s. The 10⁶ run fell between them ([slice 18](#the-design-point-at-10-slice-18)).
   - The operator's CPU a statement fell from M13h's 133–144 ms to 78–84 ms. Its resident set stayed at 435–480 MB,
     against M13h's 517–634 MB.
   - One admission took 1.48 s, in the band from 7·10⁴ to 8·10⁴, while the wallet measurements' first syncs ran on the
@@ -1063,6 +1063,134 @@ kept reads as a version change does:
   laptop, another host and a traced build, took about 43 ms); the prepared one is linear in what was admitted since the
   preparation.
 - *Limits:* stand-in proofs, a fixture venue, one host and one run; building the history took 97.6 s.
+
+### The design point at 10⁶ (slice 18)
+
+M13h's method, as slice 15 ran it, carried to 10⁶ statements on the Windows PC
+([decision](../decisions/2026-10.md#2026-10-17--record-the-design-point-at-10-statements-and-take-a-wallets-spent-witnesses-a-reads-opening-hash-and-the-operators-read-wait-as-open-budgets-slice-18)).
+The driver and its hooks are [at 9cc291c](https://github.com/mediumofexchange/reference-ts/tree/9cc291c/scripts/pool/v3/design-point-1e6), on
+`bc43e79`'s runtime with the lock-byte page fix (`9f6515d`, applied at 4.7·10⁵ statements). Its changes from slice 15's driver:
+- each process samples its own memory and CPU in place of `/proc`;
+- every process runs at above-normal priority, and each band records the whole host's CPU beside `serve`'s, so other
+  work on the PC shows;
+- the holder's holdings stop at 25,000, M13h's 25,015 at 10⁵: past it every second statement also spends one of its
+  notes, so 10⁶ measures depth at 10⁵'s holdings (holdings are (az));
+- `serve` is restarted at each mark.
+
+The host is a laptop below the declared operator and reader hardware: an i7-5500U at 2.4 GHz (2 cores, 4 threads),
+16 GB, an SSD, Node 24.21.0. Generation took about 61 h of the nine days from 2026-10-09 to 2026-10-16. The rest went to
+the PC's sleep and shutdowns, and to the lock-byte stop at 4.7·10⁵ ([decision](../decisions/2026-10.md#2026-10-13--digest-sqlites-lock-byte-page-as-a-constant-so-a-kept-file-grows-past-1-gib-slice-18)).
+The driver resumed from the journal's count each time. Admissions spanning a sleep are left out of the bands (355). The
+PC was in other use in 33 of the 100 bands, marked by a host CPU above 40%.
+
+*`serve`* by depth, timed as the submitter sees it over HTTP, 42 statements a checkpoint. "Over 300 ms" holds the waits
+during the journal's own read of its new checkpoint (about 238 a band) and the slowest ordinary admissions:
+
+| Through | Median (p95), others | Median (p95), first after a block | Over 300 ms: count, p95, max | Resident (peak) | CPU a statement | Journal | Host busy |
+|---:|---:|---:|---:|---:|---:|---:|---:|
+| 10,000 | 100.4 ms (161) | 99.7 ms (836) | 237, 984 ms, 1,087 ms | 343 MB (401) | 102 ms | 0.2 GiB | 47% |
+| 100,000 | 149.2 ms (297) | 140.0 ms (230) | 467, 2,049 ms, 3,302 ms | 380 MB (430) | 131 ms | 2.1 GiB | 59% |
+| 300,000 | 140.7 ms (270) | 134.5 ms (209) | 313, 1,480 ms, 1,605 ms | 354 MB (436) | 130 ms | 6.4 GiB | 25% |
+| 500,000 | 152.6 ms (286) | 146.5 ms (232) | 389, 1,777 ms, 2,174 ms | 427 MB (521) | 142 ms | 10.6 GiB | 33% |
+| 700,000 | 160.1 ms (317) | 152.2 ms (237) | 585, 1,854 ms, 2,909 ms | 381 MB (521) | 153 ms | 14.8 GiB | 30% |
+| 900,000 | 166.7 ms (329) | 157.8 ms (236) | 692, 1,985 ms, 2,707 ms | 372 MB (453) | 156 ms | 19.1 GiB | 30% |
+| 1,000,000 | 168.3 ms (343) | 159.6 ms (230) | 726, 2,039 ms, 2,243 ms | 401 MB (460) | 159 ms | 21.2 GiB | 26% |
+
+*The tail:* once the report was done, 3,000 more stand-ins at each of two block sizes, through a restarted `serve` with
+nothing else on the host, every admission timed. The waits during the journal's own read are each checkpoint's slowest
+admission:
+
+| Block | Statements a checkpoint | Median (p95), others | Checkpoints | Their slowest admission: median, p95, max |
+|---:|---:|---:|---:|---|
+| 14 | about 42 | 146.7 ms (279) | 72 | 1,805 ms, 2,044 ms, 2,200 ms |
+| 9 | about 27 | 144.0 ms (322) | 113 | 1,468 ms, 1,705 ms, 1,967 ms |
+
+The first admission after each restart took 1,261 ms and 1,967 ms.
+
+*First sync*, each the command's whole run, with every stand-in verifying a kept real proof (999,992 and the 8 real issues at 10⁶):
+
+| Statements | Reader: time, CPU, peak; quarter means | Wallet: time, CPU, peak (holdings) | Served | Kept by the reader, the wallet |
+|---:|---|---|---:|---:|
+| 10⁵ | 3,210 s, 5,982 CPU-s, 645 MB; 513–518 MB | 3,196 s, 6,284 CPU-s, 666 MB (25,009) | 1,558 MB | 1,886 MB, 2,130 MB |
+| 10⁶ | 37,108 s (10.3 h), 65,838 CPU-s, 655 MB; 439–521 MB | 39,894 s (11.1 h), 68,020 CPU-s, 1,169 MB (25,009); 528–982 MB | 15,580 MB | 18,834 MB, 21,186 MB |
+
+The wallet's quarter means at 10⁵ were 533–545 MB.
+
+*Steady state*: 200 more statements, then nothing new (each the command's whole run):
+
+| Statements | Reader, 200 new | Wallet, 200 new | Reader, nothing new | Wallet, nothing new |
+|---:|---|---|---|---|
+| 10⁵ | 16.0 s, 22.9 CPU-s, 379 MB | 21.9 s, 29.0 CPU-s, 382 MB | 7.4 s, 7.9 CPU-s, 274 MB | 11.5 s, 12.4 CPU-s, 306 MB |
+| 10⁶ | 29.3 s, 33.0 CPU-s, 471 MB | 46.9 s, 54.1 CPU-s, 487 MB | 15.3 s, 16.4 CPU-s, 315 MB | 33.2 s, 35.2 CPU-s, 419 MB |
+
+Each read of 200 new statements was served 3.1 MB.
+
+*Restart* at 1,000,201 statements: `serve` listened after 19.0 s over its 21.7 GB directory (6.6 s and 2.2 GB at 10⁵), and
+then held 241 MB, against 338 MB before. Its first admission took 2,250 ms (551 ms at 10⁵).
+
+*The wallet's growth, isolated* (`witness-probe.mjs`): the runtime's `ReplayStore` appending four-output records to a
+kept file, witnessing every eighth output (the run's 12.5% owned) and spending each two records later. Each append that
+completes a large block of the note tree, and the keep point after it:
+
+| Leaves | Witness rows | Append | Keep point | Resident before → after, settled |
+|---:|---:|---:|---:|---|
+| 2¹⁷ | 16,384 | 2.6 s | 2.1 s | 239 → 249 MB, 241 MB |
+| 2¹⁸ | 32,768 | 5.2 s | 4.0 s | 247 → 290 MB, 271 MB |
+| 2¹⁹ | 65,536 | 10.3 s | 7.0 s | 284 → 366 MB, 350 MB |
+| 2²⁰ | 131,072 | 20.2 s | 15.0 s | 352 → 534 MB, 500 MB |
+
+Between those appends the resident set stayed where the last one left it, and an append completing 2¹⁵ leaves took
+0.55 s.
+
+Findings:
+- **The reader holds every budget at 10⁶.** Its first sync took 10.3 h on this 2-core host, against 24 h on the
+  declared 8 cores. It peaked at 655 MB, against 645 MB at 10⁵, so its memory is independent of history length. It was
+  served 15.6 KB a statement and kept 18.8 KB. It reads a new statement in about 83 CPU-ms beyond its read with nothing
+  new: a day of 900 statements in ten reads costs about 4 CPU-minutes and 14 MB served, within ≤ 10 CPU-minutes and
+  ≤ 50 MB.
+- **A read with nothing new about doubled from 10⁵ to 10⁶:** the reader's from 7.9 to 16.4 CPU-s, the wallet's from 12.4
+  to 35.2 CPU-s. Opening hashes each whole kept replay file (§14's check). At [190 MB/s here](#the-restart-read-next-4-bb),
+  that is about 12 s for the reader's 2.27 GB file and 23 s for the wallet's 4.37 GB, most of each read. This is inferred
+  from those rates, not profiled. The cost grows with history: a wallet reading ten times a day spends about 7.3 of its
+  10 CPU-minutes, about 6 of them hashing (WORK.md Next 4 (cl)).
+- **A wallet's first sync passes 1 GiB at 10⁶, through the witnesses of the notes it has spent.** It peaked at 1,169 MB,
+  and its quarter means rose from 528 to 982 MB. Its holdings stayed at 25,009 throughout, and at 10⁵ it peaked at
+  666 MB. So its memory grows with history, which the budget excludes. Its time, 11.1 h, holds.
+  - The witness probe isolates the cause. A record that completes a block of the note tree rewrites the witness of every
+    output the wallet ever marked in the leaves before it, spent or not. It does so in one synchronous append that holds
+    every moved path in memory. The resident set steps up by about twice as much with each height and stays there.
+  - The run's four outputs a statement complete a block of 2²⁰ leaves at about 2.6·10⁵ statements and of 2²¹ at
+    5.2·10⁵. The sync's two steps came at the times its replay reached them: 4.2 h and 6.4 h into the 11.1 h run, against
+    about 3.9 h and 6.5 h at its mean rate. The next block of 2²⁰, at 7.9·10⁵, raised no new peak.
+  - No read of a note-tree namespace uses a spent note's witness: the wallet's holdings read only unspent ones
+    (`holdings.ts`), and the reads of spent marks are lit-v1's (§8), in a construction without a tree. Those rows also make the wallet's replay file 2.1 GB larger than
+    the reader's. By SQLite's format, each row of about 1.2 KB spills onto an overflow page of its own (an estimate).
+  - Levers (WORK.md Next 4 (ck)): drop a tree namespace's witness row once its nullifier is spent, which bounds the rows by
+    the holdings; and rewrite a block's witnesses in bounded batches, which bounds the step even at the largest holdings.
+- **The operator's memory and storage hold, and its ordinary admission stays flat.** `serve` held 340–430 MB, peaked at
+  521 MB, and kept 21.7 KB a statement (21.7 GB at 10⁶, against about 20 GB declared). Its median admission rose from
+  100 to 168 ms over the run, and its CPU a statement from 102 to 159 ms.
+- **The wait during the journal's own read exceeds 1 s on this host, and holds on the declared hardware only by
+  scaling.**
+  - In the tails, each checkpoint's slowest admission took 1.80 s at about 42 statements a checkpoint. At the design
+    point's peak of about 27 it took 1.47 s, which 3.8% of admissions shared.
+  - Over the run, that wait's p95 rose from about 1.46 s at 2.5·10⁵ to 2.04 s at 10⁶ (quiet bands). That is slower than
+    in proportion to statements.
+  - Slice 15's 4-core host admitted 2.4 times faster at 10⁵ (61.8 ms against 149.2 ms). Scaled by that, the 10⁶ waits
+    are about 0.75 s at 42 statements and 0.6 s at 27. That lies between slice 15's two extrapolations, nearer the
+    per-decade one.
+  - With a third fewer statements a checkpoint, the wait fell only 18%. A fixed part of about 0.9 s a checkpoint here
+    grows with depth: the read's kept-file work, not its statements' replay.
+  - A run on the declared hardware decides (WORK.md Next 4 (cm)).
+- **A restart resumes without verifying its history again, but its first admission waits longer with depth.** `serve`
+  listened after 19.0 s (6.6 s at 10⁵), then took 2.25 s for its first admission (0.55 s at 10⁵). The tails' restarts
+  took 1.26 s and 1.97 s. That admission reads what the previous process admitted since its last kept read ((bb)'s open
+  limit), at the read's depth cost above.
+- *Limits:*
+  - stand-in records verified against eight real proofs, as in M11c2;
+  - one backing and segment, synthetic blocks, one holder by construction extreme up to its cap;
+  - one run on one host below the declared hardware, in use for a third of the bands;
+  - memory is the process's peak, which garbage collection timing moves by tens of MB.
 
 ## The trail's succinct relation (slice 27)
 
