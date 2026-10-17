@@ -145,7 +145,7 @@ try {
   const { set } = prover, keys = trailKeys();
   assert.equal(set.test, true);
   // The shipped set's test identity at the zero start, as test/succinct-set.test.ts pins it.
-  assert.equal(Buffer.from(set.identity).toString("hex"), "1edfd4f19c82b711190dcafdb2e6d754abd64c6566cd0a7fbe0f8438f7fdd8b2");
+  assert.equal(Buffer.from(set.identity).toString("hex"), "c5aa5ce7a7deed5b31bcbd0e81be4c43a10a5aa8fd51eed163c2bdd0cce7e6b3");
   const fixture = JSON.parse(readFileSync(join(root, "test/fixtures/pool-v3-genuine-proofs.json"), "utf8")).proofs;
   const records = Object.fromEntries(Object.entries(fixture).map(([name, g]) => [name, { domain: adoptedDomain(), kind: g.kind,
     publicInputs: g.publicInputs.map(BigInt), proof: new Uint8Array(Buffer.from(g.proof, "base64")), authorization: new Uint8Array(), capsules: [] }]));

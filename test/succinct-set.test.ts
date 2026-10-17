@@ -13,6 +13,11 @@ const start = { id: sha256(Uint8Array.of(7)), height: 1_234_567n };
 const hex = (bytes: Uint8Array): string => Buffer.from(bytes).toString("hex");
 const file = (path: string): string => hex(sha256(readFileSync(new URL(`../${path}`, import.meta.url))));
 const identity = (manifest: SetManifest, at = start, context = SET_CONTEXT): string => hex(sha256(setBytes(manifest, at, context)));
+/** §6's names of the two halves' circuits. */
+const trailNames = { "leaf-issue": "trail-issue", "leaf-spend": "trail-spend", "leaf-burn": "trail-burn", "leaf-demand": "trail-demand",
+  "leaf-settle": "trail-settle", "node": "trail-node" } as const;
+const exhaustionNames = { "leaf-t": "exhaustion-tx", "leaf-m": "exhaustion-tree", "leaf-u": "exhaustion-map", "node": "exhaustion-node",
+  "fold-first": "fold-first", "fold-next": "fold-next" } as const;
 /** The shipped manifest with one circuit's field replaced. */
 const withCircuit = (name: typeof SUCCINCT_CIRCUITS[number], change: object): SetManifest =>
   ({ ...SUCCINCT_SET_MANIFEST, circuits: { ...SUCCINCT_SET_MANIFEST.circuits, [name]: { ...SUCCINCT_SET_MANIFEST.circuits[name], ...change } } });
@@ -26,10 +31,24 @@ describe("the succinct set's manifest and identity (succinct-read §6)", () => {
     const sponge = file("src/pool/circuits/vendor/poseidon2.nr");
     expect(CHECK_SET_MANIFEST.modules["poseidon2.nr"]).toBe(sponge);
     expect(EXHAUSTION_SET_MANIFEST.modules["poseidon2.nr"]).toBe(sponge);
-    // Each circuit's sources by their path below its package's `src`: its own main.nr and its half's shared modules.
+    // Each circuit's sources by their path below its package's `src`: the files its compiler reads, its own main.nr and
+    // the modules that declares (a file no `mod` names is not read, and frames nothing).
     expect(Object.keys(SUCCINCT_SET_MANIFEST.circuits)).toEqual([...SUCCINCT_CIRCUITS]);
+    const mains = [...TRAIL_CIRCUITS.map(name => [trailNames[name], `scripts/pool/v3/trail-circuits/${name}.nr`] as const),
+      ...EXHAUSTION_CIRCUITS.map(name => [exhaustionNames[name], `src/exhaustion-circuits/${name}.nr`] as const)];
+    expect(mains.map(([name]) => name).sort()).toEqual([...SUCCINCT_CIRCUITS].sort());
+    for (const [name, path] of mains) {
+      const declared = [...readFileSync(new URL(`../${path}`, import.meta.url), "utf8").matchAll(/^mod (\w+);$/gm)].map(([, module]) => `${module}.nr`);
+      expect(Object.keys(SUCCINCT_SET_MANIFEST.circuits[name].sources).sort()).toEqual(["main.nr", ...declared].sort());
+    }
+    // The shared modules declare none of their own, so these are every file each compiler reads.
+    for (const path of ["src/exhaustion-circuits/exhaustion.nr", "src/exhaustion-circuits/blake2b.nr", "scripts/pool/v3/trail-circuits/trail.nr",
+      "src/pool/circuits/vendor/poseidon2.nr"]) {
+      expect(readFileSync(new URL(`../${path}`, import.meta.url), "utf8")).not.toMatch(/^\s*(pub\s+)?mod\s/m);
+    }
     expect(Object.keys(SUCCINCT_SET_MANIFEST.circuits["trail-node"].sources).sort()).toEqual(["main.nr", "poseidon2.nr", "trail.nr"]);
-    expect(Object.keys(SUCCINCT_SET_MANIFEST.circuits["fold-next"].sources).sort()).toEqual(["blake2b.nr", "exhaustion.nr", "main.nr", "poseidon2.nr"]);
+    expect(Object.keys(SUCCINCT_SET_MANIFEST.circuits["fold-next"].sources).sort()).toEqual(["exhaustion.nr", "main.nr", "poseidon2.nr"]);
+    expect(Object.keys(SUCCINCT_SET_MANIFEST.circuits["exhaustion-map"].sources).sort()).toEqual(["blake2b.nr", "exhaustion.nr", "main.nr", "poseidon2.nr"]);
     expect(SUCCINCT_SET_MANIFEST.circuits["exhaustion-tree"].bytecode).toBe(EXHAUSTION_SET_MANIFEST.circuits["leaf-m"].bytecode);
     expect(SUCCINCT_SET_MANIFEST.circuits["trail-settle"].vk).toBe(CHECK_SET_MANIFEST.circuits["leaf-settle"].vk);
     // One compiler: every shipped program names it, as the exhaustion half's native compiler does.
@@ -79,8 +98,8 @@ describe("the succinct set's manifest and identity (succinct-read §6)", () => {
     // A source added or renamed, and the same sources listed in another order.
     const node = SUCCINCT_SET_MANIFEST.circuits["exhaustion-node"];
     differs(identity(withCircuit("exhaustion-node", { sources: { ...node.sources, "extra.nr": node.sources["main.nr"] } })));
-    const { "blake2b.nr": blake, ...rest } = node.sources;
-    differs(identity(withCircuit("exhaustion-node", { sources: { ...rest, "blake2c.nr": blake } })));
+    const { "exhaustion.nr": module, ...rest } = node.sources;
+    differs(identity(withCircuit("exhaustion-node", { sources: { ...rest, "exhaustion2.nr": module } })));
     expect(identity(withCircuit("exhaustion-node", { sources: Object.fromEntries(Object.entries(node.sources).reverse()) }))).toBe(base);
     for (const change of [{ compiler: "noir 1.0.0-beta.27" }, { backend: "@aztec/bb.js 5.2.1" }, { verifierTarget: "noir-rollup" },
       { parameters: { ...SUCCINCT_SET_MANIFEST.parameters, points: 2097152 } },
@@ -97,7 +116,7 @@ describe("the succinct set's manifest and identity (succinct-read §6)", () => {
 
   it("holds the shipped test identity at a fixed start", () => {
     // A change to the frame, a circuit, a source or the toolchain moves this value (and every kept state named by it).
-    expect(hex(testSetIdentity({ id: new Uint8Array(32), height: 0n }))).toBe("1edfd4f19c82b711190dcafdb2e6d754abd64c6566cd0a7fbe0f8438f7fdd8b2");
+    expect(hex(testSetIdentity({ id: new Uint8Array(32), height: 0n }))).toBe("c5aa5ce7a7deed5b31bcbd0e81be4c43a10a5aa8fd51eed163c2bdd0cce7e6b3");
   });
 
   it("refuses a malformed start, hash, key hash or text, and a circuit without sources", () => {
