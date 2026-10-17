@@ -24,7 +24,7 @@ import { initRole, keptBackings, keptReplay, openEvidence, originOf, passedOver,
   serviceCommand, supplyCommand, supplyOf, termsCommand } from "./read.js";
 import { closeListener, listenLoopback, SERVE_FLAGS, serveFlags, untilStopped } from "./serve.js";
 import { keptTerms } from "./terms.js";
-import { exhaustionOver, exhaustionSuppliers, keptReplicaUrls, openView, requireVenue } from "./venue.js";
+import { exhaustionOver, exhaustionSuppliers, keptReplicaUrls, openView, requireVenue, venueStart } from "./venue.js";
 
 /** How long a replica proves new covers after each round (`serve --prove`) before it syncs again: about ten leaves on
  * four cores with the WebAssembly backend (slice 36), twenty natively (slice 42). */
@@ -90,7 +90,7 @@ async function serve(argv: readonly string[]): Promise<void> {
   try {
     verifier = await directoryVerifier(directory, args);
     evidence = openEvidence(directory, true);
-    if (has(args, "prove")) covers = await openCoverProver(directory, verifier!, flag(args, "parameters"), native, log);
+    if (has(args, "prove")) covers = await openCoverProver(directory, venueStart(venue), verifier!, flag(args, "parameters"), native, log);
     if (exhausting) periods = await openExhaustionProver(directory, flag(args, "parameters"), flag(args, "nargo") ?? "nargo", log);
   } catch (error) { await periods?.close(); await covers?.close(); await verifier?.close(); evidence?.close(); view.close(); throw error; }
   const replica = new V3Replica(directory.file("evidence.db"), evidence, view.venue.id);

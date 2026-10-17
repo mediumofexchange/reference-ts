@@ -31,7 +31,10 @@ import { keyedVerifier, mixedPairingObject, nativeRefusal, PROOF_OPTIONS, startC
 import { fieldToHex } from "../../../dist/pool/field.js";
 import { adoptedDomain } from "../../../dist/pool/v3/configuration.js";
 import { openTrailProver } from "../../../dist/pool/v3/aggregator.js";
-import { CHECK_SET_MANIFEST, checkSetIdentity, trailKeys, trailPrograms } from "../../../dist/pool/v3/check-set.js";
+import { CHECK_SET_MANIFEST, trailKeys, trailPrograms } from "../../../dist/pool/v3/check-set.js";
+import { testSetIdentity } from "../../../dist/succinct-set.js";
+// The set's start: a test set's from a zero header, which no exhaustion here reads (succinct-read §6).
+const START = { id: new Uint8Array(32), height: 0n };
 import { nodeDigest, statementLeafDigest, SUCCINCT_SPECIFICATION } from "../../../dist/pool/v3/succinct.js";
 import { sha256 } from "@noble/hashes/sha2.js";
 import { openV3Verifier } from "../../../dist/pool/v3/verifier.js";
@@ -137,11 +140,11 @@ try {
   live = undefined;
   await api.destroy();
   assert(await ended(keyProcesses), "the key-deriving native process did not end");
-  prover = await openTrailProver(() => readCheckSetParameters(PARAMETER_DIRECTORY), statements, { native, threads });
+  prover = await openTrailProver(() => readCheckSetParameters(PARAMETER_DIRECTORY), statements, START, { native, threads });
   assert.equal(prover.backend, native ? "native" : "wasm");
   const { set } = prover, keys = trailKeys();
   assert.equal(set.test, true);
-  assert.deepEqual(set.identity, checkSetIdentity());
+  assert.deepEqual(set.identity, testSetIdentity(START));
   const fixture = JSON.parse(readFileSync(join(root, "test/fixtures/pool-v3-genuine-proofs.json"), "utf8")).proofs;
   const records = Object.fromEntries(Object.entries(fixture).map(([name, g]) => [name, { domain: adoptedDomain(), kind: g.kind,
     publicInputs: g.publicInputs.map(BigInt), proof: new Uint8Array(Buffer.from(g.proof, "base64")), authorization: new Uint8Array(), capsules: [] }]));
@@ -307,7 +310,7 @@ try {
     const ending = prover; prover = undefined;
     await ending.close();
     assert(await ended(children().map(child => child.pid)), "the native prover's process did not end");
-    const wasm =await openTrailProver(() => readCheckSetParameters(PARAMETER_DIRECTORY), statements, { threads });
+    const wasm =await openTrailProver(() => readCheckSetParameters(PARAMETER_DIRECTORY), statements, START, { threads });
     try {
       const leaf = await timed("leaf-spend on WebAssembly", () => wasm.leaf(records.spend));
       const node = await timed("node over two leaves on WebAssembly", () => wasm.node(leaves.issue, leaves.spend));

@@ -9,7 +9,7 @@ import { nativeRefusal } from "../src/pool/proof-verifier.js";
 import { openTrailProver } from "../src/pool/v3/aggregator.js";
 import { adoptedDomain } from "../src/pool/v3/configuration.js";
 import {
-  CHECK_SET_MANIFEST, checkSetIdentity, LEAF_KINDS, TRAIL_CIRCUITS, trailKeys, trailPrograms, type TrailCircuit,
+  CHECK_SET_MANIFEST, LEAF_KINDS, TRAIL_CIRCUITS, trailKeys, trailPrograms, type TrailCircuit,
 } from "../src/pool/v3/check-set.js";
 import type { Record } from "../src/pool/v3/records.js";
 import { nodeDigest, statementLeafDigest } from "../src/pool/v3/succinct.js";
@@ -29,14 +29,17 @@ const noir = (name: TrailCircuit) => new Noir(programs[name] as unknown as Compi
 const NODE_KEY_HASH = fieldToHex(keys.node.keyHash);
 
 describe("the trail check set (succinct-read §3.2)", () => {
-  it("ships six circuits whose keys and programs are the manifest's, under a test-labelled identity", () => {
+  it("ships six circuits whose keys and programs are the manifest's", () => {
     expect(Object.keys(keys).sort()).toEqual([...TRAIL_CIRCUITS].sort());
     for (const name of TRAIL_CIRCUITS) {
       expect(Buffer.from(sha256(keys[name].vk)).toString("hex")).toBe(CHECK_SET_MANIFEST.circuits[name].vk);
       expect(keys[name].vk.length).toBe(115 * 32);
     }
     expect(new Set(TRAIL_CIRCUITS.map(name => keys[name].keyHash)).size).toBe(6);
-    expect(checkSetIdentity()).toHaveLength(32);
+    // The bytecode identity is pool-v2 §2's: the bytes the artifact's field base64-decodes to, as the compiler emits them.
+    for (const name of TRAIL_CIRCUITS) {
+      expect(Buffer.from(sha256(Buffer.from(programs[name].bytecode, "base64"))).toString("hex")).toBe(CHECK_SET_MANIFEST.circuits[name].bytecode);
+    }
   });
 
   it.each(Object.entries(LEAF_KINDS))("%s outputs the host's leaf digest over a genuine proof", async (name, kind) => {
@@ -58,7 +61,7 @@ describe("the trail check set (succinct-read §3.2)", () => {
     for (const native of [false, true]) {
       const refusal = native ? nativeRefusal() : undefined;
       await expect(openTrailProver(async () => ({ g1: new Uint8Array(64), g2: new Uint8Array(128) }), { verify: async () => true, parallel: 1, close: async () => {} },
-        { native })).rejects.toMatchObject(refusal === undefined ? { name: "ParameterError", code: "G2", message: "the BN254 G2 parameters are not the manifest's" }
+        { id: new Uint8Array(32), height: 0n }, { native })).rejects.toMatchObject(refusal === undefined ? { name: "ParameterError", code: "G2", message: "the BN254 G2 parameters are not the manifest's" }
         : { name: "ParameterError", code: "BACKEND", message: refusal });
     }
   });

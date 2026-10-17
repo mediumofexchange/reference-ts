@@ -47,13 +47,14 @@ import type { ProofVerifier } from "../pool/proof-verifier.js";
 import { CommandError, commitmentOut, event, flag, fresh, has, hex, hex32, initialized, integer, openDirectory, PACKAGE_FILE_LIMIT, parseArguments, print, readJson, READ_FLAGS, readOptional, readRequired, readSecret, required, requireWritable,
   Replayed, UsageError, writeExclusive, writeReplace, writeSame, type Arguments, type Directory, type FlagSpec } from "./common.js";
 import { directoryBackend, directoryVerifier, openCheckSet, verifierCount } from "./backend.js";
-import { checkSetIdentity, type TrailCheckSet } from "../pool/v3/check-set.js";
+import type { TrailCheckSet } from "../pool/v3/check-set.js";
 import type { CheckSet, CheckSupply } from "../pool/v3/succinct.js";
 import { constructionNamed, constructions, nameOf } from "./construction.js";
 import { initConstruction, initRead, initRole, presentationOf, succinctSupply, readSources, repairRecord, replicaCommand, serviceClient, serviceCommand, sourcesOf, termsCommand, unanswered,
   type Skipped } from "./read.js";
 import { authenticate, keepTerms, keptTerms, type KeptTerms } from "./terms.js";
-import { createVenue, openView, ownVenue, parseVenue, requireVenue, venueText, type View } from "./venue.js";
+import { createVenue, openView, ownVenue, parseVenue, requireVenue, venueStart, venueText, type View } from "./venue.js";
+import { testSetIdentity } from "../succinct-set.js";
 
 /** Who funds a gap act, said with the first notes and with each publication file (slice 12 M12c). */
 const RELAY_NOTE = "A relay publishes a gap act from its own funding key, which the chain ties to every act it funds and to its coins' history: a relay of your own links your acts to each other and to where its coins came from; a third party's relay reached as an onion service (moe relay send) ties them to its other users' acts, not to your coins, but sees each act a little before the public and may delay or withhold it. Take its relay.json only where it is published to everyone alike, and send to a second relay only when the first has not had the act witnessed in time.";
@@ -169,8 +170,8 @@ async function openWallet(directory: Directory, args: Arguments, options: { read
     if (directory.succinct) {
       let bound: ReturnType<typeof succinctSupply> | undefined;
       const target = (): CheckSupply => { if (bound === undefined) throw new Error("a succinct read before its sources were bound"); return bound.supply; };
-      const pinned = (): Promise<TrailCheckSet> => (opening ??= openCheckSet(directory));
-      const lazy: CheckSet = { identity: checkSetIdentity(), test: true, verify: async (kind, digest, proof) => (await pinned()).verify(kind, digest, proof) };
+      const start = venueStart(view.file), pinned = (): Promise<TrailCheckSet> => (opening ??= openCheckSet(directory, start));
+      const lazy: CheckSet = { identity: testSetIdentity(start), test: true, verify: async (kind, digest, proof) => (await pinned()).verify(kind, digest, proof) };
       reading = { set: lazy, supply: { cover: (digest, accept) => target().cover(digest, accept), proof: (hash, at) => target().proof(hash, at) } };
       succinct = { bind: kept => { bound = succinctSupply(directory, kept, view, lazy); }, out: () => bound?.out() ?? {} };
     }

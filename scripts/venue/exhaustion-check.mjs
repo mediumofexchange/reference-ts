@@ -32,7 +32,8 @@ import { checkFold, EMPTY_SUBTREES, SubjectMap } from "../../dist/ergo-exhaustio
 import { Chain, plainOutput, transaction } from "../../dist/ergo-synthetic.js";
 import { bytesOf, compress, foldStateInputs, isPeriodEnd, iv0, mapUpdateLeaf, periodLeaves, periodStreams, startState, stateEnd, stateHash,
   transactionLeaf, treeLeaf, wordsOf } from "../../dist/ergo-exhaustion-prover.js";
-import { EXHAUSTION_CIRCUITS, EXHAUSTION_SET_MANIFEST, exhaustionKeys, shippedExhaustionSet } from "../../dist/ergo-exhaustion-set.js";
+import { EXHAUSTION_CIRCUITS, EXHAUSTION_SET_MANIFEST, exhaustionKeys } from "../../dist/ergo-exhaustion-set.js";
+import { shippedExhaustionSet } from "../../dist/succinct-set.js";
 import { crateName, exhaustionPrograms, nargoWitness } from "../../dist/ergo-exhaustion-programs.js";
 import { fieldToHex, identifierOf, limbsOf } from "../../dist/pool/field.js";
 import { prepareExhaustionParameters, readExhaustionParameters } from "../../dist/pool/parameter-files.js";

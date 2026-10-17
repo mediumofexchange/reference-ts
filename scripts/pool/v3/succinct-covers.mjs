@@ -62,7 +62,7 @@ export async function readWithCovers(journal, backing, selection, ranges, { veri
     await prepareCheckSetParameters(PARAMETER_DIRECTORY);
     let prover;
     try {
-      prover = await openTrailProver(() => readCheckSetParameters(PARAMETER_DIRECTORY), verifier, { threads: availableParallelism() });
+      prover = await openTrailProver(() => readCheckSetParameters(PARAMETER_DIRECTORY), verifier, { id: new Uint8Array(32), height: 0n }, { threads: availableParallelism() });
       // The replica proves as it does for any reader (`V3Replica.prove`), with leaves only over the chosen records:
       // `coverTrail` proves a node only over two covered spans, so it keeps the aligned spans inside the ranges.
       const chosen = new Set(ranges.flatMap(({ first, count }) => proved.slice(first, first + count).map(record => sha(record.proof))));

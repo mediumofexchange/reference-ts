@@ -4,10 +4,10 @@ import { EncodingError } from "../src/bytes.js";
 import { foldPublicInputs, pathRoot, subjectKey, testExhaustionSet, type Fold } from "../src/ergo-exhaustion.js";
 import { ExhaustionServer, ExhaustionServerError, type ServedBlock } from "../src/ergo-exhaustion-server.js";
 import {
-  circuitIdentities, EXHAUSTION_CIRCUITS, EXHAUSTION_KEY_BYTES, EXHAUSTION_SET_MANIFEST, exhaustionKeys, exhaustionSetIdentity,
-  shippedExhaustionSet, type ExhaustionCircuits,
+  circuitIdentities, EXHAUSTION_CIRCUITS, EXHAUSTION_KEY_BYTES, EXHAUSTION_SET_MANIFEST, exhaustionKeys, type ExhaustionCircuits,
 } from "../src/ergo-exhaustion-set.js";
 import { fieldToHex } from "../src/pool/field.js";
+import { shippedExhaustionSet, testSetIdentity } from "../src/succinct-set.js";
 import { Chain, plainOutput, recordOutput, transaction } from "../src/ergo-synthetic.js";
 
 // A replica taking a fold it did not prove (slice 43): its own kept fold after a restart, or one proved elsewhere. The
@@ -131,12 +131,13 @@ describe("the shipped exhaustion set (slice 43)", () => {
     expect(EXHAUSTION_SET_MANIFEST.sizes).toEqual({ t: 167, m: 380, u: 746 });
   });
 
-  it("names the set by its identities and start, as over built circuits, and starts no verifier before a fold", async () => {
+  it("names the set by the shipped set's identity from its start, and starts no verifier before a fold", async () => {
     let started = 0;
     const shipped = shippedExhaustionSet(start, async () => { started++; throw new Error("no backend here"); });
     expect(shipped.test).toBe(true);
     expect(shipped.foldKeyHash).toBe(exhaustionKeys()["fold-next"].keyHash);
-    expect(shipped.identity).toEqual(exhaustionSetIdentity(EXHAUSTION_SET_MANIFEST.circuits, start));
+    expect(shipped.identity).toEqual(testSetIdentity(start));
+    expect(shipped.start).toEqual(start);
     expect(shipped.identity).not.toEqual(shippedExhaustionSet({ ...start, height: start.height + 1n }, async () => { throw new Error(); }).identity);
     expect(started).toBe(0);
     // A proof of another length is false without a verifier; a fold's verification starts one, which failed here.
@@ -146,12 +147,13 @@ describe("the shipped exhaustion set (slice 43)", () => {
     await shipped.close();
     await expect(shipped.verifyFold(true, new Array(8).fill(0n), new Uint8Array(458 * 32))).rejects.toThrow("closed");
     expect(started).toBe(1);
-    // Built circuits with the same identities make the same set (their programs' bytecode hashed as the manifest is).
+    // Built circuits are named as the manifest names them (their programs' bytecode hashed as the compiler emits it).
     const keys = exhaustionKeys(), built = { sizes: EXHAUSTION_SET_MANIFEST.sizes, circuits: Object.fromEntries(EXHAUSTION_CIRCUITS.map(name =>
       [name, { program: { bytecode: "", abi: {} }, ...keys[name] }])) } as unknown as ExhaustionCircuits;
     const ids = circuitIdentities(built);
     expect(ids["fold-next"].keyHash).toBe(EXHAUSTION_SET_MANIFEST.circuits["fold-next"].keyHash);
-    expect(exhaustionSetIdentity(ids, start)).not.toEqual(shipped.identity);
+    expect(ids["fold-next"].vk).toBe(EXHAUSTION_SET_MANIFEST.circuits["fold-next"].vk);
+    expect(ids["fold-next"].bytecode).toBe(Buffer.from(sha256(new Uint8Array())).toString("hex"));
     expect(() => shippedExhaustionSet({ ...start, height: -1n }, null as never)).toThrow("invalid exhaustion start");
   });
 });
