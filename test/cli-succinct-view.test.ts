@@ -7,7 +7,8 @@ import { afterEach, describe, expect, it } from "vitest";
 import { ExhaustionServer } from "../src/ergo-exhaustion-server.js";
 import { transactionsRoot } from "../src/ergo-profile.js";
 import { testExhaustionSet } from "../src/ergo-exhaustion.js";
-import { exhaustionOver, openView, venueText } from "../src/cli/venue.js";
+import { exhaustionOver, openView, readsTrailsSuccinctly, requireVenue, venueStart, venueText } from "../src/cli/venue.js";
+import { testSetIdentity } from "../src/succinct-set.js";
 import type { ExhaustionProver } from "../src/cli/backend.js";
 import { foldPublicInputs, type ExhaustionSupplier, type Fold } from "../src/ergo-exhaustion.js";
 import { ExhaustionPool } from "../src/ergo-exhaustion-pool.js";
@@ -86,6 +87,19 @@ describe("a succinct directory's view", () => {
     copyFileSync(dir.file("before.db"), dir.file("succinct-venue.db"));
     view = openView(dir, exhaustion);
     try { expect(view.venue.succinctSummary()!.succinctIndices).toBe(0n); } finally { view.close(); }
+  });
+
+  it("reads trails natively once the set its venue names is dropped: rule 7 stops the set for every read", () => {
+    const dir = directory(), file = requireVenue(dir);
+    expect(readsTrailsSuccinctly(dir, file)).toBe(true);
+    // Another set dropped leaves this one in use.
+    writeFileSync(dir.file("exhaustion.json"), `${JSON.stringify({ dropped: ["00".repeat(32)] })}\n`);
+    expect(readsTrailsSuccinctly(dir, file)).toBe(true);
+    // The set the venue names: its trail covers (succinct-read §3) are used no more, as its folds are not.
+    const named = bytesToHex(testSetIdentity(venueStart(file)));
+    writeFileSync(dir.file("exhaustion.json"), `${JSON.stringify({ dropped: ["00".repeat(32), named] })}\n`);
+    expect(readsTrailsSuccinctly(dir, file)).toBe(false);
+    expect(readsTrailsSuccinctly(directory(false), file)).toBe(false);
   });
 
   it("proves a replica's periods in the background, keeps its fold and serves it again after a restart without a prover", async () => {

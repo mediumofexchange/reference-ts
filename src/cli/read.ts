@@ -26,7 +26,7 @@ import { directoryVerifier, openCheckSet } from "./backend.js";
 import { CONSTRUCTION_NAMES, constructionNamed, DEFAULT_CONSTRUCTION, isConstructionName, nameOf, type ConstructionName } from "./construction.js";
 import { authenticate, explain, keepTerms, keptTerms, type KeptTerms } from "./terms.js";
 import { isListenerUrl, listenerFile } from "./serve.js";
-import { keepContext, openView, ownVenue, parseVenue, requireVenue, venueStart, venueText, type View } from "./venue.js";
+import { keepContext, openView, ownVenue, parseVenue, readsTrailsSuccinctly, requireVenue, venueStart, venueText, type View } from "./venue.js";
 
 /** `init` shared by every role: parameters (copied from `--parameters` or fetched) where the directory verifies proofs,
  * then the venue when given. A role that serves one construction (`construction`) takes `--construction <name>`,
@@ -446,8 +446,9 @@ async function frontier(directory: Directory, args: Arguments, kept: KeptTerms, 
     const verifier = await directoryVerifier(directory, args);
     let evidence: EvidenceStore | undefined, store: ReplayStore | undefined, set: TrailCheckSet | undefined;
     try {
-      // A succinct directory reads under the shipped check set, from the backing's sources (slice 38).
-      set = directory.succinct ? await openCheckSet(directory, venueStart(view.file)) : undefined;
+      // A succinct directory reads under the shipped check set, from the backing's sources (slice 38), unless it
+      // dropped the set (succinct-read §2 rule 7): it then reads every proof natively.
+      set = readsTrailsSuccinctly(directory, view.file) ? await openCheckSet(directory, venueStart(view.file)) : undefined;
       const reading = set === undefined ? undefined : readingOf(directory, kept, view, set);
       evidence = openEvidence(directory, false, reading?.construction);
       const opened = { evidence, store: store = keptReplay(directory, at) };

@@ -53,7 +53,7 @@ import { constructionNamed, constructions, nameOf } from "./construction.js";
 import { initConstruction, initRead, initRole, presentationOf, succinctSupply, readSources, repairRecord, replicaCommand, serviceClient, serviceCommand, sourcesOf, termsCommand, unanswered,
   type Skipped } from "./read.js";
 import { authenticate, keepTerms, keptTerms, type KeptTerms } from "./terms.js";
-import { createVenue, openView, ownVenue, parseVenue, requireVenue, venueStart, venueText, type View } from "./venue.js";
+import { createVenue, openView, ownVenue, parseVenue, readsTrailsSuccinctly, requireVenue, venueStart, venueText, type View } from "./venue.js";
 import { testSetIdentity } from "../succinct-set.js";
 
 /** Who funds a gap act, said with the first notes and with each publication file (slice 12 M12c). */
@@ -164,13 +164,15 @@ async function openWallet(directory: Directory, args: Arguments, options: { read
       closeProof = opened.close; verifier = opened.prover.verifier;
       prove = task => opened.prover.prove(task);
     } else verifier = await directoryVerifier(directory, args);
-    // A succinct directory reads under the shipped check set from the sources of the backing a read names (slice 38).
+    // A succinct directory reads under the shipped check set from the sources of the backing a read names (slice 38),
+    // unless it dropped the set (succinct-read §2 rule 7): it then reads every proof natively.
     // The set's verifier starts when a read first checks a cover, so a command that reads nothing starts none.
     let succinct: Opened["succinct"], reading: { set: CheckSet; supply: CheckSupply } | undefined;
-    if (directory.succinct) {
+    const start = venueStart(view.file);
+    if (readsTrailsSuccinctly(directory, view.file)) {
       let bound: ReturnType<typeof succinctSupply> | undefined;
       const target = (): CheckSupply => { if (bound === undefined) throw new Error("a succinct read before its sources were bound"); return bound.supply; };
-      const start = venueStart(view.file), pinned = (): Promise<TrailCheckSet> => (opening ??= openCheckSet(directory, start));
+      const pinned = (): Promise<TrailCheckSet> => (opening ??= openCheckSet(directory, start));
       const lazy: CheckSet = { identity: testSetIdentity(start), test: true, verify: async (kind, digest, proof) => (await pinned()).verify(kind, digest, proof) };
       reading = { set: lazy, supply: { cover: (digest, accept) => target().cover(digest, accept), proof: (hash, at) => target().proof(hash, at) } };
       succinct = { bind: kept => { bound = succinctSupply(directory, kept, view, lazy); }, out: () => bound?.out() ?? {} };
