@@ -36,6 +36,7 @@ as current instructions.
 
 ## Index
 
+- `2026-10-17` [Record the design point at 10⁶ statements, and take a wallet's spent witnesses, a read's opening hash and the operator's read wait as open budgets (slice 18)](decisions/2026-10.md#2026-10-17--record-the-design-point-at-10-statements-and-take-a-wallets-spent-witnesses-a-reads-opening-hash-and-the-operators-read-wait-as-open-budgets-slice-18)
 - `2026-10-17` [Frame one set identity over the twelve circuits, their sources, toolchain, parameters and start, and name a start final when adopted (slice 43, succinct-read §6)](decisions/2026-10.md#2026-10-17--frame-one-set-identity-over-the-twelve-circuits-their-sources-toolchain-parameters-and-start-and-name-a-start-final-when-adopted-slice-43-succinct-read-6)
 - `2026-10-16` [Prove the exhaustion's recursive joins on the shipped set in the hostile-set check, and retire the proving and pool probes (simplify)](decisions/2026-10.md#2026-10-16--prove-the-exhaustions-recursive-joins-on-the-shipped-set-in-the-hostile-set-check-and-retire-the-proving-and-pool-probes-simplify)
 - `2026-10-16` [Argue that each exhaustion circuit computes its check, and execute the hostile set and every header version on the shipped programs (slice 43, succinct-read §6)](decisions/2026-10.md#2026-10-16--argue-that-each-exhaustion-circuit-computes-its-check-and-execute-the-hostile-set-and-every-header-version-on-the-shipped-programs-slice-43-succinct-read-6)
