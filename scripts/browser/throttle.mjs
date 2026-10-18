@@ -14,7 +14,7 @@
 // report as scratch/throttle/<check>-s<s>.json.
 import { spawn, spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { existsSync, mkdirSync, readFileSync, rmdirSync, writeFileSync, chmodSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, readFileSync, rmdirSync, rmSync, writeFileSync } from "node:fs";
 import { availableParallelism, cpus, totalmem } from "node:os";
 import { join, resolve } from "node:path";
 import { root } from "./build.mjs";
@@ -71,7 +71,7 @@ function group(name, core, memoryBytes) {
      * gives to the sum of its processes' proportional set sizes; unmapped page cache is left out. */
     resident() {
       const stat = Object.fromEntries((get("memory.stat") ?? "").trim().split("\n").map(line => line.split(" ")).map(([k, v]) => [k, Number(v)]));
-      return v2 ? stat.anon + stat.file_mapped : stat.total_rss + stat.total_mapped_file;
+      return v2 ? { anon: stat.anon, mapped: stat.anon + stat.file_mapped } : { anon: stat.total_rss, mapped: stat.total_rss + stat.total_mapped_file };
     },
     /** The group's peak charge (each page once, page cache included), the limit's hits and kills, and its throttling. */
     read() {
@@ -90,6 +90,8 @@ function group(name, core, memoryBytes) {
 /** One browser check with the browser in the group; this script's own affinity (the other cores) passes to its children. */
 function runCheck(check, s, wrapper, groupName, minutes) {
   const report = join(out, `${check}-s${s}.json`);
+  // A check that fails before writing its report must not be read from an earlier run's.
+  rmSync(report, { force: true });
   return new Promise(done => {
     const began = Date.now();
     const child = spawn(process.execPath, [join(root, "scripts/browser/check.mjs"), `--${check}`, "--browser", wrapper, "--report", report, "--minutes", String(minutes)],
@@ -180,13 +182,13 @@ async function main() {
         g.resetPeak();
         const before = g.read();
         console.log(`throttle: ${check} at slowdown ${s} (quota ${quota}/${PERIOD} µs on core ${options.core})`);
-        let mapped = 0;
-        const sampler = setInterval(() => { mapped = Math.max(mapped, g.resident() ?? 0); }, 250);
+        let mapped = 0, anon = 0;
+        const sampler = setInterval(() => { const r = g.resident(); mapped = Math.max(mapped, r.mapped || 0); anon = Math.max(anon, r.anon || 0); }, 250);
         const run = await runCheck(check, s, wrapper, name, Math.ceil(25 * s)).finally(() => clearInterval(sampler));
         const after = g.read();
-        checks[check] = { ...run, memory: { mappedPeakBytes: mapped, peakBytes: after.peakBytes, limitHits: after.limitHits - before.limitHits, oomKills: after.oomKills - before.oomKills },
+        checks[check] = { ...run, memory: { mappedPeakBytes: mapped, anonPeakBytes: anon, peakBytes: after.peakBytes, limitHits: after.limitHits - before.limitHits, oomKills: after.oomKills - before.oomKills },
           throttled: { periods: after.cpu.nr_throttled - before.cpu.nr_throttled, seconds: ((after.cpu.throttled_time ?? after.cpu.throttled_usec * 1000) - (before.cpu.throttled_time ?? before.cpu.throttled_usec * 1000)) / 1e9 } };
-        console.log(`throttle: ${check} at ${s}: ${run.status === 0 ? "passed" : `failed (${run.status})`} in ${run.seconds.toFixed(1)} s, mapped peak ${Math.round(mapped / 2 ** 20)} MiB, charged peak ${Math.round(after.peakBytes / 2 ** 20)} MiB`);
+        console.log(`throttle: ${check} at ${s}: ${run.status === 0 ? "passed" : `failed (${run.status})`} in ${run.seconds.toFixed(1)} s, mapped peak ${Math.round(mapped / 2 ** 20)} MiB (anonymous ${Math.round(anon / 2 ** 20)}), charged peak ${Math.round(after.peakBytes / 2 ** 20)} MiB`);
       }
       runs.push({ slowdown: s, quotaMicroseconds: quota, checks, rates: rates(checks) });
     }
@@ -199,7 +201,7 @@ async function main() {
       points, ...breakEven(points, budget.seconds) };
   });
   const memory = runs.map(run => ({ s: run.slowdown, ...Object.fromEntries(Object.entries(run.checks).map(([check, c]) =>
-    [check, { passed: c.status === 0, mappedPeakMiB: Math.round(c.memory.mappedPeakBytes / 2 ** 20), chargedPeakMiB: Math.round(c.memory.peakBytes / 2 ** 20), limitHits: c.memory.limitHits, oomKills: c.memory.oomKills }])) }));
+    [check, { passed: c.status === 0, mappedPeakMiB: Math.round(c.memory.mappedPeakBytes / 2 ** 20), anonPeakMiB: Math.round(c.memory.anonPeakBytes / 2 ** 20), chargedPeakMiB: Math.round(c.memory.peakBytes / 2 ** 20), limitHits: c.memory.limitHits, oomKills: c.memory.oomKills }])) }));
   const configuration = adoptedConfiguration();
   const report = {
     label: "SIMULATED: a desktop core throttled by a CFS quota stands in for a slower core; no phone was measured",
