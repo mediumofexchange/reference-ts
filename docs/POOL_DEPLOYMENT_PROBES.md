@@ -1512,6 +1512,68 @@ browser's process tree peaked at 1.2–1.9 GiB over the three runs. Headless Chr
 storage (`persist()` false). **Limits.** Three runs on one host; Chromium only; the worker reaches the loopback parties
 through the check's server, standing in for an app's native transport; no device.
 
+## The throttled phone estimate (slice 46)
+
+Measured 2026-10-18 on a 4-vCPU cloud container (Intel Xeon @ 2.10 GHz), headless Chromium 141, `scripts/browser/throttle.mjs`
+at `32d4ceb` ([report](phone-throttle-estimate.json), which binds the relations' and check set's programs and the
+checks by hash; [decision](../decisions/2026-10.md#2026-10-18--estimate-the-phone-holders-budgets-on-a-throttled-core-a-days-sync-breaks-even-near-17-times-this-hosts-thread-a-restore-22-pay-31-and-the-wallet-browser-at-its-memory-budget-slice-46-next-12)).
+**Simulated, not a phone.** The browser's whole process tree ran on one core under a CFS quota of 1/s of it (100 ms
+periods) and a 1 GiB memory cap, the harness and the parties it starts (synthetic node, operator, backer, shop) on the
+other three; every holder workload runs on one thread, so the quota stands in for a core s times slower than this
+host's. `check.mjs --proofs`, `--rates` (new: the journal's package of one issue and 300 spends replayed proof-free,
+succinct reading's digests, 300 headers through the store's full check) and `--wallet` ran once at each s.
+
+| Workload, one thread | s = 1 | 1.5 | 2 | 3 | 4 | 6 |
+|---|---:|---:|---:|---:|---:|---:|
+| Proof-free replay, a statement | 7.8 ms | 11.2 | 15.8 | 22.5 | 29.9 | 60.5 |
+| Digests, a statement | 0.61 ms | 0.82 | 1.07 | 1.70 | 2.35 | 4.97 |
+| Ergo header, full check | 10.4 ms | 17.2 | 26.3 | 40.3 | 42.7 | 68.7 |
+| Capsule tried | 0.21 ms | 0.35 | 0.49 | 0.73 | 1.02 | 2.05 |
+| A spend proved | 4.6 s | 7.1 | 9.5 | 14.2 | 19.7 | 30.9 |
+| `request` (verifier started, keys derived) | OOM | 6.4 s | 8.7 | 14.2 | 18.9 | 31.0 |
+| `pay` with its proof and submission | OOM | 13.8 s | 18.4 | 29.2 | 37.7 | 58.2 |
+| `fulfill` | OOM | 7.6 s | 9.3 | 14.5 | 19.2 | 30.2 |
+
+Times grow faster than s at deep quotas (replay at s = 6 is 7.7 times its s = 1 time): the browser's other processes
+share the core and the quota's periods, so the deep points overstate a slower core, and crossings are interpolated
+between measured points. Against the budgets ([Phone holder](PRODUCTION_REQUIREMENTS.md#target-scale-and-budgets)),
+the day and the restore are arithmetic over these rates (a mean day 900 statements, 720 headers, 3,650 capsules and
+one cover root verified; a peak day 10⁴ statements and 4·10⁴ capsules; a restore 10⁶ statements, 7.9·10⁵ headers and
+4·10⁶ capsules), the commands measured:
+
+| Budget | s = 1 | Holds to | Break-even slowdown |
+|---|---:|---:|---:|
+| A mean day's sync ≤ 30 s | 15.9 s | 1.5 | 1.7 |
+| A peak day's sync ≤ 3 min | 100 s | 1.5 | 1.8 |
+| A seed restore ≤ 12 h | 4.9 h | 2 | 2.2 |
+| `pay` ≤ 30 s | 13.8 s at 1.5 | 3 | 3.1 |
+| `request`, `fulfill` ≤ 30 s | 6.4, 7.6 s at 1.5 | 4 | 5.8, 6.0 |
+| A mean day's CPU ≤ 2 min | 15.9 s | 6 | about 6 (extrapolated) |
+
+An earlier run at `d4fe0d4` (same programs and checks but for reporting) gave the same break-evens within 0.1. At
+s = 1 the day and the restore split about evenly between headers (720 × 10.4 ms, 47% of a mean day; 2.3 h of a
+restore) and replay with digests (48%; 2.3 h); capsules take the rest. A header's cost is Autolykos v2's hit: 33 Blake2b-256
+hashes over the 8 KiB table message M and four short ones, in JavaScript (`src/ergo-headers.ts`).
+
+*Memory.* `--proofs` and `--rates` peak at 305–332 MiB of the group's anonymous memory at every s. The wallet drill
+peaks at 876–985 MiB for s ≥ 1.5, against the 1,024 MiB cap, and at s = 1 its page was killed by the cap during the
+restore step in two of three runs (this one and `d4fe0d4`'s; a trial run passed). Uncapped and unthrottled it peaked
+at 1,112 and 1,161 MiB (two runs, not retained): the page's renderer 863–974 MiB, the browser, GPU and service
+processes about 190 MiB. The renderer grows over the drill's 24 commands, each a worker ended after it answers (316 MiB
+after the first, 974 before the last, with partial drops); whether ended workers' memory returns later or is held is
+not yet known (WORK.md Next 4 (cq)).
+
+*Against the direction's proxy* (desktop rates in one Node thread, [slice 33](#the-trails-proof-aggregation-slice-33)):
+replay costs 7.8 ms in the browser against 5.4 in Node, a capsule 0.21 ms against 0.061 (@noble/ciphers' AES-GCM
+against OpenSSL's), so the break-evens are lower than the declared ones (a mean day 2.3, a peak day 2.6, the restore
+3.0, `pay` 3.3, a mean day's CPU 9).
+
+**Limits.** A throttled Xeon core is not an ARM core, whose ratio differs by workload; one run per point; Chromium on
+Linux, not Android's WebView; the counterparties are unthrottled loopback processes; a day and a restore are sums of
+rates, not a measured day (a day's weight depends on mainnet blocks: slice 45's decision); the cgroup's anonymous
+memory counts each page once, close to the processes' summed PSS, while Android's PSS also shares file pages. A device
+runs every check through `check.mjs --connect` (WORK.md Open questions).
+
 ## Invalid-checkpoint evidence
 
 `model/pool-fault-boundary.test.ts` (nine cases over the authority and recovery models) shows, under the

@@ -206,7 +206,7 @@ async function main() {
   const report = {
     label: "SIMULATED: a desktop core throttled by a CFS quota stands in for a slower core; no phone was measured",
     measuredAt: new Date().toISOString(),
-    host: { cpu: cpus()[0]?.model, cores: availableParallelism(), memoryGiB: Math.round(totalmem() / 2 ** 30), node: process.version, cgroup: g.version },
+    host: { cpu: cpus()[0]?.model, cores: cpus().length, memoryGiB: Math.round(totalmem() / 2 ** 30), node: process.version, cgroup: g.version },
     throttle: { core: options.core, otherCores: rest, periodMicroseconds: PERIOD, memoryCapMiB: options.memoryMib },
     manifest: { revision: spawnSync("git", ["-C", root, "rev-parse", "HEAD"], { encoding: "utf8" }).stdout.trim(), configurationHash: bytesToHex(configurationHash(configuration)),
       // The relations' and check set's programs (the manifest the rates ran under) and the checks that timed them.

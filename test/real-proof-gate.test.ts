@@ -84,7 +84,8 @@ describe("real-proof gate", () => {
 describe("real-proof groups", () => {
   // The serial check:pool:v3 before CI split it into groups; nothing may drop out (the proof-free offline transfer check
   // moved to check:scripts); the trail check set (slice 36), its native run (slice 42), the browser engine's proofs
-  // (slice 39) and the exhaustion circuits' full-size hostile set (slice 43) add their own groups.
+  // (slice 39) and the exhaustion circuits' full-size hostile set (slice 43) add their own groups; the browser's rates
+  // (slice 46) join its group.
   const serial = [
     "check.mjs", "store-check.mjs --ergo", "history-store-check.mjs",
     "recovery-store-check.mjs", "recovery-store-check.mjs --ergo", "succession-store-check.mjs", "succession-store-check.mjs --ergo",
@@ -92,7 +93,7 @@ describe("real-proof groups", () => {
     "command-drill.mjs", "succinct-drill.mjs",
   ].map(label => `scripts/pool/v3/${label}`).concat(["scripts/venue/exhaustion-check.mjs --shipped"],
     ["local-check.mjs", "check-set-check.mjs", "check-set-check.mjs --native"].map(label => `scripts/pool/v3/${label}`),
-    ["scripts/browser/check.mjs --proofs", "scripts/browser/check.mjs --wallet"]);
+    ["scripts/browser/check.mjs --proofs", "scripts/browser/check.mjs --rates", "scripts/browser/check.mjs --wallet"]);
 
   it("runs every script of the serial check once, each in one group", () => {
     expect(runner.SCRIPTS.map(entry => [entry.script, ...entry.args].join(" "))).toEqual(serial);

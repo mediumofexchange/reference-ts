@@ -36,6 +36,7 @@ as current instructions.
 
 ## Index
 
+- `2026-10-18` [Estimate the phone holder's budgets on a throttled core: a day's sync breaks even near 1.7 times this host's thread, a restore 2.2, `pay` 3.1, and the wallet browser at its memory budget (slice 46, Next 12)](decisions/2026-10.md#2026-10-18--estimate-the-phone-holders-budgets-on-a-throttled-core-a-days-sync-breaks-even-near-17-times-this-hosts-thread-a-restore-22-pay-31-and-the-wallet-browser-at-its-memory-budget-slice-46-next-12)
 - `2026-10-17` [Put the reference's own publications through the shipped exhaustion circuits on three testnet days, pin every corpus day's chain, and name the adoption's start last (slice 45, succinct-read §6)](decisions/2026-10.md#2026-10-17--put-the-references-own-publications-through-the-shipped-exhaustion-circuits-on-three-testnet-days-pin-every-corpus-days-chain-and-name-the-adoptions-start-last-slice-45-succinct-read-6)
 - `2026-10-17` [Frame each circuit by the files its compiler reads, stop a dropped set for trail reads, and hold every fetched transaction against every key (audit 35)](decisions/2026-10.md#2026-10-17--frame-each-circuit-by-the-files-its-compiler-reads-stop-a-dropped-set-for-trail-reads-and-hold-every-fetched-transaction-against-every-key-audit-35)
 - `2026-10-17` [Drop a spent note's witness, and rewrite a completed block's witnesses a page at a time (slice 44, Next 4 (ck))](decisions/2026-10.md#2026-10-17--drop-a-spent-notes-witness-and-rewrite-a-completed-blocks-witnesses-a-page-at-a-time-slice-44-next-4-ck)

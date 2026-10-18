@@ -40,6 +40,8 @@ export const SCRIPTS = Object.freeze([
   // The holder's read path in a browser engine (slice 39): proving and verifying there, with times and memory in its
   // report (the probes section records them).
   { group: "browser", script: "scripts/browser/check.mjs", args: ["--proofs"], reports: ["scratch/browser-proofs.json"] },
+  // The holder's replay, digests and header checks timed there (slice 46), the rates the throttled estimate scales.
+  { group: "browser", script: "scripts/browser/check.mjs", args: ["--rates"], reports: ["scratch/browser-rates.json"] },
   // The wallet's flows there (slice 41): a holder's commands in the page's workers, against parties running `moe` here.
   { group: "browser", script: "scripts/browser/check.mjs", args: ["--wallet"], reports: ["scratch/browser-wallet.json"] },
 ].map(entry => Object.freeze({ ...entry, args: Object.freeze(entry.args), reports: Object.freeze(entry.reports) })));

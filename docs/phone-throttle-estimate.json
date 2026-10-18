@@ -1,0 +1,2894 @@
+{
+  "label": "SIMULATED: a desktop core throttled by a CFS quota stands in for a slower core; no phone was measured",
+  "measuredAt": "2026-10-18T00:55:48.229Z",
+  "host": {
+    "cpu": "Intel(R) Xeon(R) Processor @ 2.10GHz",
+    "cores": 3,
+    "memoryGiB": 16,
+    "node": "v24.21.0",
+    "cgroup": 1
+  },
+  "throttle": {
+    "core": 0,
+    "otherCores": [
+      1,
+      2,
+      3
+    ],
+    "periodMicroseconds": 100000,
+    "memoryCapMiB": 1024
+  },
+  "manifest": {
+    "revision": "32d4ceb1218fbe2fc4220804a301a6061c6dcf99",
+    "configurationHash": "7ddbb7e86dbfaf5e7bbc28541be28fdef04da02b30214109420d840fe664a618",
+    "sources": {
+      "src/pool/v3/programs.json": "b129fcfca83a4b48cb725d839fda7957491948ff15362b3c29c8014b7e77a2ec",
+      "src/pool/v3/check-set.json": "1a58d3fdb8bf64eeeb0a0dcb59b66670f8d7c2109fd9bcc454b75db00148459e",
+      "src/pool/v3/check-set-programs.json": "2e1d677923e2c213ca86af36abb85a8cf006dc0d00af28a228203afe086b7349",
+      "scripts/browser/throttle.mjs": "473375abf2fd2b6b65e4f5059746c8cd44e816bbb8de0f3b421f06864a199fd8",
+      "scripts/browser/check.mjs": "f5c707db3ae2de7d902a8791522d36c5253c694bb4ecc51750833179882edaaf",
+      "scripts/browser/proofs.mjs": "7ac8c5345e6b089dc9a737e07f69d5fddf87db6ed89884e7f7038d90391d09db",
+      "scripts/browser/rates.mjs": "72ee48f5dee931d42604bfd23f298bae4e7d818de1c7cd9a05277d21792c8cee",
+      "scripts/browser/wallet-drill.mjs": "644898cd39811a53126964eba74b696a92f4d12890e0d8207e728dbfed2ba0c5",
+      "scripts/browser/wallet-worker.mjs": "e3f8ad47d831a85f5a2ee11a7c8e52718d8c3acfa24c43e788999fd98507743d"
+    },
+    "bbjs": "5.2.0",
+    "browser": "Chrome/141.0.7390.37"
+  },
+  "workloads": {
+    "day": {
+      "statements": 900,
+      "headers": 720,
+      "capsules": 3650,
+      "roots": 1
+    },
+    "peak": {
+      "statements": 10000,
+      "headers": 720,
+      "capsules": 40000,
+      "roots": 1
+    },
+    "restore": {
+      "statements": 1000000,
+      "headers": 790000,
+      "capsules": 4000000,
+      "roots": 1
+    }
+  },
+  "estimate": [
+    {
+      "budget": "a mean day's sync",
+      "budgetSeconds": 30,
+      "kind": "arithmetic over measured rates",
+      "points": [
+        {
+          "s": 1,
+          "seconds": 15.873779999999998
+        },
+        {
+          "s": 1.5,
+          "seconds": 24.5267625
+        },
+        {
+          "s": 2,
+          "seconds": 36.048790000000004
+        },
+        {
+          "s": 3,
+          "seconds": 53.58535249999999
+        },
+        {
+          "s": 4,
+          "seconds": 63.6189875
+        },
+        {
+          "s": 6,
+          "seconds": 116.21771
+        }
+      ],
+      "heldUpTo": 1.5,
+      "failedFrom": 2,
+      "slowdown": 1.7,
+      "basis": "interpolated"
+    },
+    {
+      "budget": "a peak day's sync",
+      "budgetSeconds": 180,
+      "kind": "arithmetic over measured rates",
+      "points": [
+        {
+          "s": 1,
+          "seconds": 100.33847999999999
+        },
+        {
+          "s": 1.5,
+          "seconds": 146.4948
+        },
+        {
+          "s": 2,
+          "seconds": 207.61384
+        },
+        {
+          "s": 3,
+          "seconds": 300.59584
+        },
+        {
+          "s": 4,
+          "seconds": 394.3892
+        },
+        {
+          "s": 6,
+          "seconds": 786.1481600000001
+        }
+      ],
+      "heldUpTo": 1.5,
+      "failedFrom": 2,
+      "slowdown": 1.8,
+      "basis": "interpolated"
+    },
+    {
+      "budget": "a mean day's CPU",
+      "budgetSeconds": 120,
+      "kind": "arithmetic over measured rates",
+      "points": [
+        {
+          "s": 1,
+          "seconds": 15.873779999999998
+        },
+        {
+          "s": 1.5,
+          "seconds": 24.5267625
+        },
+        {
+          "s": 2,
+          "seconds": 36.048790000000004
+        },
+        {
+          "s": 3,
+          "seconds": 53.58535249999999
+        },
+        {
+          "s": 4,
+          "seconds": 63.6189875
+        },
+        {
+          "s": 6,
+          "seconds": 116.21771
+        }
+      ],
+      "heldUpTo": 6,
+      "slowdown": 6.1,
+      "basis": "extrapolated"
+    },
+    {
+      "budget": "a seed restore",
+      "budgetSeconds": 43200,
+      "kind": "arithmetic over measured rates",
+      "points": [
+        {
+          "s": 1,
+          "seconds": 17486.392
+        },
+        {
+          "s": 1.5,
+          "seconds": 26985.168
+        },
+        {
+          "s": 2,
+          "seconds": 39670.214
+        },
+        {
+          "s": 3,
+          "seconds": 58982.732
+        },
+        {
+          "s": 4,
+          "seconds": 70075.266
+        },
+        {
+          "s": 6,
+          "seconds": 127886.02
+        }
+      ],
+      "heldUpTo": 2,
+      "failedFrom": 3,
+      "slowdown": 2.2,
+      "basis": "interpolated"
+    },
+    {
+      "budget": "request",
+      "budgetSeconds": 30,
+      "kind": "measured command",
+      "points": [
+        {
+          "s": 1
+        },
+        {
+          "s": 1.5,
+          "seconds": 6.394
+        },
+        {
+          "s": 2,
+          "seconds": 8.718
+        },
+        {
+          "s": 3,
+          "seconds": 14.201
+        },
+        {
+          "s": 4,
+          "seconds": 18.894
+        },
+        {
+          "s": 6,
+          "seconds": 30.996
+        }
+      ],
+      "heldUpTo": 4,
+      "failedFrom": 6,
+      "slowdown": 5.8,
+      "basis": "interpolated"
+    },
+    {
+      "budget": "pay with its proof",
+      "budgetSeconds": 30,
+      "kind": "measured command",
+      "points": [
+        {
+          "s": 1
+        },
+        {
+          "s": 1.5,
+          "seconds": 13.821
+        },
+        {
+          "s": 2,
+          "seconds": 18.353
+        },
+        {
+          "s": 3,
+          "seconds": 29.18
+        },
+        {
+          "s": 4,
+          "seconds": 37.705
+        },
+        {
+          "s": 6,
+          "seconds": 58.195
+        }
+      ],
+      "heldUpTo": 3,
+      "failedFrom": 4,
+      "slowdown": 3.1,
+      "basis": "interpolated"
+    },
+    {
+      "budget": "fulfill",
+      "budgetSeconds": 30,
+      "kind": "measured command",
+      "points": [
+        {
+          "s": 1
+        },
+        {
+          "s": 1.5,
+          "seconds": 7.609
+        },
+        {
+          "s": 2,
+          "seconds": 9.286
+        },
+        {
+          "s": 3,
+          "seconds": 14.497
+        },
+        {
+          "s": 4,
+          "seconds": 19.213
+        },
+        {
+          "s": 6,
+          "seconds": 30.203
+        }
+      ],
+      "heldUpTo": 4,
+      "failedFrom": 6,
+      "slowdown": 6,
+      "basis": "interpolated"
+    }
+  ],
+  "memory": [
+    {
+      "s": 1,
+      "proofs": {
+        "passed": true,
+        "mappedPeakMiB": 339,
+        "anonPeakMiB": 332,
+        "chargedPeakMiB": 358,
+        "limitHits": 0,
+        "oomKills": 0
+      },
+      "rates": {
+        "passed": true,
+        "mappedPeakMiB": 310,
+        "anonPeakMiB": 305,
+        "chargedPeakMiB": 340,
+        "limitHits": 0,
+        "oomKills": 0
+      },
+      "wallet": {
+        "passed": false,
+        "mappedPeakMiB": 981,
+        "anonPeakMiB": 975,
+        "chargedPeakMiB": 1024,
+        "limitHits": 22612,
+        "oomKills": 1
+      }
+    },
+    {
+      "s": 1.5,
+      "proofs": {
+        "passed": true,
+        "mappedPeakMiB": 328,
+        "anonPeakMiB": 322,
+        "chargedPeakMiB": 359,
+        "limitHits": 0,
+        "oomKills": 0
+      },
+      "rates": {
+        "passed": true,
+        "mappedPeakMiB": 317,
+        "anonPeakMiB": 311,
+        "chargedPeakMiB": 345,
+        "limitHits": 0,
+        "oomKills": 0
+      },
+      "wallet": {
+        "passed": true,
+        "mappedPeakMiB": 991,
+        "anonPeakMiB": 985,
+        "chargedPeakMiB": 1024,
+        "limitHits": 19502,
+        "oomKills": 0
+      }
+    },
+    {
+      "s": 2,
+      "proofs": {
+        "passed": true,
+        "mappedPeakMiB": 326,
+        "anonPeakMiB": 321,
+        "chargedPeakMiB": 347,
+        "limitHits": 0,
+        "oomKills": 0
+      },
+      "rates": {
+        "passed": true,
+        "mappedPeakMiB": 320,
+        "anonPeakMiB": 315,
+        "chargedPeakMiB": 348,
+        "limitHits": 0,
+        "oomKills": 0
+      },
+      "wallet": {
+        "passed": true,
+        "mappedPeakMiB": 883,
+        "anonPeakMiB": 876,
+        "chargedPeakMiB": 1014,
+        "limitHits": 0,
+        "oomKills": 0
+      }
+    },
+    {
+      "s": 3,
+      "proofs": {
+        "passed": true,
+        "mappedPeakMiB": 328,
+        "anonPeakMiB": 323,
+        "chargedPeakMiB": 350,
+        "limitHits": 0,
+        "oomKills": 0
+      },
+      "rates": {
+        "passed": true,
+        "mappedPeakMiB": 320,
+        "anonPeakMiB": 315,
+        "chargedPeakMiB": 409,
+        "limitHits": 0,
+        "oomKills": 0
+      },
+      "wallet": {
+        "passed": true,
+        "mappedPeakMiB": 955,
+        "anonPeakMiB": 948,
+        "chargedPeakMiB": 1024,
+        "limitHits": 12989,
+        "oomKills": 0
+      }
+    },
+    {
+      "s": 4,
+      "proofs": {
+        "passed": true,
+        "mappedPeakMiB": 327,
+        "anonPeakMiB": 322,
+        "chargedPeakMiB": 348,
+        "limitHits": 0,
+        "oomKills": 0
+      },
+      "rates": {
+        "passed": true,
+        "mappedPeakMiB": 313,
+        "anonPeakMiB": 308,
+        "chargedPeakMiB": 408,
+        "limitHits": 0,
+        "oomKills": 0
+      },
+      "wallet": {
+        "passed": true,
+        "mappedPeakMiB": 962,
+        "anonPeakMiB": 955,
+        "chargedPeakMiB": 1024,
+        "limitHits": 14027,
+        "oomKills": 0
+      }
+    },
+    {
+      "s": 6,
+      "proofs": {
+        "passed": true,
+        "mappedPeakMiB": 329,
+        "anonPeakMiB": 324,
+        "chargedPeakMiB": 350,
+        "limitHits": 0,
+        "oomKills": 0
+      },
+      "rates": {
+        "passed": true,
+        "mappedPeakMiB": 319,
+        "anonPeakMiB": 314,
+        "chargedPeakMiB": 417,
+        "limitHits": 0,
+        "oomKills": 0
+      },
+      "wallet": {
+        "passed": true,
+        "mappedPeakMiB": 953,
+        "anonPeakMiB": 945,
+        "chargedPeakMiB": 1024,
+        "limitHits": 12167,
+        "oomKills": 0
+      }
+    }
+  ],
+  "runs": [
+    {
+      "slowdown": 1,
+      "quotaMicroseconds": 100000,
+      "checks": {
+        "proofs": {
+          "status": 0,
+          "seconds": 11.592,
+          "result": {
+            "kind": "proofs",
+            "phases": [
+              {
+                "name": "start the backend from the parameters",
+                "ms": 351,
+                "memoryBytes": 81705326
+              },
+              {
+                "name": "derive and check the six relations' keys",
+                "ms": 3178,
+                "memoryBytes": 105375627
+              },
+              {
+                "name": "verify a genuine proof of each proved kind",
+                "ms": 445,
+                "memoryBytes": 125946598
+              },
+              {
+                "name": "prove a spend",
+                "ms": 4550,
+                "memoryBytes": 130676197
+              },
+              {
+                "name": "verify the spend",
+                "ms": 32,
+                "memoryBytes": 130674697
+              },
+              {
+                "name": "try 4000 capsules",
+                "ms": 848,
+                "memoryBytes": 131187398
+              }
+            ],
+            "checks": {
+              "points": 32768,
+              "genuine": {
+                "issue": true,
+                "spend": true,
+                "burn": true,
+                "demand": true,
+                "settle": true
+              },
+              "tampered": false,
+              "spendProofBytes": 14656,
+              "spendVerifies": true,
+              "capsulesFound": 1000,
+              "capsuleMs": 0.212
+            },
+            "worker": {
+              "userAgent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/141.0.0.0 Safari/537.36",
+              "hardwareConcurrency": 1,
+              "deviceMemory": 8
+            },
+            "check": "proofs",
+            "browser": "Chrome/141.0.7390.37",
+            "userAgent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/141.0.0.0 Safari/537.36",
+            "platform": "linux",
+            "browserRssBytes": {
+              "idle": 585338880,
+              "peak": 1127714816
+            },
+            "code": "1ca2fba23a287b95efa30627a02f0b590ab68bfc5a18af33a9fdc244c72c0929",
+            "seconds": 11.415
+          },
+          "memory": {
+            "mappedPeakBytes": 355504128,
+            "anonPeakBytes": 348434432,
+            "peakBytes": 375599104,
+            "limitHits": 0,
+            "oomKills": 0
+          },
+          "throttled": {
+            "periods": 7,
+            "seconds": 0.007140335
+          }
+        },
+        "rates": {
+          "status": 0,
+          "seconds": 32.253,
+          "result": {
+            "kind": "rates",
+            "phases": [
+              {
+                "name": "build the package of 1 issue and 300 spends (untimed work)",
+                "ms": 7740,
+                "memoryBytes": 70170616
+              },
+              {
+                "name": "replay the package (read 1)",
+                "ms": 2269,
+                "count": 301,
+                "perMs": 7.539,
+                "memoryBytes": 70487375
+              },
+              {
+                "name": "replay the package (read 2)",
+                "ms": 2357,
+                "count": 301,
+                "perMs": 7.83,
+                "memoryBytes": 70589159
+              },
+              {
+                "name": "leaf and node digests of the 301 statements",
+                "ms": 182,
+                "count": 301,
+                "perMs": 0.605,
+                "memoryBytes": 70599223
+              },
+              {
+                "name": "mine 300 synthetic headers (untimed work)",
+                "ms": 13830,
+                "memoryBytes": 71406343
+              },
+              {
+                "name": "check 300 headers in the store",
+                "ms": 3115,
+                "count": 300,
+                "perMs": 10.384,
+                "memoryBytes": 73983602
+              }
+            ],
+            "checks": {
+              "packageBytes": 4686720,
+              "replayPosition": "301",
+              "verifierCallsPerRead": 301,
+              "digestRoot": "0x2ccc133dbc03c1b4d92ecadeb6a1cde72c2b60a5d152d951582c09233eedf7d9",
+              "headersAdded": 300
+            },
+            "sizes": {
+              "spends": 300,
+              "reads": 2,
+              "headers": 300
+            },
+            "worker": {
+              "userAgent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/141.0.0.0 Safari/537.36",
+              "hardwareConcurrency": 1,
+              "deviceMemory": 8
+            },
+            "check": "rates",
+            "browser": "Chrome/141.0.7390.37",
+            "userAgent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/141.0.0.0 Safari/537.36",
+            "platform": "linux",
+            "browserRssBytes": {
+              "idle": 641282048,
+              "peak": 1111244800
+            },
+            "code": "413258b1fd7a5e8b19c1d5e4733c54fef2fa994aff0fb30080cc0e577a01f886",
+            "seconds": 32.075
+          },
+          "memory": {
+            "mappedPeakBytes": 324808704,
+            "anonPeakBytes": 319406080,
+            "peakBytes": 356491264,
+            "limitHits": 0,
+            "oomKills": 0
+          },
+          "throttled": {
+            "periods": 8,
+            "seconds": 0.004851739
+          }
+        },
+        "wallet": {
+          "status": 1,
+          "seconds": 140.387,
+          "tail": "browser check: {\"built\":[\"wallet\"],\"code\":\"cbe824044d299240d780c5a327a26f05735723a74d99234ece883e88a78a1fe2\",\"seconds\":0.795}\nbrowser check: passed: an operator, a backer's terms and a shop as processes; serve listens\nbrowser check: passed: the holder's wallet in the browser: init (an exact rerun replays), terms and service kept\nbrowser check: passed: receive: a request whose frame is read back (an exact retry the same frame), the backer's issue to it read final by fulfill (a rerun exits 4 with the saved result) and held by sync\nbrowser check: passed: pay: the browser proves a payment to the shop's request; a substituted request is refused; the shop fulfills it\nbrowser check: passed: one command at a time: a second command while one holds the pool is refused BUSY\nfile:///home/user/reference-ts/scripts/browser/check.mjs:333\n    const crashed = new Promise((_, reject) => { crash = method => reject(new Error(`browser check: the page crashed (${method})`)); });\n                                                                          ^\n\nError: browser check: the page crashed (Inspector.targetCrashed)\n    at crash (file:///home/user/reference-ts/scripts/browser/check.mjs:333:75)\n    at file:///home/user/reference-ts/scripts/browser/check.mjs:336:102\n    at socket.onmessage (file:///home/user/reference-ts/scripts/browser/check.mjs:218:37)\n    at [nodejs.internal.kHybridDispatch] (node:internal/event_target:848:20)\n    at WebSocket.dispatchEvent (node:internal/event_target:789:26)\n    at fireEvent (node:internal/deps/undici/undici:14438:14)\n    at #onMessage (node:internal/deps/undici/undici:15762:9)\n    at Object.onMessage (node:internal/deps/undici/undici:15469:76)\n    at websocketMessageReceived (node:internal/deps/undici/undici:14442:15)\n    at node:internal/deps/undici/undici:15171:21\n\nNode.js v24.21.0\n",
+          "memory": {
+            "mappedPeakBytes": 1028562944,
+            "anonPeakBytes": 1021964288,
+            "peakBytes": 1073741824,
+            "limitHits": 22612,
+            "oomKills": 1
+          },
+          "throttled": {
+            "periods": 38,
+            "seconds": 0.053829477
+          }
+        }
+      },
+      "rates": {
+        "replayPerStatementMs": 7.83,
+        "digestsPerStatementMs": 0.605,
+        "headerMs": 10.384,
+        "capsuleMs": 0.212,
+        "verifyMs": 32,
+        "proveSpendMs": 4550,
+        "keysMs": 3178,
+        "commandMs": {}
+      }
+    },
+    {
+      "slowdown": 1.5,
+      "quotaMicroseconds": 66667,
+      "checks": {
+        "proofs": {
+          "status": 0,
+          "seconds": 17.788,
+          "result": {
+            "kind": "proofs",
+            "phases": [
+              {
+                "name": "start the backend from the parameters",
+                "ms": 670,
+                "memoryBytes": 81703302
+              },
+              {
+                "name": "derive and check the six relations' keys",
+                "ms": 4864,
+                "memoryBytes": 105379287
+              },
+              {
+                "name": "verify a genuine proof of each proved kind",
+                "ms": 774,
+                "memoryBytes": 125949586
+              },
+              {
+                "name": "prove a spend",
+                "ms": 7129,
+                "memoryBytes": 130675933
+              },
+              {
+                "name": "verify the spend",
+                "ms": 68,
+                "memoryBytes": 130675025
+              },
+              {
+                "name": "try 4000 capsules",
+                "ms": 1397,
+                "memoryBytes": 131187938
+              }
+            ],
+            "checks": {
+              "points": 32768,
+              "genuine": {
+                "issue": true,
+                "spend": true,
+                "burn": true,
+                "demand": true,
+                "settle": true
+              },
+              "tampered": false,
+              "spendProofBytes": 14656,
+              "spendVerifies": true,
+              "capsulesFound": 1000,
+              "capsuleMs": 0.34925
+            },
+            "worker": {
+              "userAgent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/141.0.0.0 Safari/537.36",
+              "hardwareConcurrency": 1,
+              "deviceMemory": 8
+            },
+            "check": "proofs",
+            "browser": "Chrome/141.0.7390.37",
+            "userAgent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/141.0.0.0 Safari/537.36",
+            "platform": "linux",
+            "browserRssBytes": {
+              "idle": 646647808,
+              "peak": 1134751744
+            },
+            "code": "1ca2fba23a287b95efa30627a02f0b590ab68bfc5a18af33a9fdc244c72c0929",
+            "seconds": 17.574
+          },
+          "memory": {
+            "mappedPeakBytes": 343556096,
+            "anonPeakBytes": 338014208,
+            "peakBytes": 376954880,
+            "limitHits": 0,
+            "oomKills": 0
+          },
+          "throttled": {
+            "periods": 170,
+            "seconds": 5.448845807
+          }
+        },
+        "rates": {
+          "status": 0,
+          "seconds": 48.499,
+          "result": {
+            "kind": "rates",
+            "phases": [
+              {
+                "name": "build the package of 1 issue and 300 spends (untimed work)",
+                "ms": 10996,
+                "memoryBytes": 70165980
+              },
+              {
+                "name": "replay the package (read 1)",
+                "ms": 3369,
+                "count": 301,
+                "perMs": 11.193,
+                "memoryBytes": 70482575
+              },
+              {
+                "name": "replay the package (read 2)",
+                "ms": 3152,
+                "count": 301,
+                "perMs": 10.471,
+                "memoryBytes": 70584463
+              },
+              {
+                "name": "leaf and node digests of the 301 statements",
+                "ms": 245,
+                "count": 301,
+                "perMs": 0.815,
+                "memoryBytes": 70594539
+              },
+              {
+                "name": "mine 300 synthetic headers (untimed work)",
+                "ms": 21595,
+                "memoryBytes": 71401655
+              },
+              {
+                "name": "check 300 headers in the store",
+                "ms": 5157,
+                "count": 300,
+                "perMs": 17.19,
+                "memoryBytes": 73978898
+              }
+            ],
+            "checks": {
+              "packageBytes": 4686720,
+              "replayPosition": "301",
+              "verifierCallsPerRead": 301,
+              "digestRoot": "0x2ccc133dbc03c1b4d92ecadeb6a1cde72c2b60a5d152d951582c09233eedf7d9",
+              "headersAdded": 300
+            },
+            "sizes": {
+              "spends": 300,
+              "reads": 2,
+              "headers": 300
+            },
+            "worker": {
+              "userAgent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/141.0.0.0 Safari/537.36",
+              "hardwareConcurrency": 1,
+              "deviceMemory": 8
+            },
+            "check": "rates",
+            "browser": "Chrome/141.0.7390.37",
+            "userAgent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/141.0.0.0 Safari/537.36",
+            "platform": "linux",
+            "browserRssBytes": {
+              "idle": 645345280,
+              "peak": 1113739264
+            },
+            "code": "413258b1fd7a5e8b19c1d5e4733c54fef2fa994aff0fb30080cc0e577a01f886",
+            "seconds": 48.28
+          },
+          "memory": {
+            "mappedPeakBytes": 331952128,
+            "anonPeakBytes": 326418432,
+            "peakBytes": 361271296,
+            "limitHits": 0,
+            "oomKills": 0
+          },
+          "throttled": {
+            "periods": 476,
+            "seconds": 15.24541206
+          }
+        },
+        "wallet": {
+          "status": 0,
+          "seconds": 191.795,
+          "result": {
+            "checks": [
+              {
+                "label": "an operator, a backer's terms and a shop as processes; serve listens",
+                "ms": 20738
+              },
+              {
+                "label": "the holder's wallet in the browser: init (an exact rerun replays), terms and service kept",
+                "ms": 16675
+              },
+              {
+                "label": "receive: a request whose frame is read back (an exact retry the same frame), the backer's issue to it read final by fulfill (a rerun exits 4 with the saved result) and held by sync",
+                "ms": 71286
+              },
+              {
+                "label": "pay: the browser proves a payment to the shop's request; a substituted request is refused; the shop fulfills it",
+                "ms": 42634
+              },
+              {
+                "label": "one command at a time: a second command while one holds the pool is refused BUSY",
+                "ms": 7401
+              },
+              {
+                "label": "restore: the seed shown in the browser restores into a new directory that finds the same holdings; an onion service is refused PROXY",
+                "ms": 30788
+              }
+            ],
+            "commands": [
+              {
+                "command": "init",
+                "code": 0,
+                "ms": 7892
+              },
+              {
+                "command": "init",
+                "code": 0,
+                "ms": 6475
+              },
+              {
+                "command": "terms add",
+                "code": 0,
+                "ms": 1134
+              },
+              {
+                "command": "service add",
+                "code": 0,
+                "ms": 1172
+              },
+              {
+                "command": "request",
+                "code": 0,
+                "ms": 6309
+              },
+              {
+                "command": "request",
+                "code": 0,
+                "ms": 6394
+              },
+              {
+                "command": "status",
+                "code": 1,
+                "ms": 6375
+              },
+              {
+                "command": "fulfill",
+                "code": 1,
+                "ms": 7311
+              },
+              {
+                "command": "fulfill",
+                "code": 0,
+                "ms": 7609
+              },
+              {
+                "command": "fulfill",
+                "code": 4,
+                "ms": 6454
+              },
+              {
+                "command": "sync",
+                "code": 0,
+                "ms": 6896
+              },
+              {
+                "command": "pay",
+                "code": 1,
+                "ms": 1010
+              },
+              {
+                "command": "pay",
+                "code": 0,
+                "ms": 13821
+              },
+              {
+                "command": "sync",
+                "code": 0,
+                "ms": 7463
+              },
+              {
+                "command": "status",
+                "code": 0,
+                "ms": 6116
+              },
+              {
+                "command": "status",
+                "code": 1,
+                "ms": 1764
+              },
+              {
+                "command": "sync",
+                "code": 0,
+                "ms": 7400
+              },
+              {
+                "command": "seed",
+                "code": 0,
+                "ms": 6280
+              },
+              {
+                "command": "restore-seed",
+                "code": 0,
+                "ms": 6809
+              },
+              {
+                "command": "terms add",
+                "code": 0,
+                "ms": 1118
+              },
+              {
+                "command": "service add",
+                "code": 0,
+                "ms": 1091
+              },
+              {
+                "command": "sync",
+                "code": 1,
+                "ms": 6961
+              },
+              {
+                "command": "service add",
+                "code": 0,
+                "ms": 1198
+              },
+              {
+                "command": "sync",
+                "code": 0,
+                "ms": 7330
+              }
+            ],
+            "processes": [
+              {
+                "command": "operator init",
+                "status": 0,
+                "ms": 631
+              },
+              {
+                "command": "operator venue create",
+                "status": 0,
+                "ms": 961
+              },
+              {
+                "command": "wallet init",
+                "status": 0,
+                "ms": 4503
+              },
+              {
+                "command": "wallet terms create",
+                "status": 0,
+                "ms": 486
+              },
+              {
+                "command": "operator open",
+                "status": 0,
+                "ms": 4412
+              },
+              {
+                "command": "wallet init",
+                "status": 0,
+                "ms": 4208
+              },
+              {
+                "command": "wallet terms add",
+                "status": 0,
+                "ms": 509
+              },
+              {
+                "command": "wallet service add",
+                "status": 0,
+                "ms": 492
+              },
+              {
+                "command": "wallet service add",
+                "status": 0,
+                "ms": 509
+              },
+              {
+                "command": "wallet issue",
+                "status": 0,
+                "ms": 5823
+              },
+              {
+                "command": "wallet submit",
+                "status": 1,
+                "ms": 3945
+              },
+              {
+                "command": "wallet submit",
+                "status": 1,
+                "ms": 3829
+              },
+              {
+                "command": "wallet submit",
+                "status": 1,
+                "ms": 4285
+              },
+              {
+                "command": "wallet submit",
+                "status": 0,
+                "ms": 4327
+              },
+              {
+                "command": "wallet request",
+                "status": 0,
+                "ms": 4005
+              },
+              {
+                "command": "wallet fulfill",
+                "status": 1,
+                "ms": 4632
+              },
+              {
+                "command": "wallet fulfill",
+                "status": 0,
+                "ms": 4374
+              }
+            ],
+            "persisted": false,
+            "check": "wallet",
+            "browser": "Chrome/141.0.7390.37",
+            "userAgent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/141.0.0.0 Safari/537.36",
+            "platform": "linux",
+            "browserRssBytes": {
+              "idle": 620273664,
+              "peak": 1891848192
+            },
+            "code": "cbe824044d299240d780c5a327a26f05735723a74d99234ece883e88a78a1fe2",
+            "seconds": 191.459
+          },
+          "memory": {
+            "mappedPeakBytes": 1039441920,
+            "anonPeakBytes": 1032650752,
+            "peakBytes": 1073741824,
+            "limitHits": 19502,
+            "oomKills": 0
+          },
+          "throttled": {
+            "periods": 1321,
+            "seconds": 41.582619999
+          }
+        }
+      },
+      "rates": {
+        "replayPerStatementMs": 11.193,
+        "digestsPerStatementMs": 0.815,
+        "headerMs": 17.19,
+        "capsuleMs": 0.34925,
+        "verifyMs": 68,
+        "proveSpendMs": 7129,
+        "keysMs": 4864,
+        "commandMs": {
+          "init": 7892,
+          "request": 6394,
+          "fulfill": 7609,
+          "pay": 13821,
+          "sync": 7463
+        }
+      }
+    },
+    {
+      "slowdown": 2,
+      "quotaMicroseconds": 50000,
+      "checks": {
+        "proofs": {
+          "status": 0,
+          "seconds": 23.421,
+          "result": {
+            "kind": "proofs",
+            "phases": [
+              {
+                "name": "start the backend from the parameters",
+                "ms": 725,
+                "memoryBytes": 81703302
+              },
+              {
+                "name": "derive and check the six relations' keys",
+                "ms": 6528,
+                "memoryBytes": 105379071
+              },
+              {
+                "name": "verify a genuine proof of each proved kind",
+                "ms": 835,
+                "memoryBytes": 125949062
+              },
+              {
+                "name": "prove a spend",
+                "ms": 9500,
+                "memoryBytes": 130676521
+              },
+              {
+                "name": "verify the spend",
+                "ms": 84,
+                "memoryBytes": 130675085
+              },
+              {
+                "name": "try 4000 capsules",
+                "ms": 1964,
+                "memoryBytes": 131180814
+              }
+            ],
+            "checks": {
+              "points": 32768,
+              "genuine": {
+                "issue": true,
+                "spend": true,
+                "burn": true,
+                "demand": true,
+                "settle": true
+              },
+              "tampered": false,
+              "spendProofBytes": 14656,
+              "spendVerifies": true,
+              "capsulesFound": 1000,
+              "capsuleMs": 0.491
+            },
+            "worker": {
+              "userAgent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/141.0.0.0 Safari/537.36",
+              "hardwareConcurrency": 1,
+              "deviceMemory": 8
+            },
+            "check": "proofs",
+            "browser": "Chrome/141.0.7390.37",
+            "userAgent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/141.0.0.0 Safari/537.36",
+            "platform": "linux",
+            "browserRssBytes": {
+              "idle": 674893824,
+              "peak": 1116438528
+            },
+            "code": "1ca2fba23a287b95efa30627a02f0b590ab68bfc5a18af33a9fdc244c72c0929",
+            "seconds": 23.167
+          },
+          "memory": {
+            "mappedPeakBytes": 341860352,
+            "anonPeakBytes": 336424960,
+            "peakBytes": 364183552,
+            "limitHits": 0,
+            "oomKills": 0
+          },
+          "throttled": {
+            "periods": 227,
+            "seconds": 11.122378362
+          }
+        },
+        "rates": {
+          "status": 0,
+          "seconds": 68.306,
+          "result": {
+            "kind": "rates",
+            "phases": [
+              {
+                "name": "build the package of 1 issue and 300 spends (untimed work)",
+                "ms": 15615,
+                "memoryBytes": 70167984
+              },
+              {
+                "name": "replay the package (read 1)",
+                "ms": 4762,
+                "count": 301,
+                "perMs": 15.821,
+                "memoryBytes": 70484871
+              },
+              {
+                "name": "replay the package (read 2)",
+                "ms": 4479,
+                "count": 301,
+                "perMs": 14.879,
+                "memoryBytes": 70587351
+              },
+              {
+                "name": "leaf and node digests of the 301 statements",
+                "ms": 322,
+                "count": 301,
+                "perMs": 1.071,
+                "memoryBytes": 70596191
+              },
+              {
+                "name": "mine 300 synthetic headers (untimed work)",
+                "ms": 30095,
+                "memoryBytes": 71401815
+              },
+              {
+                "name": "check 300 headers in the store",
+                "ms": 7904,
+                "count": 300,
+                "perMs": 26.347,
+                "memoryBytes": 73978474
+              }
+            ],
+            "checks": {
+              "packageBytes": 4686720,
+              "replayPosition": "301",
+              "verifierCallsPerRead": 301,
+              "digestRoot": "0x2ccc133dbc03c1b4d92ecadeb6a1cde72c2b60a5d152d951582c09233eedf7d9",
+              "headersAdded": 300
+            },
+            "sizes": {
+              "spends": 300,
+              "reads": 2,
+              "headers": 300
+            },
+            "worker": {
+              "userAgent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/141.0.0.0 Safari/537.36",
+              "hardwareConcurrency": 1,
+              "deviceMemory": 8
+            },
+            "check": "rates",
+            "browser": "Chrome/141.0.7390.37",
+            "userAgent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/141.0.0.0 Safari/537.36",
+            "platform": "linux",
+            "browserRssBytes": {
+              "idle": 625688576,
+              "peak": 1144770560
+            },
+            "code": "413258b1fd7a5e8b19c1d5e4733c54fef2fa994aff0fb30080cc0e577a01f886",
+            "seconds": 67.988
+          },
+          "memory": {
+            "mappedPeakBytes": 335405056,
+            "anonPeakBytes": 329961472,
+            "peakBytes": 364855296,
+            "limitHits": 0,
+            "oomKills": 0
+          },
+          "throttled": {
+            "periods": 674,
+            "seconds": 32.811509935
+          }
+        },
+        "wallet": {
+          "status": 0,
+          "seconds": 228.108,
+          "result": {
+            "checks": [
+              {
+                "label": "an operator, a backer's terms and a shop as processes; serve listens",
+                "ms": 20185
+              },
+              {
+                "label": "the holder's wallet in the browser: init (an exact rerun replays), terms and service kept",
+                "ms": 21948
+              },
+              {
+                "label": "receive: a request whose frame is read back (an exact retry the same frame), the backer's issue to it read final by fulfill (a rerun exits 4 with the saved result) and held by sync",
+                "ms": 86001
+              },
+              {
+                "label": "pay: the browser proves a payment to the shop's request; a substituted request is refused; the shop fulfills it",
+                "ms": 46995
+              },
+              {
+                "label": "one command at a time: a second command while one holds the pool is refused BUSY",
+                "ms": 9932
+              },
+              {
+                "label": "restore: the seed shown in the browser restores into a new directory that finds the same holdings; an onion service is refused PROXY",
+                "ms": 40378
+              }
+            ],
+            "commands": [
+              {
+                "command": "init",
+                "code": 0,
+                "ms": 10843
+              },
+              {
+                "command": "init",
+                "code": 0,
+                "ms": 8205
+              },
+              {
+                "command": "terms add",
+                "code": 0,
+                "ms": 1420
+              },
+              {
+                "command": "service add",
+                "code": 0,
+                "ms": 1477
+              },
+              {
+                "command": "request",
+                "code": 0,
+                "ms": 8718
+              },
+              {
+                "command": "request",
+                "code": 0,
+                "ms": 8415
+              },
+              {
+                "command": "status",
+                "code": 1,
+                "ms": 9378
+              },
+              {
+                "command": "fulfill",
+                "code": 1,
+                "ms": 9114
+              },
+              {
+                "command": "fulfill",
+                "code": 0,
+                "ms": 9286
+              },
+              {
+                "command": "fulfill",
+                "code": 4,
+                "ms": 8616
+              },
+              {
+                "command": "sync",
+                "code": 0,
+                "ms": 8859
+              },
+              {
+                "command": "pay",
+                "code": 1,
+                "ms": 1416
+              },
+              {
+                "command": "pay",
+                "code": 0,
+                "ms": 18353
+              },
+              {
+                "command": "sync",
+                "code": 0,
+                "ms": 9625
+              },
+              {
+                "command": "status",
+                "code": 0,
+                "ms": 8187
+              },
+              {
+                "command": "status",
+                "code": 1,
+                "ms": 2312
+              },
+              {
+                "command": "sync",
+                "code": 0,
+                "ms": 9932
+              },
+              {
+                "command": "seed",
+                "code": 0,
+                "ms": 8184
+              },
+              {
+                "command": "restore-seed",
+                "code": 0,
+                "ms": 9018
+              },
+              {
+                "command": "terms add",
+                "code": 0,
+                "ms": 1490
+              },
+              {
+                "command": "service add",
+                "code": 0,
+                "ms": 1487
+              },
+              {
+                "command": "sync",
+                "code": 1,
+                "ms": 9099
+              },
+              {
+                "command": "service add",
+                "code": 0,
+                "ms": 1484
+              },
+              {
+                "command": "sync",
+                "code": 0,
+                "ms": 9614
+              }
+            ],
+            "processes": [
+              {
+                "command": "operator init",
+                "status": 0,
+                "ms": 526
+              },
+              {
+                "command": "operator venue create",
+                "status": 0,
+                "ms": 920
+              },
+              {
+                "command": "wallet init",
+                "status": 0,
+                "ms": 4427
+              },
+              {
+                "command": "wallet terms create",
+                "status": 0,
+                "ms": 493
+              },
+              {
+                "command": "operator open",
+                "status": 0,
+                "ms": 4056
+              },
+              {
+                "command": "wallet init",
+                "status": 0,
+                "ms": 4248
+              },
+              {
+                "command": "wallet terms add",
+                "status": 0,
+                "ms": 501
+              },
+              {
+                "command": "wallet service add",
+                "status": 0,
+                "ms": 543
+              },
+              {
+                "command": "wallet service add",
+                "status": 0,
+                "ms": 505
+              },
+              {
+                "command": "wallet issue",
+                "status": 0,
+                "ms": 5848
+              },
+              {
+                "command": "wallet submit",
+                "status": 1,
+                "ms": 3938
+              },
+              {
+                "command": "wallet submit",
+                "status": 1,
+                "ms": 3873
+              },
+              {
+                "command": "wallet submit",
+                "status": 1,
+                "ms": 3938
+              },
+              {
+                "command": "wallet submit",
+                "status": 0,
+                "ms": 4286
+              },
+              {
+                "command": "wallet request",
+                "status": 0,
+                "ms": 3890
+              },
+              {
+                "command": "wallet fulfill",
+                "status": 0,
+                "ms": 4716
+              }
+            ],
+            "persisted": false,
+            "check": "wallet",
+            "browser": "Chrome/141.0.7390.37",
+            "userAgent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/141.0.0.0 Safari/537.36",
+            "platform": "linux",
+            "browserRssBytes": {
+              "idle": 683556864,
+              "peak": 1779089408
+            },
+            "code": "cbe824044d299240d780c5a327a26f05735723a74d99234ece883e88a78a1fe2",
+            "seconds": 227.777
+          },
+          "memory": {
+            "mappedPeakBytes": 926011392,
+            "anonPeakBytes": 918188032,
+            "peakBytes": 1062813696,
+            "limitHits": 0,
+            "oomKills": 0
+          },
+          "throttled": {
+            "periods": 1754,
+            "seconds": 84.992820063
+          }
+        }
+      },
+      "rates": {
+        "replayPerStatementMs": 15.821,
+        "digestsPerStatementMs": 1.071,
+        "headerMs": 26.347,
+        "capsuleMs": 0.491,
+        "verifyMs": 84,
+        "proveSpendMs": 9500,
+        "keysMs": 6528,
+        "commandMs": {
+          "init": 10843,
+          "request": 8718,
+          "fulfill": 9286,
+          "pay": 18353,
+          "sync": 9932
+        }
+      }
+    },
+    {
+      "slowdown": 3,
+      "quotaMicroseconds": 33333,
+      "checks": {
+        "proofs": {
+          "status": 0,
+          "seconds": 34.674,
+          "result": {
+            "kind": "proofs",
+            "phases": [
+              {
+                "name": "start the backend from the parameters",
+                "ms": 1115,
+                "memoryBytes": 81705202
+              },
+              {
+                "name": "derive and check the six relations' keys",
+                "ms": 9585,
+                "memoryBytes": 105380839
+              },
+              {
+                "name": "verify a genuine proof of each proved kind",
+                "ms": 1489,
+                "memoryBytes": 125946718
+              },
+              {
+                "name": "prove a spend",
+                "ms": 14178,
+                "memoryBytes": 130679873
+              },
+              {
+                "name": "verify the spend",
+                "ms": 102,
+                "memoryBytes": 130679049
+              },
+              {
+                "name": "try 4000 capsules",
+                "ms": 2905,
+                "memoryBytes": 131190170
+              }
+            ],
+            "checks": {
+              "points": 32768,
+              "genuine": {
+                "issue": true,
+                "spend": true,
+                "burn": true,
+                "demand": true,
+                "settle": true
+              },
+              "tampered": false,
+              "spendProofBytes": 14656,
+              "spendVerifies": true,
+              "capsulesFound": 1000,
+              "capsuleMs": 0.72625
+            },
+            "worker": {
+              "userAgent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/141.0.0.0 Safari/537.36",
+              "hardwareConcurrency": 1,
+              "deviceMemory": 8
+            },
+            "check": "proofs",
+            "browser": "Chrome/141.0.7390.37",
+            "userAgent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/141.0.0.0 Safari/537.36",
+            "platform": "linux",
+            "browserRssBytes": {
+              "idle": 673800192,
+              "peak": 1129971712
+            },
+            "code": "1ca2fba23a287b95efa30627a02f0b590ab68bfc5a18af33a9fdc244c72c0929",
+            "seconds": 34.417
+          },
+          "memory": {
+            "mappedPeakBytes": 344436736,
+            "anonPeakBytes": 338821120,
+            "peakBytes": 366866432,
+            "limitHits": 0,
+            "oomKills": 0
+          },
+          "throttled": {
+            "periods": 341,
+            "seconds": 22.420873514
+          }
+        },
+        "rates": {
+          "status": 0,
+          "seconds": 106.026,
+          "result": {
+            "kind": "rates",
+            "phases": [
+              {
+                "name": "build the package of 1 issue and 300 spends (untimed work)",
+                "ms": 22694,
+                "memoryBytes": 70161488
+              },
+              {
+                "name": "replay the package (read 1)",
+                "ms": 6785,
+                "count": 301,
+                "perMs": 22.542,
+                "memoryBytes": 70478575
+              },
+              {
+                "name": "replay the package (read 2)",
+                "ms": 6503,
+                "count": 301,
+                "perMs": 21.604,
+                "memoryBytes": 70579683
+              },
+              {
+                "name": "leaf and node digests of the 301 statements",
+                "ms": 512,
+                "count": 301,
+                "perMs": 1.701,
+                "memoryBytes": 70589843
+              },
+              {
+                "name": "mine 300 synthetic headers (untimed work)",
+                "ms": 49603,
+                "memoryBytes": 71394735
+              },
+              {
+                "name": "check 300 headers in the store",
+                "ms": 12089,
+                "count": 300,
+                "perMs": 40.297,
+                "memoryBytes": 73971826
+              }
+            ],
+            "checks": {
+              "packageBytes": 4686720,
+              "replayPosition": "301",
+              "verifierCallsPerRead": 301,
+              "digestRoot": "0x2ccc133dbc03c1b4d92ecadeb6a1cde72c2b60a5d152d951582c09233eedf7d9",
+              "headersAdded": 300
+            },
+            "sizes": {
+              "spends": 300,
+              "reads": 2,
+              "headers": 300
+            },
+            "worker": {
+              "userAgent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/141.0.0.0 Safari/537.36",
+              "hardwareConcurrency": 1,
+              "deviceMemory": 8
+            },
+            "check": "rates",
+            "browser": "Chrome/141.0.7390.37",
+            "userAgent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/141.0.0.0 Safari/537.36",
+            "platform": "linux",
+            "browserRssBytes": {
+              "idle": 644243456,
+              "peak": 1154502656
+            },
+            "code": "413258b1fd7a5e8b19c1d5e4733c54fef2fa994aff0fb30080cc0e577a01f886",
+            "seconds": 105.73
+          },
+          "memory": {
+            "mappedPeakBytes": 335831040,
+            "anonPeakBytes": 330334208,
+            "peakBytes": 429383680,
+            "limitHits": 0,
+            "oomKills": 0
+          },
+          "throttled": {
+            "periods": 1052,
+            "seconds": 69.141382484
+          }
+        },
+        "wallet": {
+          "status": 0,
+          "seconds": 328.14,
+          "result": {
+            "checks": [
+              {
+                "label": "an operator, a backer's terms and a shop as processes; serve listens",
+                "ms": 20073
+              },
+              {
+                "label": "the holder's wallet in the browser: init (an exact rerun replays), terms and service kept",
+                "ms": 33653
+              },
+              {
+                "label": "receive: a request whose frame is read back (an exact retry the same frame), the backer's issue to it read final by fulfill (a rerun exits 4 with the saved result) and held by sync",
+                "ms": 121081
+              },
+              {
+                "label": "pay: the browser proves a payment to the shop's request; a substituted request is refused; the shop fulfills it",
+                "ms": 68519
+              },
+              {
+                "label": "one command at a time: a second command while one holds the pool is refused BUSY",
+                "ms": 15403
+              },
+              {
+                "label": "restore: the seed shown in the browser restores into a new directory that finds the same holdings; an onion service is refused PROXY",
+                "ms": 65768
+              }
+            ],
+            "commands": [
+              {
+                "command": "init",
+                "code": 0,
+                "ms": 16355
+              },
+              {
+                "command": "init",
+                "code": 0,
+                "ms": 12582
+              },
+              {
+                "command": "terms add",
+                "code": 0,
+                "ms": 2396
+              },
+              {
+                "command": "service add",
+                "code": 0,
+                "ms": 2319
+              },
+              {
+                "command": "request",
+                "code": 0,
+                "ms": 14201
+              },
+              {
+                "command": "request",
+                "code": 0,
+                "ms": 13488
+              },
+              {
+                "command": "status",
+                "code": 1,
+                "ms": 13700
+              },
+              {
+                "command": "fulfill",
+                "code": 1,
+                "ms": 14892
+              },
+              {
+                "command": "fulfill",
+                "code": 0,
+                "ms": 14497
+              },
+              {
+                "command": "fulfill",
+                "code": 4,
+                "ms": 13166
+              },
+              {
+                "command": "sync",
+                "code": 0,
+                "ms": 13497
+              },
+              {
+                "command": "pay",
+                "code": 1,
+                "ms": 2047
+              },
+              {
+                "command": "pay",
+                "code": 0,
+                "ms": 29180
+              },
+              {
+                "command": "sync",
+                "code": 0,
+                "ms": 15188
+              },
+              {
+                "command": "status",
+                "code": 0,
+                "ms": 12621
+              },
+              {
+                "command": "sync",
+                "code": 1,
+                "ms": 3890
+              },
+              {
+                "command": "status",
+                "code": 0,
+                "ms": 15402
+              },
+              {
+                "command": "seed",
+                "code": 0,
+                "ms": 13180
+              },
+              {
+                "command": "restore-seed",
+                "code": 0,
+                "ms": 14699
+              },
+              {
+                "command": "terms add",
+                "code": 0,
+                "ms": 2295
+              },
+              {
+                "command": "service add",
+                "code": 0,
+                "ms": 2326
+              },
+              {
+                "command": "sync",
+                "code": 1,
+                "ms": 14787
+              },
+              {
+                "command": "service add",
+                "code": 0,
+                "ms": 2401
+              },
+              {
+                "command": "sync",
+                "code": 0,
+                "ms": 16080
+              }
+            ],
+            "processes": [
+              {
+                "command": "operator init",
+                "status": 0,
+                "ms": 549
+              },
+              {
+                "command": "operator venue create",
+                "status": 0,
+                "ms": 920
+              },
+              {
+                "command": "wallet init",
+                "status": 0,
+                "ms": 4215
+              },
+              {
+                "command": "wallet terms create",
+                "status": 0,
+                "ms": 491
+              },
+              {
+                "command": "operator open",
+                "status": 0,
+                "ms": 4115
+              },
+              {
+                "command": "wallet init",
+                "status": 0,
+                "ms": 4330
+              },
+              {
+                "command": "wallet terms add",
+                "status": 0,
+                "ms": 482
+              },
+              {
+                "command": "wallet service add",
+                "status": 0,
+                "ms": 469
+              },
+              {
+                "command": "wallet service add",
+                "status": 0,
+                "ms": 497
+              },
+              {
+                "command": "wallet issue",
+                "status": 0,
+                "ms": 5711
+              },
+              {
+                "command": "wallet submit",
+                "status": 1,
+                "ms": 3980
+              },
+              {
+                "command": "wallet submit",
+                "status": 1,
+                "ms": 3860
+              },
+              {
+                "command": "wallet submit",
+                "status": 1,
+                "ms": 3943
+              },
+              {
+                "command": "wallet submit",
+                "status": 0,
+                "ms": 4412
+              },
+              {
+                "command": "wallet request",
+                "status": 0,
+                "ms": 3868
+              },
+              {
+                "command": "wallet fulfill",
+                "status": 0,
+                "ms": 4805
+              }
+            ],
+            "persisted": false,
+            "check": "wallet",
+            "browser": "Chrome/141.0.7390.37",
+            "userAgent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/141.0.0.0 Safari/537.36",
+            "platform": "linux",
+            "browserRssBytes": {
+              "idle": 683683840,
+              "peak": 1856737280
+            },
+            "code": "cbe824044d299240d780c5a327a26f05735723a74d99234ece883e88a78a1fe2",
+            "seconds": 327.775
+          },
+          "memory": {
+            "mappedPeakBytes": 1000996864,
+            "anonPeakBytes": 993546240,
+            "peakBytes": 1073741824,
+            "limitHits": 12989,
+            "oomKills": 0
+          },
+          "throttled": {
+            "periods": 2762,
+            "seconds": 180.720883762
+          }
+        }
+      },
+      "rates": {
+        "replayPerStatementMs": 22.542,
+        "digestsPerStatementMs": 1.701,
+        "headerMs": 40.297,
+        "capsuleMs": 0.72625,
+        "verifyMs": 102,
+        "proveSpendMs": 14178,
+        "keysMs": 9585,
+        "commandMs": {
+          "init": 16355,
+          "request": 14201,
+          "fulfill": 14497,
+          "pay": 29180,
+          "sync": 16080
+        }
+      }
+    },
+    {
+      "slowdown": 4,
+      "quotaMicroseconds": 25000,
+      "checks": {
+        "proofs": {
+          "status": 0,
+          "seconds": 47.819,
+          "result": {
+            "kind": "proofs",
+            "phases": [
+              {
+                "name": "start the backend from the parameters",
+                "ms": 1593,
+                "memoryBytes": 81703538
+              },
+              {
+                "name": "derive and check the six relations' keys",
+                "ms": 13099,
+                "memoryBytes": 105468339
+              },
+              {
+                "name": "verify a genuine proof of each proved kind",
+                "ms": 1801,
+                "memoryBytes": 125946922
+              },
+              {
+                "name": "prove a spend",
+                "ms": 19702,
+                "memoryBytes": 130629385
+              },
+              {
+                "name": "verify the spend",
+                "ms": 116,
+                "memoryBytes": 130627933
+              },
+              {
+                "name": "try 4000 capsules",
+                "ms": 4095,
+                "memoryBytes": 131164610
+              }
+            ],
+            "checks": {
+              "points": 32768,
+              "genuine": {
+                "issue": true,
+                "spend": true,
+                "burn": true,
+                "demand": true,
+                "settle": true
+              },
+              "tampered": false,
+              "spendProofBytes": 14656,
+              "spendVerifies": true,
+              "capsulesFound": 1000,
+              "capsuleMs": 1.02375
+            },
+            "worker": {
+              "userAgent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/141.0.0.0 Safari/537.36",
+              "hardwareConcurrency": 1,
+              "deviceMemory": 8
+            },
+            "check": "proofs",
+            "browser": "Chrome/141.0.7390.37",
+            "userAgent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/141.0.0.0 Safari/537.36",
+            "platform": "linux",
+            "browserRssBytes": {
+              "idle": 644665344,
+              "peak": 1121767424
+            },
+            "code": "1ca2fba23a287b95efa30627a02f0b590ab68bfc5a18af33a9fdc244c72c0929",
+            "seconds": 47.465
+          },
+          "memory": {
+            "mappedPeakBytes": 342753280,
+            "anonPeakBytes": 337264640,
+            "peakBytes": 364658688,
+            "limitHits": 0,
+            "oomKills": 0
+          },
+          "throttled": {
+            "periods": 471,
+            "seconds": 35.013756621
+          }
+        },
+        "rates": {
+          "status": 0,
+          "seconds": 137.155,
+          "result": {
+            "kind": "rates",
+            "phases": [
+              {
+                "name": "build the package of 1 issue and 300 spends (untimed work)",
+                "ms": 31088,
+                "memoryBytes": 70166904
+              },
+              {
+                "name": "replay the package (read 1)",
+                "ms": 9002,
+                "count": 301,
+                "perMs": 29.906,
+                "memoryBytes": 70484395
+              },
+              {
+                "name": "replay the package (read 2)",
+                "ms": 8899,
+                "count": 301,
+                "perMs": 29.566,
+                "memoryBytes": 70585651
+              },
+              {
+                "name": "leaf and node digests of the 301 statements",
+                "ms": 708,
+                "count": 301,
+                "perMs": 2.353,
+                "memoryBytes": 70595715
+              },
+              {
+                "name": "mine 300 synthetic headers (untimed work)",
+                "ms": 65195,
+                "memoryBytes": 71403043
+              },
+              {
+                "name": "check 300 headers in the store",
+                "ms": 12806,
+                "count": 300,
+                "perMs": 42.685,
+                "memoryBytes": 73980554
+              }
+            ],
+            "checks": {
+              "packageBytes": 4686720,
+              "replayPosition": "301",
+              "verifierCallsPerRead": 301,
+              "digestRoot": "0x2ccc133dbc03c1b4d92ecadeb6a1cde72c2b60a5d152d951582c09233eedf7d9",
+              "headersAdded": 300
+            },
+            "sizes": {
+              "spends": 300,
+              "reads": 2,
+              "headers": 300
+            },
+            "worker": {
+              "userAgent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/141.0.0.0 Safari/537.36",
+              "hardwareConcurrency": 1,
+              "deviceMemory": 8
+            },
+            "check": "rates",
+            "browser": "Chrome/141.0.7390.37",
+            "userAgent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/141.0.0.0 Safari/537.36",
+            "platform": "linux",
+            "browserRssBytes": {
+              "idle": 650579968,
+              "peak": 1152512000
+            },
+            "code": "413258b1fd7a5e8b19c1d5e4733c54fef2fa994aff0fb30080cc0e577a01f886",
+            "seconds": 136.663
+          },
+          "memory": {
+            "mappedPeakBytes": 328232960,
+            "anonPeakBytes": 322633728,
+            "peakBytes": 427941888,
+            "limitHits": 0,
+            "oomKills": 0
+          },
+          "throttled": {
+            "periods": 1365,
+            "seconds": 101.361752608
+          }
+        },
+        "wallet": {
+          "status": 0,
+          "seconds": 421.275,
+          "result": {
+            "checks": [
+              {
+                "label": "an operator, a backer's terms and a shop as processes; serve listens",
+                "ms": 21162
+              },
+              {
+                "label": "the holder's wallet in the browser: init (an exact rerun replays), terms and service kept",
+                "ms": 48359
+              },
+              {
+                "label": "receive: a request whose frame is read back (an exact retry the same frame), the backer's issue to it read final by fulfill (a rerun exits 4 with the saved result) and held by sync",
+                "ms": 154605
+              },
+              {
+                "label": "pay: the browser proves a payment to the shop's request; a substituted request is refused; the shop fulfills it",
+                "ms": 86895
+              },
+              {
+                "label": "one command at a time: a second command while one holds the pool is refused BUSY",
+                "ms": 19709
+              },
+              {
+                "label": "restore: the seed shown in the browser restores into a new directory that finds the same holdings; an onion service is refused PROXY",
+                "ms": 86112
+              }
+            ],
+            "commands": [
+              {
+                "command": "init",
+                "code": 0,
+                "ms": 22174
+              },
+              {
+                "command": "init",
+                "code": 0,
+                "ms": 18988
+              },
+              {
+                "command": "terms add",
+                "code": 0,
+                "ms": 3993
+              },
+              {
+                "command": "service add",
+                "code": 0,
+                "ms": 3202
+              },
+              {
+                "command": "request",
+                "code": 0,
+                "ms": 18512
+              },
+              {
+                "command": "request",
+                "code": 0,
+                "ms": 18894
+              },
+              {
+                "command": "status",
+                "code": 1,
+                "ms": 20095
+              },
+              {
+                "command": "fulfill",
+                "code": 1,
+                "ms": 19002
+              },
+              {
+                "command": "fulfill",
+                "code": 0,
+                "ms": 19213
+              },
+              {
+                "command": "fulfill",
+                "code": 4,
+                "ms": 17396
+              },
+              {
+                "command": "sync",
+                "code": 0,
+                "ms": 18185
+              },
+              {
+                "command": "pay",
+                "code": 1,
+                "ms": 2926
+              },
+              {
+                "command": "pay",
+                "code": 0,
+                "ms": 37705
+              },
+              {
+                "command": "sync",
+                "code": 0,
+                "ms": 19818
+              },
+              {
+                "command": "status",
+                "code": 0,
+                "ms": 17200
+              },
+              {
+                "command": "sync",
+                "code": 1,
+                "ms": 5017
+              },
+              {
+                "command": "status",
+                "code": 0,
+                "ms": 19709
+              },
+              {
+                "command": "seed",
+                "code": 0,
+                "ms": 18487
+              },
+              {
+                "command": "restore-seed",
+                "code": 0,
+                "ms": 18825
+              },
+              {
+                "command": "terms add",
+                "code": 0,
+                "ms": 3084
+              },
+              {
+                "command": "service add",
+                "code": 0,
+                "ms": 3196
+              },
+              {
+                "command": "sync",
+                "code": 1,
+                "ms": 18818
+              },
+              {
+                "command": "service add",
+                "code": 0,
+                "ms": 3176
+              },
+              {
+                "command": "sync",
+                "code": 0,
+                "ms": 20526
+              }
+            ],
+            "processes": [
+              {
+                "command": "operator init",
+                "status": 0,
+                "ms": 531
+              },
+              {
+                "command": "operator venue create",
+                "status": 0,
+                "ms": 942
+              },
+              {
+                "command": "wallet init",
+                "status": 0,
+                "ms": 4778
+              },
+              {
+                "command": "wallet terms create",
+                "status": 0,
+                "ms": 546
+              },
+              {
+                "command": "operator open",
+                "status": 0,
+                "ms": 4561
+              },
+              {
+                "command": "wallet init",
+                "status": 0,
+                "ms": 4182
+              },
+              {
+                "command": "wallet terms add",
+                "status": 0,
+                "ms": 495
+              },
+              {
+                "command": "wallet service add",
+                "status": 0,
+                "ms": 522
+              },
+              {
+                "command": "wallet service add",
+                "status": 0,
+                "ms": 513
+              },
+              {
+                "command": "wallet issue",
+                "status": 0,
+                "ms": 5874
+              },
+              {
+                "command": "wallet submit",
+                "status": 1,
+                "ms": 3833
+              },
+              {
+                "command": "wallet submit",
+                "status": 1,
+                "ms": 3887
+              },
+              {
+                "command": "wallet submit",
+                "status": 1,
+                "ms": 3825
+              },
+              {
+                "command": "wallet submit",
+                "status": 0,
+                "ms": 4163
+              },
+              {
+                "command": "wallet request",
+                "status": 0,
+                "ms": 3872
+              },
+              {
+                "command": "wallet fulfill",
+                "status": 0,
+                "ms": 4558
+              }
+            ],
+            "persisted": false,
+            "check": "wallet",
+            "browser": "Chrome/141.0.7390.37",
+            "userAgent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/141.0.0.0 Safari/537.36",
+            "platform": "linux",
+            "browserRssBytes": {
+              "idle": 697155584,
+              "peak": 1864986624
+            },
+            "code": "cbe824044d299240d780c5a327a26f05735723a74d99234ece883e88a78a1fe2",
+            "seconds": 420.574
+          },
+          "memory": {
+            "mappedPeakBytes": 1008594944,
+            "anonPeakBytes": 1001791488,
+            "peakBytes": 1073741824,
+            "limitHits": 14027,
+            "oomKills": 0
+          },
+          "throttled": {
+            "periods": 3672,
+            "seconds": 272.454980012
+          }
+        }
+      },
+      "rates": {
+        "replayPerStatementMs": 29.906,
+        "digestsPerStatementMs": 2.353,
+        "headerMs": 42.685,
+        "capsuleMs": 1.02375,
+        "verifyMs": 116,
+        "proveSpendMs": 19702,
+        "keysMs": 13099,
+        "commandMs": {
+          "init": 22174,
+          "request": 18894,
+          "fulfill": 19213,
+          "pay": 37705,
+          "sync": 20526
+        }
+      }
+    },
+    {
+      "slowdown": 6,
+      "quotaMicroseconds": 16667,
+      "checks": {
+        "proofs": {
+          "status": 0,
+          "seconds": 76.559,
+          "result": {
+            "kind": "proofs",
+            "phases": [
+              {
+                "name": "start the backend from the parameters",
+                "ms": 2999,
+                "memoryBytes": 81702938
+              },
+              {
+                "name": "derive and check the six relations' keys",
+                "ms": 19714,
+                "memoryBytes": 105371603
+              },
+              {
+                "name": "verify a genuine proof of each proved kind",
+                "ms": 3000,
+                "memoryBytes": 125936930
+              },
+              {
+                "name": "prove a spend",
+                "ms": 30901,
+                "memoryBytes": 130636169
+              },
+              {
+                "name": "verify the spend",
+                "ms": 400,
+                "memoryBytes": 130634105
+              },
+              {
+                "name": "try 4000 capsules",
+                "ms": 8204,
+                "memoryBytes": 131169790
+              }
+            ],
+            "checks": {
+              "points": 32768,
+              "genuine": {
+                "issue": true,
+                "spend": true,
+                "burn": true,
+                "demand": true,
+                "settle": true
+              },
+              "tampered": false,
+              "spendProofBytes": 14656,
+              "spendVerifies": true,
+              "capsulesFound": 1000,
+              "capsuleMs": 2.051
+            },
+            "worker": {
+              "userAgent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/141.0.0.0 Safari/537.36",
+              "hardwareConcurrency": 1,
+              "deviceMemory": 8
+            },
+            "check": "proofs",
+            "browser": "Chrome/141.0.7390.37",
+            "userAgent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/141.0.0.0 Safari/537.36",
+            "platform": "linux",
+            "browserRssBytes": {
+              "idle": 698904576,
+              "peak": 1152061440
+            },
+            "code": "1ca2fba23a287b95efa30627a02f0b590ab68bfc5a18af33a9fdc244c72c0929",
+            "seconds": 76.211
+          },
+          "memory": {
+            "mappedPeakBytes": 345124864,
+            "anonPeakBytes": 339648512,
+            "peakBytes": 367517696,
+            "limitHits": 0,
+            "oomKills": 0
+          },
+          "throttled": {
+            "periods": 758,
+            "seconds": 62.832129188
+          }
+        },
+        "rates": {
+          "status": 0,
+          "seconds": 219.434,
+          "result": {
+            "kind": "rates",
+            "phases": [
+              {
+                "name": "build the package of 1 issue and 300 spends (untimed work)",
+                "ms": 49297,
+                "memoryBytes": 70162916
+              },
+              {
+                "name": "replay the package (read 1)",
+                "ms": 18197,
+                "count": 301,
+                "perMs": 60.454,
+                "memoryBytes": 70464339
+              },
+              {
+                "name": "replay the package (read 2)",
+                "ms": 17805,
+                "count": 301,
+                "perMs": 59.154,
+                "memoryBytes": 70580007
+              },
+              {
+                "name": "leaf and node digests of the 301 statements",
+                "ms": 1497,
+                "count": 301,
+                "perMs": 4.972,
+                "memoryBytes": 70590083
+              },
+              {
+                "name": "mine 300 synthetic headers (untimed work)",
+                "ms": 97802,
+                "memoryBytes": 71394423
+              },
+              {
+                "name": "check 300 headers in the store",
+                "ms": 20603,
+                "count": 300,
+                "perMs": 68.678,
+                "memoryBytes": 73971682
+              }
+            ],
+            "checks": {
+              "packageBytes": 4686720,
+              "replayPosition": "301",
+              "verifierCallsPerRead": 301,
+              "digestRoot": "0x2ccc133dbc03c1b4d92ecadeb6a1cde72c2b60a5d152d951582c09233eedf7d9",
+              "headersAdded": 300
+            },
+            "sizes": {
+              "spends": 300,
+              "reads": 2,
+              "headers": 300
+            },
+            "worker": {
+              "userAgent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/141.0.0.0 Safari/537.36",
+              "hardwareConcurrency": 1,
+              "deviceMemory": 8
+            },
+            "check": "rates",
+            "browser": "Chrome/141.0.7390.37",
+            "userAgent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/141.0.0.0 Safari/537.36",
+            "platform": "linux",
+            "browserRssBytes": {
+              "idle": 766844928,
+              "peak": 1166180352
+            },
+            "code": "413258b1fd7a5e8b19c1d5e4733c54fef2fa994aff0fb30080cc0e577a01f886",
+            "seconds": 218.95
+          },
+          "memory": {
+            "mappedPeakBytes": 334278656,
+            "anonPeakBytes": 328822784,
+            "peakBytes": 437043200,
+            "limitHits": 0,
+            "oomKills": 0
+          },
+          "throttled": {
+            "periods": 2189,
+            "seconds": 181.166452672
+          }
+        },
+        "wallet": {
+          "status": 0,
+          "seconds": 620.697,
+          "result": {
+            "checks": [
+              {
+                "label": "an operator, a backer's terms and a shop as processes; serve listens",
+                "ms": 21207
+              },
+              {
+                "label": "the holder's wallet in the browser: init (an exact rerun replays), terms and service kept",
+                "ms": 80115
+              },
+              {
+                "label": "receive: a request whose frame is read back (an exact retry the same frame), the backer's issue to it read final by fulfill (a rerun exits 4 with the saved result) and held by sync",
+                "ms": 225215
+              },
+              {
+                "label": "pay: the browser proves a payment to the shop's request; a substituted request is refused; the shop fulfills it",
+                "ms": 127488
+              },
+              {
+                "label": "one command at a time: a second command while one holds the pool is refused BUSY",
+                "ms": 30294
+              },
+              {
+                "label": "restore: the seed shown in the browser restores into a new directory that finds the same holdings; an onion service is refused PROXY",
+                "ms": 129508
+              }
+            ],
+            "commands": [
+              {
+                "command": "init",
+                "code": 0,
+                "ms": 35816
+              },
+              {
+                "command": "init",
+                "code": 0,
+                "ms": 32509
+              },
+              {
+                "command": "terms add",
+                "code": 0,
+                "ms": 5897
+              },
+              {
+                "command": "service add",
+                "code": 0,
+                "ms": 5892
+              },
+              {
+                "command": "request",
+                "code": 0,
+                "ms": 30996
+              },
+              {
+                "command": "request",
+                "code": 0,
+                "ms": 28213
+              },
+              {
+                "command": "status",
+                "code": 1,
+                "ms": 27193
+              },
+              {
+                "command": "fulfill",
+                "code": 1,
+                "ms": 29653
+              },
+              {
+                "command": "fulfill",
+                "code": 0,
+                "ms": 30203
+              },
+              {
+                "command": "fulfill",
+                "code": 4,
+                "ms": 27295
+              },
+              {
+                "command": "sync",
+                "code": 0,
+                "ms": 27814
+              },
+              {
+                "command": "pay",
+                "code": 1,
+                "ms": 4620
+              },
+              {
+                "command": "pay",
+                "code": 0,
+                "ms": 58195
+              },
+              {
+                "command": "sync",
+                "code": 0,
+                "ms": 29153
+              },
+              {
+                "command": "status",
+                "code": 0,
+                "ms": 26091
+              },
+              {
+                "command": "sync",
+                "code": 1,
+                "ms": 7691
+              },
+              {
+                "command": "status",
+                "code": 0,
+                "ms": 30293
+              },
+              {
+                "command": "seed",
+                "code": 0,
+                "ms": 26498
+              },
+              {
+                "command": "restore-seed",
+                "code": 0,
+                "ms": 29220
+              },
+              {
+                "command": "terms add",
+                "code": 0,
+                "ms": 5185
+              },
+              {
+                "command": "service add",
+                "code": 0,
+                "ms": 5203
+              },
+              {
+                "command": "sync",
+                "code": 1,
+                "ms": 28397
+              },
+              {
+                "command": "service add",
+                "code": 0,
+                "ms": 4600
+              },
+              {
+                "command": "sync",
+                "code": 0,
+                "ms": 30404
+              }
+            ],
+            "processes": [
+              {
+                "command": "operator init",
+                "status": 0,
+                "ms": 656
+              },
+              {
+                "command": "operator venue create",
+                "status": 0,
+                "ms": 932
+              },
+              {
+                "command": "wallet init",
+                "status": 0,
+                "ms": 4557
+              },
+              {
+                "command": "wallet terms create",
+                "status": 0,
+                "ms": 515
+              },
+              {
+                "command": "operator open",
+                "status": 0,
+                "ms": 4403
+              },
+              {
+                "command": "wallet init",
+                "status": 0,
+                "ms": 4339
+              },
+              {
+                "command": "wallet terms add",
+                "status": 0,
+                "ms": 493
+              },
+              {
+                "command": "wallet service add",
+                "status": 0,
+                "ms": 495
+              },
+              {
+                "command": "wallet service add",
+                "status": 0,
+                "ms": 507
+              },
+              {
+                "command": "wallet issue",
+                "status": 0,
+                "ms": 6041
+              },
+              {
+                "command": "wallet submit",
+                "status": 1,
+                "ms": 3932
+              },
+              {
+                "command": "wallet submit",
+                "status": 1,
+                "ms": 3997
+              },
+              {
+                "command": "wallet submit",
+                "status": 1,
+                "ms": 3975
+              },
+              {
+                "command": "wallet submit",
+                "status": 0,
+                "ms": 4168
+              },
+              {
+                "command": "wallet request",
+                "status": 0,
+                "ms": 3964
+              },
+              {
+                "command": "wallet fulfill",
+                "status": 0,
+                "ms": 4651
+              }
+            ],
+            "persisted": false,
+            "check": "wallet",
+            "browser": "Chrome/141.0.7390.37",
+            "userAgent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/141.0.0.0 Safari/537.36",
+            "platform": "linux",
+            "browserRssBytes": {
+              "idle": 763039744,
+              "peak": 1853599744
+            },
+            "code": "cbe824044d299240d780c5a327a26f05735723a74d99234ece883e88a78a1fe2",
+            "seconds": 619.842
+          },
+          "memory": {
+            "mappedPeakBytes": 998936576,
+            "anonPeakBytes": 991318016,
+            "peakBytes": 1073741824,
+            "limitHits": 12167,
+            "oomKills": 0
+          },
+          "throttled": {
+            "periods": 5664,
+            "seconds": 468.397620442
+          }
+        }
+      },
+      "rates": {
+        "replayPerStatementMs": 60.454,
+        "digestsPerStatementMs": 4.972,
+        "headerMs": 68.678,
+        "capsuleMs": 2.051,
+        "verifyMs": 400,
+        "proveSpendMs": 30901,
+        "keysMs": 19714,
+        "commandMs": {
+          "init": 35816,
+          "request": 30996,
+          "fulfill": 30203,
+          "pay": 58195,
+          "sync": 30404
+        }
+      }
+    }
+  ]
+}

@@ -174,7 +174,11 @@ evidence and wallet files run their Node code there (`check.mjs --files`). The `
 (slice 41, [probes](POOL_DEPLOYMENT_PROBES.md#the-wallets-flows-in-a-browser-engine-slice-41)): one command a worker over
 the pool (`src/browser/command.ts`), driven from a stand-in page (`src/browser/wallet.html`); `check.mjs --wallet`
 (CI's `browser` group) creates a wallet, requests, receives, pays with a proof made there and restores from the seed,
-against an operator, backer and shop running `moe` as processes. No packaged app, device or onion route yet.
+against an operator, backer and shop running `moe` as processes. `check.mjs --rates` times the holder's replay, digests
+and header checks there, `--connect` drives a browser already running (a phone's Chrome over adb) through every check,
+the wallet drill included, and `scripts/browser/throttle.mjs` runs the checks on one core under CPU quotas and a memory
+cap for the throttled phone estimate (slice 46, [probes](POOL_DEPLOYMENT_PROBES.md#the-throttled-phone-estimate-slice-46)).
+No packaged app, device or onion route yet.
 
 The [Ergo venue profile](ERGO_VENUE_PROFILE.md), selected by
 [venue-ergo.md](https://github.com/mediumofexchange/money-from-first-principles/blob/13e5b66/venue-ergo.md),
